@@ -40,12 +40,17 @@ Documentation index. maestro is **spec-driven**: product intent precedes archite
 | [0005](architecture/decisions/0005-product-domain-model.md) | Product as the core domain object (multi-repo, multi-participant) |
 | [0006](architecture/decisions/0006-spec-driven-sdlc.md) | Spec-driven SDLC + Definition of Done |
 | [0007](architecture/decisions/0007-per-product-deployment-targets.md) | Per-product deployment targets |
+| [0008](architecture/decisions/0008-system-of-record-and-persistence.md) | System of record & persistence (register as config; event-sourced operational store; GitHub for code) |
+| [0009](architecture/decisions/0009-audit-logging-and-observability.md) | Audit, logging & observability (four stores, one correlation ID) |
+| [0010](architecture/decisions/0010-public-engine-private-instance-data.md) | Open-core — public engine, private instance data |
 
 ## Guides
 
 - [`guides/sdlc.md`](guides/sdlc.md) — **the spec-driven SDLC maestro runs and follows** (artifacts, gates, DoD, traceability, the human/agent protocol)
 - [`guides/documentation-standards.md`](guides/documentation-standards.md) — how docs are structured (frontmatter, naming, ADRs)
 - [`guides/setup.md`](guides/setup.md) — local setup
+- [`guides/onboarding-a-product.md`](guides/onboarding-a-product.md) — register a product and ready its repos
+- [`guides/repo-controls.md`](guides/repo-controls.md) — enforcing the merge boundary in GitHub (CODEOWNERS, branch protection, merge-less token)
 
 ## Standards
 

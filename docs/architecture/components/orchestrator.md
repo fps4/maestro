@@ -35,9 +35,9 @@ The orchestrator is maestro's conductor: it sequences the agent crew, owns deliv
 |-----------|----------------|
 | `TaskCoordinator` | Drives a delivery task through its stages; the state machine over `DeliveryTask.stage` |
 | `GateManager` | Creates gates, resolves the reviewer via `RoutingResolver`, waits for the decision, applies approve/request-changes/reject |
-| `RoutingResolver` | Pure function: `(product, gate_type) → reviewer handle`, from `config/reviewers.yaml` + the product's membership; never hardcoded (ADR-0003) |
+| `RoutingResolver` | Pure function, never hardcoded (ADR-0003), resolving in two steps: (1) `(product_type, gate_type) → role` from the `config/reviewers.yaml` matrix; (2) `role → handle` from the product's participants in `config/products.yaml` (authoritative), falling back to the `reviewers.yaml` `roles:` defaults only when the product names no participant for that role |
 | `AgentDispatcher` | Invokes the right agent for the current stage with task + product context; agents reason via the `ModelClient` |
-| `StateStore` | Persists task / gate / product state so the pipeline is recoverable across restarts (backing store is an open PRD-0001 decision) |
+| `StateStore` | Persists task / gate / product state as an **append-only event log** (the source of truth); current state is a materialized projection, so the pipeline is recoverable across restarts via replay (ADR-0008). The product register is loaded read-only from `config/products.yaml`. |
 
 ## Key flows
 
@@ -72,8 +72,9 @@ There is intentionally **no** orchestrator flow that merges a PR. At `merge_gate
 
 | Question | Owner | Status |
 |----------|-------|--------|
-| Orchestration engine: Claude Agent SDK vs Temporal-style engine vs a lighter state machine? | @architect | Open |
-| Does `StateStore` reuse GitHub Issues/Projects as the store, or a maestro-owned DB? | @architect | Open |
+| Does `StateStore` reuse GitHub Issues/Projects, or a maestro-owned DB? | @architect | **Resolved** — maestro-owned, event-sourced store; GitHub for code only (ADR-0008) |
+| Orchestration engine: Claude Agent SDK vs Temporal-style durable execution vs a lighter event-log + snapshot? | @architect | Open (ADR-0008 defers; event-sourcing holds either way) |
+| SQLite to start, with a Postgres cutover when concurrency/recovery demand it? | @architect | Open |
 | Is the `merge_gate` a GitHub-native review approval, a Slack approval, or both? | @architect | Open |
 
 ## Assumptions and constraints

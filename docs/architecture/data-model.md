@@ -28,6 +28,8 @@ The core entities maestro reasons about, per [ADR-0005](decisions/0005-product-d
 | **PullRequest** | The GitHub PR. Mirrors GitHub state; maestro never owns the merge. | `task_id`, `repo_id`, `pr_number`, `state`, `merged` |
 | **Gate** | A pending or resolved human decision. | `id`, `task_id`, `type` (functional \| technical), `reviewer_role`, `assignee`, `status`, `feedback`, `resolved_by`, `resolved_at` |
 | **Trace** | First-class link: requirement → task → PR/commit. | `requirement_id`, `task_id`, `pr_id` |
+| **Event** | An append-only record of a state change or agent/human action — the operational **source of truth**; current state is a projection of these (ADR-0008/0009). | `id`, `run_id`, `seq`, `timestamp`, `actor`, `type`, `target`, `payload`, `prev_hash` |
+| **LLMCall** | One `ModelClient` call — the LLM-call audit record (OTel GenAI; ADR-0009). | `id`, `run_id`, `agent`, `model`, `input_tokens`, `output_tokens`, `cache_read`, `cache_write`, `cost`, `latency_ms` |
 
 ## Relationships
 
@@ -58,6 +60,19 @@ flowchart LR
 | `blocked` | Request-changes or rejection at any gate | returns to the relevant stage |
 
 `status` (e.g. `active`, `blocked`, `cancelled`, `done`) is orthogonal to `stage`.
+
+## Persistence (where each entity lives)
+
+Per [ADR-0008](decisions/0008-system-of-record-and-persistence.md) and [ADR-0009](decisions/0009-audit-logging-and-observability.md):
+
+| Group | Home | Authority |
+|-------|------|-----------|
+| Product, Repository, Participant, ProductRepo, Membership | **git-tracked config** (`config/products.yaml`), loaded into the store read-only at boot | the register; changing it is a reviewed PR |
+| Feature, Requirement, DeliveryTask, Gate, Trace | **maestro-owned, event-sourced store** — current state is a projection of the `Event` log | maestro |
+| PullRequest, branches, commits, CI checks | **GitHub**, mirrored into the store read-only via webhooks | GitHub |
+| Event, LLMCall | append-only **audit tier** (immutable; WORM + hash-chained) | maestro |
+
+A single `run_id` (correlation ID) threads `Event`, `LLMCall`, and operational logs for a delivery task, so any run is reconstructible end to end.
 
 ## Known limitations
 

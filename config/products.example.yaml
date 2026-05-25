@@ -1,0 +1,42 @@
+# Product register — TEMPLATE (committed, public).
+#
+# Copy this to config/products.yaml (which is gitignored and PRIVATE) and put your real
+# products there. The public maestro repo must never contain real product details.
+#   cp config/products.example.yaml config/products.yaml
+#
+# Git-tracked config-as-code (ADR-0008), kept private (ADR-0010): for PR-reviewed governance
+# of register changes, keep your real config/products.yaml in a PRIVATE repo or private overlay,
+# not in this public engine repo. Loaded into the operational store as a read-only projection at boot.
+#
+# A product has 1+ repos and 1+ participants (the architect always included), one product_type
+# (commercial | technical) its repos inherit, a visibility (private by default), and a deploy target.
+
+version: 1
+
+products:
+  # Example: a technical product (maestro building itself — dogfooding).
+  - id: maestro
+    name: maestro
+    product_type: technical
+    visibility: public            # deliberate exception to private-by-default (open-sourced)
+    deploy_target:                # see ADR-0007
+      default: ds1
+      production: aws
+    repos:
+      - your-org/maestro
+    participants:
+      - { handle: "@you", role: architect }
+
+  # Example: a commercial product (private — the common case).
+  - id: acme-billing
+    name: Acme Billing
+    product_type: commercial
+    visibility: private
+    deploy_target:
+      from_day_one: aws           # the product's tech requires AWS up front (ADR-0007 exception)
+    repos:
+      - acme/billing-api
+      - acme/billing-web
+    participants:
+      - { handle: "@you", role: architect }
+      - { handle: "@reviewer", role: functional_reviewer }

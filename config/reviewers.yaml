@@ -8,10 +8,16 @@
 
 version: 1
 
-# The two roles the gates route to. Map them to your Slack handles.
+# Role -> handle resolution is two steps:
+#   1. the matrix below resolves (product_type, gate) -> ROLE   (this file; ADR-0003)
+#   2. that role -> a HANDLE resolves from the product's participants in
+#      config/products.yaml FIRST (per-product roster is authoritative; ADR-0005/0008),
+#      falling back to the global defaults here only when the product names no
+#      participant for the resolved role.
+# So these are FALLBACK defaults, not the source of truth — per-product participants win.
 roles:
-  architect: "@architect"            # you — technical product owner; default reviewer everywhere; in every product
-  functional_reviewer: "@reviewer"   # reviews functional specs for commercial products
+  architect: "@architect"            # fallback handle for the architect role
+  functional_reviewer: "@reviewer"   # fallback handle for the functional-reviewer role
 
 # Default for a product that does not set its own.
 defaults:
@@ -32,12 +38,6 @@ gate:
   on_timeout: escalate               # escalate | cancel  (never auto-approve)
   surface: slack                     # where approval requests are posted
 
-# Per-product configuration. Key by product id.
-# A product has one product_type and a participant roster (the architect is always included).
-# products:
-#   acme-billing:
-#     product_type: commercial
-#     repos: [acme/billing-api, acme/billing-web]
-#     participants:
-#       - { handle: "@farid", role: architect }
-#       - { handle: "@priya", role: functional_reviewer }
+# Products (their product_type, repos, and participant rosters) are defined in the product
+# register: config/products.yaml (ADR-0008). This file holds only the routing matrix and gate
+# behaviour; the RoutingResolver combines the two to resolve (product, gate) -> reviewer handle.

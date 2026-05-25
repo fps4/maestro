@@ -1,0 +1,18 @@
+# CODEOWNERS — the architect owns review of every change (principle 3, ADR-0004).
+#
+# This is one of the THREE enforcement layers behind "agents propose, humans merge":
+#   1. CODEOWNERS (this file) — a required reviewer on every PR
+#   2. branch protection on the default branch — required review + status checks
+#   3. a GitHub credential scoped WITHOUT merge rights (the maestro runtime token)
+# See docs/guides/repo-controls.md for how to apply layers 2 and 3.
+#
+# Replace @fgurbanov with a GitHub team (e.g. @fps4/architects) if review should fan out.
+
+# Everything requires architect review by default.
+*                               @fgurbanov
+
+# Governance-critical areas — called out so they can never silently lose an owner.
+/docs/architecture/decisions/   @fgurbanov   # ADRs: immutable once accepted (ADR-0006)
+/standards/                     @fgurbanov   # machine-injected SDLC floors (principle 9)
+/config/                        @fgurbanov   # routing matrix + register (ADR-0003 / ADR-0008)
+/.github/                       @fgurbanov   # the enforcement layer itself

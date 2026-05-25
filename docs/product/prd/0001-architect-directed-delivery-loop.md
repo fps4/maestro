@@ -100,7 +100,7 @@ The full method — artifact templates, gate mechanics, the Definition of Done, 
 
 | Question | Owner | Due |
 |----------|-------|-----|
-| State of record for delivery-task/gate/traceability — maestro-owned store, GitHub (Issues + sub-issues + issue-fields + PR state), or hybrid? | @architect | 2026-06-15 |
+| ~~State of record for delivery-task/gate/traceability?~~ | @architect | **Resolved** — git-config register + maestro-owned event-sourced operational store + GitHub for code, mirrored via webhooks ([ADR-0008](../../architecture/decisions/0008-system-of-record-and-persistence.md)) |
 | Does the merge gate reuse GitHub's native PR review/approval, a Slack approval, or both (Slack UX + GitHub enforcement)? | @architect | 2026-06-15 |
 | How does a functional reviewer who is not a GitHub collaborator approve a spec — Slack-only, or a lightweight GitHub identity? | @architect | 2026-06-15 |
 | Which automated gates are required vs advisory at v1, and what are the risk tiers for auto-eligible vs human-required merges? | @architect | 2026-06-30 |

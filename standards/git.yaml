@@ -2,9 +2,9 @@
 concern: git
 
 branches:
-  agent_namespace: "Maestro/*"        # agents create only these; never the default branch
+  agent_namespace: "maestro/*"        # agents create only these; never the default branch
   default_branch_writes: forbidden    # enforced: always
-  description: Agents work on Maestro/* feature branches and open PRs from them.
+  description: Agents work on maestro/* feature branches and open PRs from them.
 
 merge:
   by_agents: forbidden                # enforced: always — humans merge, behind the gate

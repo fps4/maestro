@@ -1,0 +1,47 @@
+name: dod
+
+# Definition-of-Done gates — the subset applicable to the current docs/config scaffold.
+# Code-dependent gates (spec-adherence + unit/integration/e2e with coverage, SAST,
+# dependency scan, hallucinated-dependency check, license/SBOM) plug in below once engine
+# code exists — see docs/guides/sdlc.md and standards/. SAST, secret, and dependency scans
+# are floors that are NEVER disabled (standards/security.yaml, standards/testing.yaml).
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  secret-scan: # standards/security.yaml floor — enforced: always
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: gitleaks
+        uses: docker://ghcr.io/gitleaks/gitleaks:latest
+        with:
+          args: detect --source=/github/workspace --no-banner --redact
+
+  register-privacy: # ADR-0010 floor — product data must never be committed to the public repo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: private register must not be tracked
+        run: |
+          if git ls-files --error-unmatch config/products.yaml >/dev/null 2>&1; then
+            echo "::error::config/products.yaml is tracked — it is the PRIVATE register and must stay gitignored (ADR-0010)."
+            exit 1
+          fi
+          echo "OK: config/products.yaml is not tracked."
+
+  # --- planned gates (add when engine code lands; see standards/testing.yaml DoD order) ---
+  # spec-adherence: tests generated from EARS acceptance criteria
+  # tests:          unit / integration / e2e with a coverage threshold
+  # sast:           CodeQL or Semgrep — block on high severity
+  # dependencies:   Dependabot/Renovate advisory DB
+  # hallucinated-dependency-check: every added package exists and is the intended one
+  # license-sbom:   allowed-license policy + SBOM per build

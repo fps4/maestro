@@ -10,8 +10,10 @@ maestro is an architect-directed agentic delivery platform: a crew of Claude-pow
 |------|---------|
 | `docs/` | Product intent, architecture, ADRs, and guides — the source of truth that precedes code |
 | `standards/` | Machine-readable SDLC standards injected into agent prompts (naming, testing, security, docs) |
-| `config/reviewers.yaml` | The split-review routing: product type × gate → reviewer |
+| `config/reviewers.yaml` | The split-review routing matrix: product type × gate → reviewer (public template) |
+| `config/products.yaml` | Your **private** product register — gitignored; only `products.example.yaml` is public (ADR-0010) |
 | `logs/test_reports/` | Timestamped acceptance-test evidence (git-ignored except README) |
+| `.github/` | Merge-boundary enforcement: CODEOWNERS, PR template, the `dod` quality-gate workflow (see `docs/guides/repo-controls.md`) |
 | `orchestrator/` | *(planned)* Sequences agents and owns gate state; performs no LLM inference |
 | `agents/` | *(planned)* The crew — spec, architect, builder, test, reviewer, docs; LLM logic lives here |
 | `model/` | *(planned)* The single `ModelClient` — the only place that calls Claude; records cost + audit |

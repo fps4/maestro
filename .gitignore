@@ -3,6 +3,18 @@
 .env.local
 *.local
 
+# Private operator/product data — NEVER commit to the public engine repo (ADR-0010).
+# The real product register is private; only config/products.example.yaml is public.
+config/products.yaml
+config/*.private.yaml
+# Operational state + audit stores (event log, tasks, gates, LLM-call/audit logs) live on the
+# private host; if a local dev run creates them in-repo, keep them out of git.
+/data/
+/audit/
+*.db
+*.sqlite
+*.sqlite3
+
 # Test run reports are evidence, not source — keep the folder + README, ignore the runs
 logs/test_reports/*
 !logs/test_reports/README.md

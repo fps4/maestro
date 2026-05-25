@@ -22,7 +22,7 @@ Documentation index. maestro is **spec-driven**: product intent precedes archite
 - [`product/prd/0001-architect-directed-delivery-loop.md`](product/prd/0001-architect-directed-delivery-loop.md) — the founding delivery loop
 - [`product/user-stories/`](product/user-stories/) — discrete capabilities with acceptance criteria (EARS)
 - [`product/feature-board.md`](product/feature-board.md) — live status of each story
-- [`product/roadmap.md`](product/roadmap.md) — the engine MVP and the milestone build sequence
+- [`product/roadmap.md`](product/roadmap.md) — building it up (M0–M4) and adopting it stepwise (the adoption ladder)
 
 ## Architecture — how it's built
 

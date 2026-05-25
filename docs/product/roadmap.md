@@ -38,7 +38,7 @@ Before any engine code, close out what's already drafted.
    Merging the proposed ADRs (0011/0012/0013) **is** their ratification.
 
 2. **Resolve the deferred decisions** — these are gates into the build track:
-   - **Orchestration runtime** — extend [`spikes/langgraph/`](../../spikes/langgraph/) to test the crew/subagent model and settle the checkpointer ↔ event-log authority split, then write the runtime ADR (LangGraph / Agent SDK / bespoke).
+   - ~~**Orchestration runtime**~~ — **Decided: LangGraph** ([ADR-0014](../architecture/decisions/0014-orchestration-runtime-langgraph.md)), validated by the [spike](../../spikes/langgraph/) (interrupt gates, crew/subagents, event-log-authoritative). The M0 gate is **cleared**.
    - **Functional surface direction** — decide [ADR-0013](../architecture/decisions/0013-web-control-ui-for-reviewers.md): web control UI vs Google-Docs-comments vs Telegram. Only blocking for M4, but it shapes US-0017.
 
 3. **Lock the pre-M0 engineering choices** (table at the bottom).
@@ -88,7 +88,7 @@ The "deferred to engineering" questions from [PRD-0001](prd/0001-architect-direc
 
 | Decision | Direction |
 |---|---|
-| Orchestration runtime | **Deferred — prototyping [LangGraph](../../spikes/langgraph/)** (durable execution + `interrupt()` gates) vs Agent SDK vs bespoke; `ModelClient` boundary holds either way (ADR-0002). Write the ADR after the spike. |
+| Orchestration runtime | **Decided: LangGraph** ([ADR-0014](../architecture/decisions/0014-orchestration-runtime-langgraph.md)) — durable execution + `interrupt()` gates; `ModelClient` stays the egress and the event log stays authoritative (ADR-0002/0008/0009). |
 | Persistence | **SQLite** event store to start; Postgres when concurrency/recovery demand it (ADR-0008) |
 | Runtime language | **Python** (per `CODEBASE.md`) |
 | GitHub integration | Fine-grained **PAT scoped without merge** for the MVP; GitHub App later |
@@ -101,4 +101,4 @@ The "deferred to engineering" questions from [PRD-0001](prd/0001-architect-direc
 - **Keep the no-merge boundary verified at first run** — load-bearing, not a config nicety.
 - **MinIO durability** becomes real at M4 — erasure coding + an offsite backup before real artefacts land (ADR-0012).
 - **Deferring Telegram + ArtifactStore** holds only while the first product is technical; M4 lifts it.
-- **The two deferred decisions (runtime, functional surface) gate the build** — don't start M0 before the runtime call.
+- **Runtime decided (LangGraph, ADR-0014) — M0 is unblocked.** The functional-surface decision (ADR-0013) remains open but only gates M4, not M0.

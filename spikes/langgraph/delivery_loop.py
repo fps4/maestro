@@ -1,15 +1,19 @@
-"""The maestro delivery loop as a LangGraph state machine, with human gates as interrupts.
+"""The maestro delivery loop as a LangGraph state machine, with human gates as interrupts and a
+bounded-role crew.
 
     spec → [functional gate] → design → [technical/design gate] → build → [merge gate] → done
 
-Each gate calls interrupt() to pause for a human decision; request_changes loops back to the
-producing node. Nodes reason through the single ModelClient (ADR-0002) and emit domain events to a
-separate append-only log (ADR-0008/0009). SPIKE — the runtime ADR is deferred.
+Gates pause via interrupt() and resume via Command(resume=...); request_changes loops back. Each
+stage delegates to a crew agent (ADR-0002 egress); the build stage fans out to test + reviewer
+SUBAGENTS, enforcing reviewer ≠ author (ADR-0004). Domain events go to the append-only log
+(authoritative; ADR-0008/0009) — the checkpointer is just execution recovery. SPIKE.
 """
 from typing import Optional, TypedDict
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.types import interrupt
+
+from crew import Crew
 
 ACTIONS = ["approve", "request_changes", "reject"]
 
@@ -17,7 +21,7 @@ ACTIONS = ["approve", "request_changes", "reject"]
 class DeliveryState(TypedDict, total=False):
     run_id: str
     intent: str
-    product_type: str          # "technical" routes every gate to the architect (ADR-0003/0011)
+    product_type: str
     spec: Optional[str]
     design: Optional[str]
     pr_url: Optional[str]
@@ -27,19 +31,21 @@ class DeliveryState(TypedDict, total=False):
 
 
 def make_graph(checkpointer, model, events):
+    crew = Crew(model)
+
     def emit(state, type_, **payload):
         events.append(run_id=state["run_id"], actor="orchestrator", type=type_, payload=payload)
 
     def route(product_type, gate):
-        # ADR-0011/0013: technical → architect on Slack; commercial functional → reviewer surface.
         if gate == "functional" and product_type == "commercial":
             return {"role": "functional_reviewer", "surface": "web-ui", "destination": "product review page"}
         return {"role": "architect", "surface": "slack", "destination": "architect channel"}
 
     def spec(state):
-        text = model.complete("spec", f"Draft a functional spec (EARS) for: {state['intent']}")
-        emit(state, "spec.drafted")
-        return {"spec": text, "stage": "functional_gate"}
+        agent = crew.agent("spec")
+        agent.run(f"Draft a functional spec (EARS) for: {state['intent']}")
+        emit(state, "spec.drafted", by=agent.id)
+        return {"spec": f"[spec by {agent.id}] {state['intent']}", "stage": "functional_gate"}
 
     def functional_gate(state):
         decision = interrupt({"gate": "functional", **route(state["product_type"], "functional"),
@@ -50,9 +56,10 @@ def make_graph(checkpointer, model, events):
                 "history": state.get("history", []) + [{"gate": "functional", **decision}]}
 
     def design(state):
-        text = model.complete("architect", f"Technical design + tasks for:\n{state['spec']}")
-        emit(state, "design.produced")
-        return {"design": text, "stage": "technical_gate"}
+        agent = crew.agent("architect")
+        agent.run(f"Technical design + tasks for:\n{state['spec']}")
+        emit(state, "design.produced", by=agent.id)
+        return {"design": f"[design by {agent.id}]", "stage": "technical_gate"}
 
     def technical_gate(state):
         decision = interrupt({"gate": "technical_design", "role": "architect", "surface": "slack",
@@ -63,9 +70,20 @@ def make_graph(checkpointer, model, events):
                 "history": state.get("history", []) + [{"gate": "technical_design", **decision}]}
 
     def build(state):
-        model.complete("builder", f"Implement on a maestro/* branch from:\n{state['design']}")
+        builder = crew.agent("builder")
+        builder.run(f"Implement on a maestro/* branch from:\n{state['design']}")
         pr = f"https://github.com/example/repo/pull/{abs(hash(state['run_id'])) % 900 + 100}"
-        emit(state, "pr.opened", pr_url=pr)   # in the real engine the DoD gates must be green here
+        emit(state, "pr.opened", pr_url=pr, by=builder.id)
+
+        # subagent fan-out within the build stage:
+        test = crew.agent("test")
+        test.run(f"Generate + run spec-derived tests for {pr}")
+        emit(state, "test.passed", by=test.id)
+
+        reviewer = crew.agent("reviewer")
+        assert reviewer.id != builder.id, "reviewer must not be the author (ADR-0004)"
+        reviewer.run(f"Critique the diff for {pr} against standards/")
+        emit(state, "review.posted", by=reviewer.id, author=builder.id, findings="none-high")
         return {"pr_url": pr, "stage": "merge_gate"}
 
     def merge_gate(state):
@@ -81,7 +99,7 @@ def make_graph(checkpointer, model, events):
         emit(state, "task.done", pr_url=state.get("pr_url"))
         return {"stage": "done"}
 
-    def decided(state):                       # conditional-edge router: the human's choice
+    def decided(state):
         return state["last_decision"]["decision"]
 
     g = StateGraph(DeliveryState)

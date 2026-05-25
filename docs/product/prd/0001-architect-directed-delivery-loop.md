@@ -116,7 +116,7 @@ The full method — artifact templates, gate mechanics, the Definition of Done, 
 
 ## Out of scope decisions deferred to engineering
 
-- Orchestration foundation — build on the **Claude Agent SDK** (subagents, hooks, MCP) vs a bespoke state machine.
+- ~~Orchestration foundation~~ — **Resolved: LangGraph** (durable execution + `interrupt()` gates), via the spike ([ADR-0014](../../architecture/decisions/0014-orchestration-runtime-langgraph.md)).
 - Persistence choice for delivery-task / gate / traceability state.
 - GitHub integration mechanism (GitHub App vs PAT) and Slack integration mechanism (Slack app — Socket Mode vs Events API).
 - Concrete SAST/dependency/secret/SBOM tool selection (e.g. CodeQL vs Semgrep; Dependabot vs Renovate).

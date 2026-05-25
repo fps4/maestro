@@ -1,11 +1,12 @@
 """CLI driver for the LangGraph delivery-loop spike.
 
-  python run.py start  --intent "add OAuth login" [--product-type technical|commercial]
-  python run.py resume --thread <id> --decision approve|request_changes|reject [--feedback "..."]
-  python run.py state  --thread <id>
+  python run.py start   --intent "add OAuth login" [--product-type technical|commercial]
+  python run.py resume  --thread <id> --decision approve|request_changes|reject [--feedback "..."]
+  python run.py state   --thread <id>      # current state from LangGraph's checkpointer + event log
+  python run.py project --thread <id>      # current state rebuilt from the EVENT LOG ALONE (no checkpointer)
 
-State is checkpointed to .run/checkpoints.sqlite, so `start` and `resume` can run in separate
-processes — demonstrating durable resume across restarts.
+`state` vs `project` is the point: both should agree, but `project` proves the event log — not the
+checkpointer — is the authoritative source of truth (ADR-0008/0009).
 """
 import argparse
 import json
@@ -16,7 +17,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import Command
 
 from delivery_loop import make_graph
-from event_log import EventLog
+from event_log import EventLog, replay
 from model_client import ModelClient
 
 RUN = pathlib.Path(__file__).parent / ".run"
@@ -59,14 +60,23 @@ def resume(a):
 def state(a):
     cfg = {"configurable": {"thread_id": a.thread}}
     snap = _run(lambda g: g.get_state(cfg))
-    print("paused_at:", snap.next or "(done)")
-    print("values:", json.dumps({k: v for k, v in snap.values.items() if k != "history"},
-                                 indent=2, default=str))
-    if EVENTS.exists():
-        print("\nevent log (maestro source of truth — separate from the checkpointer):")
-        for line in EVENTS.read_text().splitlines():
-            e = json.loads(line)
-            print(f"  #{e['seq']:>2} {e['type']:<18} {json.dumps(e['payload'])}")
+    print("checkpointer — paused_at:", snap.next or "(done)")
+    print("checkpointer — values:",
+          json.dumps({k: v for k, v in snap.values.items() if k != "history"}, indent=2, default=str))
+    _print_events(a.thread)
+
+
+def project(a):
+    evs = [e for e in EventLog(EVENTS).read() if e["run_id"] == a.thread]
+    print(f"reconstructed from the EVENT LOG ALONE — {len(evs)} events, no checkpointer:\n")
+    print(json.dumps(replay(evs), indent=2))
+
+
+def _print_events(thread):
+    evs = [e for e in EventLog(EVENTS).read() if e["run_id"] == thread]
+    print("\nevent log (authoritative — separate from the checkpointer):")
+    for e in evs:
+        print(f"  #{e['seq']:>2} {e['type']:<16} {json.dumps(e['payload'])}")
 
 
 if __name__ == "__main__":
@@ -83,6 +93,7 @@ if __name__ == "__main__":
     r.set_defaults(fn=resume)
 
     st = sub.add_parser("state"); st.add_argument("--thread", required=True); st.set_defaults(fn=state)
+    pj = sub.add_parser("project"); pj.add_argument("--thread", required=True); pj.set_defaults(fn=project)
 
     args = p.parse_args()
     args.fn(args)

@@ -1,6 +1,6 @@
 ---
 title: "0012: Artefact storage and sharing — S3-compatible ArtifactStore (MinIO on ds1)"
-status: proposed
+status: accepted
 date: 2026-05-25
 related:
   - 0002-claude-api-direct-via-modelclient.md

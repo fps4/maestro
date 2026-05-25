@@ -5,7 +5,7 @@ maestro is built the way it builds: **spec-driven, gated, and tested**. Whether 
 ## The short version
 
 1. **Start from a spec, not a diff.** Significant work needs an approved functional spec and technical design before code. See [`docs/guides/sdlc.md`](docs/guides/sdlc.md).
-2. **Work on a branch, open a pull request.** Never push to `main`. Never merge your own PR.
+2. **Work on a branch, open a pull request.** Don't push directly to `main`. (Agents never merge the *products maestro builds* — ADR-0004; for **this engine repo**, the maintainer/owner merges PRs.)
 3. **Green before review.** Tests, linters, and security/dependency scans must pass before a human is asked to look.
 4. **Docs change with the code.** A behaviour change that leaves docs stale is incomplete. See [`docs/guides/documentation-standards.md`](docs/guides/documentation-standards.md).
 

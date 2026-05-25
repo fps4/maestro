@@ -7,17 +7,18 @@ Instructions for AI coding agents working **on the maestro repo itself**. (For m
 - Read any file in the repository
 - Create and edit files in `docs/`, `standards/`, `config/`, and (once they exist) `orchestrator/`, `agents/`, `model/`, `adapters/`
 - Propose changes as branches and pull requests
+- **Merge engine-repo pull requests** — the maintainer/owner (or automation acting on their behalf) may merge PRs in *this* repo. The never-merge rule is the runtime crew's contract for the products maestro builds, not a rule for this engine repo.
 
 ## Not allowed
 
-- **Push to the default branch, or merge any PR** — merge is a human action behind the gate. This is the load-bearing safety rule (see ADR-0004).
+- **Push *directly* to the default branch** — change this repo via pull requests (merging them is allowed, per *Allowed* above). The "agents never merge" rule applies to the runtime crew on the products maestro builds (ADR-0004), restated below.
 - Edit `docs/architecture/decisions/` accepted ADRs — they are immutable; propose a new ADR that supersedes instead
 - Add direct provider SDK calls in agent code — all LLM calls go through the single `ModelClient` (ADR-0002)
 - Change split-review routing semantics in `config/reviewers.yaml` without an ADR (ADR-0003)
 
 ## Hard rules for the runtime crew
 
-These are maestro's product safety contract, restated here so any agent editing this repo preserves them:
+These are maestro's product safety contract **for the products maestro builds** (not for this engine repo, whose PRs the maintainer may merge), restated here so any agent editing this repo preserves them:
 
 1. Agents work on `maestro/*` branches and open pull requests. They never push to a default branch and never merge.
 2. A **reviewer agent may not author the feature it reviews** — independent checks, not self-grading.

@@ -32,6 +32,17 @@ maestro runs on a cloud substrate — three external connections:
 | `SLACK_BOT_TOKEN` | Yes | Slack app bot token |
 | `SLACK_CHANNEL` | Yes | Channel for status and approval requests |
 | `REVIEWERS_CONFIG` | No | Path to the routing matrix (default: `config/reviewers.yaml`) |
+| `PRODUCTS_REGISTER` | No | Path to your **private** product register (default: `config/products.yaml`, gitignored). Point at a private repo/overlay to keep product data out of the public repo (ADR-0010). |
+
+## Your private product register
+
+maestro is open-core — the public repo ships only a template. Create your real, private register before first run:
+
+```bash
+cp config/products.example.yaml config/products.yaml   # gitignored; never committed
+```
+
+See [`../../config/README.md`](../../config/README.md) for keeping product data private (including the recommended separate-private-repo option).
 
 ## First-run verification (from US-0001)
 

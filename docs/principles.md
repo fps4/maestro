@@ -88,3 +88,9 @@ The SDLC standards above are encoded as machine-readable rules in [`standards/`]
 ## 10. Graduated, revocable autonomy
 
 A new product starts more-gated. As a crew demonstrates reliability on a repo, auto-merge eligibility for low-risk change classes may be relaxed — with one-switch revocation and a full audit trail. Autonomy is earned per product and per change class, never a launch-time global toggle.
+
+## 11. Open-core — public engine, private instance data
+
+The maestro **engine and its conceptual docs are open source**; **everything about the products it builds is private and never lives in the public repo.** Product code sits in each product's own (private-by-default) repos; specs/designs seed the *product's* repo; operational state and audit logs live in maestro's store on a private host; the product register is gitignored (only a template is public). The public repo ships templates and design, never product data. See [ADR-0010](architecture/decisions/0010-public-engine-private-instance-data.md).
+
+**Why:** open-sourcing the engine must never risk product confidentiality. **How:** the real register loads from a configurable path (default `config/products.yaml`, gitignored) that can point at a private repo/overlay; `.gitignore` enforces the floor so product data can't be committed by accident.

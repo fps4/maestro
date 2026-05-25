@@ -19,3 +19,7 @@
 | Traceability | First-class links from requirement → task → PR/commit, so "is the product done?" aggregates across repos. |
 | Conductor | Informal name for the orchestrator — sequences agents and owns gate state; performs no LLM inference. |
 | ModelClient | The single internal client that calls the Anthropic API directly and records cost + audit for every call. The only LLM egress. |
+| Product register | The git-tracked registry of products (`config/products.yaml`) — their repos, participants/roles, product_type, deploy target, and visibility. Changing it is a reviewed PR (ADR-0008). |
+| Event log | The append-only record of state changes and agent/human actions; maestro's operational source of truth. Current state is a projection of it (event-sourcing + CQRS; ADR-0008). |
+| Audit log | The immutable tier: the LLM-call audit (every `ModelClient` call) plus the gate-decision/agent-action event log. Long-retention, tamper-evident (ADR-0009). |
+| Correlation ID (`run_id`) | The single id threading every LLM call, event, gate decision, and operational log line for one run — so a run is reconstructible end to end. |

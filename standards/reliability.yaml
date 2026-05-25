@@ -1,0 +1,62 @@
+# Reliability standards — injected into agent prompts. Apply to maestro's own services and to the
+# services the crew builds for a product. Adapted from the foundry; re-anchored to maestro
+# (ModelClient egress ADR-0002, event log ADR-0008, OTel observability ADR-0009, LangGraph ADR-0014).
+concern: reliability
+
+slos:
+  definition: count(good_events) / count(total_events) over a 30-day rolling window
+  rule: every HTTP service defines at least availability + latency SLOs before production   # enforced: always
+  availability:
+    sli: count(status < 500) / count(total_requests)
+    target: 99.9%                  # raise to 99.95% for user-facing services
+  latency:
+    rule: never average latency — track p50/p95/p99; measure success and error latency separately
+    budgets_by_model_tier:         # LLM calls; the tier is resolved by the ModelClient (see patterns.yaml)
+      fast: { p95: 3s }            # Haiku-class
+      standard: { p95: 30s }       # Sonnet-class
+      strong: { p95: 60s }         # Opus-class
+    non_llm_http: { p95: 100ms }
+
+golden_signals:
+  latency: track success and error latency separately, as percentiles — never averages
+  traffic: request rate / events per minute
+  errors:
+    rule: distinguish platform errors (an agent/engine bug) from expected errors (bad input)
+    by_type: [5xx, timeout, llm_malformed_output, business_logic]
+  saturation:
+    rule: alert at 80% of capacity, before saturation — not after
+    resources: [cpu, memory, queue_depth, llm_concurrency, token_budget]
+
+burn_rate_alerts:
+  critical: { short_window: 5m,  long_window: 1h, factor: 14.4x, action: page on-call immediately }
+  warning:  { short_window: 30m, long_window: 6h, factor: 6x,    action: notify team and investigate }
+
+error_budget:
+  rule: if >50% of the budget is consumed with >50% of the window remaining, halt non-critical work
+  tracking: burn rate must be visible in metrics (OTel; ADR-0009)
+
+incident_response:
+  severity_by_slo_impact:
+    sev1: SLO breach active or imminent (budget burning > 14x)
+    sev2: budget burning > 6x; degraded experience
+    sev3: elevated errors within budget; no user impact
+  rules:
+    - severity is set by SLO impact, not by gut feeling or team pressure
+    - every incident produces a blameless post-incident review
+    - post-incident actions are tracked to completion, not just written down
+  mttr_target: { sev1: < 30m, sev2: < 4h }
+
+agent_reliability:                 # the maestro crew + orchestrator (ADR-0014)
+  health_check_contract:
+    liveness: "GET /health -> {status: ok|degraded|error}; responds < 2s"
+    degraded: running, but a dependency (Anthropic API, store, an adapter) is unavailable
+    error: cannot serve requests — removed from rotation
+  retry_on_degraded:
+    rule: the orchestrator retries a degraded agent before escalating
+    max_retries: 3
+    backoff: exponential, 2s base, 30s max
+  llm_failure_handling:
+    rule: an LLM timeout or malformed/invalid-JSON output is a RETRYABLE error, not fatal   # enforced: always
+    fallback: >
+      after max_retries, emit an error event to the event log (ADR-0008/0009), move the task to
+      `blocked`, and surface it to the architect in Slack — never silently drop it.

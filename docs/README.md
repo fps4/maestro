@@ -58,6 +58,7 @@ Documentation index. maestro is **spec-driven**: product intent precedes archite
 - [`guides/setup.md`](guides/setup.md) — local setup
 - [`guides/onboarding-a-product.md`](guides/onboarding-a-product.md) — register a product and ready its repos
 - [`guides/repo-controls.md`](guides/repo-controls.md) — enforcing the merge boundary in GitHub (CODEOWNERS, branch protection, merge-less token)
+- [`guides/testing-agent-protocol.md`](guides/testing-agent-protocol.md) — how the test agent derives scenarios, runs the layered tests, and records evidence
 
 ## Standards
 

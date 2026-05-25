@@ -46,6 +46,9 @@ Documentation index. maestro is **spec-driven**: product intent precedes archite
 | [0010](architecture/decisions/0010-public-engine-private-instance-data.md) | Open-core — public engine, private instance data |
 | [0011](architecture/decisions/0011-multi-surface-human-control.md) | Multi-surface human control — Slack for architects, Telegram (per-product bots) for functional reviewers *(proposed)* |
 | [0012](architecture/decisions/0012-artifact-storage-and-sharing.md) | Artefact storage & sharing — S3-compatible ArtifactStore, MinIO on ds1 default, AWS S3 per-product opt-in *(proposed)* |
+| [0013](architecture/decisions/0013-web-control-ui-for-reviewers.md) | A web control UI for reviewers — two-axis surfaces; revisits the no-bespoke-UI non-goal *(proposed)* |
+
+> **Deferred:** the orchestration-runtime decision (LangGraph vs Agent SDK vs bespoke) is being prototyped in [`spikes/langgraph/`](../spikes/langgraph/) before an ADR is written.
 
 ## Guides
 

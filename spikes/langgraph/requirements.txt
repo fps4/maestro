@@ -1,0 +1,5 @@
+# Spike deps. Pins are loose on purpose; pin exactly once we've verified a version.
+langgraph
+langgraph-checkpoint-sqlite
+# optional — only needed if you set MAESTRO_REAL_LLM=1 to use a real Claude call instead of the stub:
+# anthropic

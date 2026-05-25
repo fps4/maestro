@@ -68,7 +68,7 @@ M0–M2 are the MVP. M3–M4 build on it.
 | **M1 — Spec → design** | Intent becomes an approved spec and design, gated in Slack | US-0010, US-0012, US-0013, US-0017 (Slack) | A real intent yields an architect-approved functional spec (EARS) then an approved design; all state event-sourced and replayable |
 | **M2 — Build → merge** | The rest of the loop; **this is the MVP** | US-0011, US-0014 | maestro implements on a `maestro/*` branch, opens a PR with green DoD, posts the merge gate; the architect merges; task marked `done` on the observed merge |
 | **M3 — Hardening & quality** | Better-vetted PRs and a compliant audit trail | US-0015, US-0016, US-0022 (full) | Independent reviewer + docs agents run on every PR; audit tier is WORM + hash-chained with retention |
-| **M4 — Commercial onboarding** | Onboard the first *commercial* product with external functional reviewers | ADR-0011 (Telegram), US-0023 (ArtifactStore), knowledge agent | A commercial product's functional gate posts to its Telegram group with presigned artefact links; per-product isolation verified |
+| **M4 — Commercial onboarding** | Onboard the first *commercial* product with external functional reviewers | functional surface (ADR-0011 / **ADR-0013** — under revision toward a web control UI + Google Docs), US-0023 (ArtifactStore), knowledge agent | A commercial product's functional gate reaches its reviewers on the chosen surface with artefact access; per-product isolation verified |
 
 ## Engineering decisions to lock before M0
 
@@ -77,7 +77,7 @@ and [`orchestrator.md`](../architecture/components/orchestrator.md). Recommended
 
 | Decision | Recommendation for the MVP |
 |---|---|
-| Crew foundation: Claude Agent SDK vs bespoke | **Claude Agent SDK** (subagents, hooks, MCP) — accelerates the crew; the `ModelClient` boundary still holds (ADR-0002) |
+| Crew foundation / orchestration runtime | **Deferred — prototyping [LangGraph](../../spikes/langgraph/)** (durable execution + `interrupt()` gates) vs Claude Agent SDK vs bespoke. The `ModelClient` boundary holds either way (ADR-0002); write the runtime ADR after the spike. |
 | Persistence | **SQLite** event store to start; Postgres cutover when concurrency/recovery demand it (ADR-0008) |
 | Runtime | **Python** (the planned runtime per `CODEBASE.md`) |
 | GitHub integration | A fine-grained **PAT scoped without merge** for the MVP; a GitHub App later |

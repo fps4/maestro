@@ -15,19 +15,21 @@ so that I review real, runnable code in GitHub and merge it myself.
 
 ## Context
 
-The execution stage. After the technical (design) gate approves, the builder implements. The output is a pull request — never a direct push, never a merge. This story exercises the ADR-0004 safety boundary end to end, and the Definition of Done gates from ADR-0006.
+The builder's execution stage. After the technical (design) gate approves (US-0013), the builder implements and opens a pull request — never a direct push, never a merge. This story is the builder's slice; the tests (US-0014), independent review (US-0015), and doc updates (US-0016) that complete the Definition of Done on the open PR, and the orchestration that opens the merge gate when they are green (US-0020), are their own stories. It exercises the ADR-0004 safety boundary end to end.
 
 ## Acceptance criteria (EARS)
 
-- WHEN a delivery task has an approved technical design, THE SYSTEM SHALL create a `maestro/*` feature branch (never the default branch) and commit the implementation to it.
-- WHEN the implementation is complete, THE SYSTEM SHALL open a pull request targeting the default branch, with a description linking the delivery task and its approved spec/design and showing which requirement each change satisfies.
-- WHILE the pull request is open, THE SYSTEM SHALL run all Definition-of-Done gates and SHALL post the PR to the technical (merge) gate only when they are green, with a triaged reviewer-agent review attached.
+- WHEN a delivery task has an approved technical design, THE SYSTEM SHALL create a `maestro/*` feature branch (never the default branch) and commit the implementation to it, one branch per delivery task.
+- WHEN the implementation is complete, THE SYSTEM SHALL open a draft pull request targeting the default branch, with a description linking the delivery task and its approved spec/design and showing which requirement each change satisfies.
+- WHEN all Definition-of-Done gates are green (spec-derived tests US-0014, independent review US-0015, docs US-0016, and the security/SBOM floors), THE SYSTEM SHALL mark the PR ready for the technical (merge) gate.
 - WHEN the architect approves and merges in GitHub, THE SYSTEM SHALL mark the delivery task done on the observed merge event.
 - IF any code path attempts to push to the default branch or merge programmatically, THEN THE SYSTEM SHALL refuse and log it — maestro has no code path that performs it.
 
 ## Out of scope
 
-- Generating the technical design (precedes this story).
+- Generating the technical design (US-0013).
+- Generating tests (US-0014), the independent diff review (US-0015), and doc updates (US-0016).
+- Opening/sequencing the merge gate and observing the merge event mechanics (orchestrator, US-0020).
 - CI configuration in the target repo (assumed present; runs on the PR).
 
 ## Notes

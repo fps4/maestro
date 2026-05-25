@@ -2,7 +2,7 @@
 
 **Question:** does LangGraph's human-in-the-loop model fit maestro's gated delivery loop — and does
 it coexist cleanly with the decisions we've already made (the `ModelClient` egress, the
-event-sourced audit log)? The runtime ADR is **deferred** until we've run this.
+event-sourced audit log)? **Resolved — adopt LangGraph; see [ADR-0014](../../docs/architecture/decisions/0014-orchestration-runtime-langgraph.md).**
 
 ## What it demonstrates
 
@@ -51,13 +51,14 @@ Set `MAESTRO_REAL_LLM=1` and `ANTHROPIC_API_KEY=...` to swap the stub for a real
   process** (durable via the SQLite checkpointer).
 - [x] **`ModelClient` egress preserved without friction** — nodes call `model.complete(...)`; no
   LangChain LLM wrapper involved; every call is audited. ADR-0002 holds.
-- [~] **checkpointer vs. our event log — they coexist, but watch duplication.** The checkpointer is
-  the *execution/recovery* layer (graph state, resumability); our append-only event log is the
-  *domain source of truth + audit* (ADR-0008/0009). They didn't fight. Open design point for the ADR:
-  keep the **event log authoritative** for audit/traceability and treat the checkpointer as a
-  rebuildable execution cache — don't let the checkpointer become a second, divergent source of truth.
-- [ ] **subagents / "deep agents" for the crew** — not exercised here (single graph); evaluate next.
-- **Verdict so far:** strong positive signal. LangGraph is a credible runtime; before writing the
-  runtime ADR, resolve (a) the checkpointer↔event-log authority split and (b) the crew/subagent model.
+- [x] **checkpointer vs. event log — resolved: the event log is authoritative, the checkpointer is a cache.**
+  `run.py project` rebuilds full task state (stage, gate decisions, review, PR) from the event log
+  **alone** — no checkpointer. So the event log is the source of truth (ADR-0008/0009); the checkpointer
+  is a rebuildable execution cache. The contract: never let the checkpointer diverge as a second source of truth.
+- [x] **bounded-role crew + subagents fit.** Five distinct agents ran through the `ModelClient`
+  (`spec-1`, `architect-1`, `builder-1`, `test-2`, `reviewer-3`); the build stage fanned out to test +
+  reviewer **subagents**, and **`reviewer-3` ≠ `builder-1`** — the reviewer ≠ author boundary (ADR-0004) holds in-runtime.
+- **Verdict: adopt LangGraph** → [ADR-0014](../../docs/architecture/decisions/0014-orchestration-runtime-langgraph.md):
+  LangGraph runtime + `interrupt()` gates; `ModelClient` stays the egress; the event log stays authoritative; OTel (not LangSmith) for the audit tier.
 
 > Throwaway spike. Not the engine; not SDLC/DoD-bound (see [`../README.md`](../README.md)).

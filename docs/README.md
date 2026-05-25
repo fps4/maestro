@@ -47,8 +47,9 @@ Documentation index. maestro is **spec-driven**: product intent precedes archite
 | [0011](architecture/decisions/0011-multi-surface-human-control.md) | Multi-surface human control — Slack for architects, Telegram (per-product bots) for functional reviewers *(proposed)* |
 | [0012](architecture/decisions/0012-artifact-storage-and-sharing.md) | Artefact storage & sharing — S3-compatible ArtifactStore, MinIO on ds1 default, AWS S3 per-product opt-in *(proposed)* |
 | [0013](architecture/decisions/0013-web-control-ui-for-reviewers.md) | A web control UI for reviewers — two-axis surfaces; revisits the no-bespoke-UI non-goal *(proposed)* |
+| [0014](architecture/decisions/0014-orchestration-runtime-langgraph.md) | Orchestration runtime — LangGraph + interrupts; `ModelClient` egress and the event log stay authoritative |
 
-> **Deferred:** the orchestration-runtime decision (LangGraph vs Agent SDK vs bespoke) is being prototyped in [`spikes/langgraph/`](../spikes/langgraph/) before an ADR is written.
+> **Decided via spike:** the orchestration runtime is **LangGraph** (ADR-0014), validated in [`spikes/langgraph/`](../spikes/langgraph/). Still open: the reviewer surface / web-UI direction (ADR-0013).
 
 ## Guides
 

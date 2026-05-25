@@ -75,7 +75,7 @@ There is intentionally **no** orchestrator flow that merges a PR. At `merge_gate
 | Question | Owner | Status |
 |----------|-------|--------|
 | Does `StateStore` reuse GitHub Issues/Projects, or a maestro-owned DB? | @architect | **Resolved** — maestro-owned, event-sourced store; GitHub for code only (ADR-0008) |
-| Orchestration engine: Claude Agent SDK vs Temporal-style durable execution vs a lighter event-log + snapshot? | @architect | Open (ADR-0008 defers; event-sourcing holds either way) |
+| Orchestration engine: Claude Agent SDK vs Temporal-style durable execution vs a lighter event-log + snapshot? | @architect | **Resolved** — **LangGraph** (durable execution + `interrupt()` gates); the event log stays authoritative, the checkpointer is a rebuildable cache (ADR-0014) |
 | SQLite to start, with a Postgres cutover when concurrency/recovery demand it? | @architect | Open |
 | Is the `merge_gate` a GitHub-native review approval, a Slack approval, or both? | @architect | Open |
 

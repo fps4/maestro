@@ -31,7 +31,7 @@ The gates are the product, not friction. Two gates, separately owned:
 - **Functional gate** (pre-code) — *is this the right thing to build?* Owned by the **functional reviewer** for commercial products, the **architect** for technical products.
 - **Technical gate** (design, and merge) — *is it designed and built right?* Owned by the **architect**.
 
-**Why:** removing the gates makes maestro an ungoverned code generator; collapsing them into one PR-skim loses the architect's design authority. **How:** gates are technically enforced (an agent cannot proceed without an explicit positive decision), routed by `config/reviewers.yaml`, risk-tiered to avoid both over-gating and under-gating, and delivered to the responsible participant in Slack.
+**Why:** removing the gates makes maestro an ungoverned code generator; collapsing them into one PR-skim loses the architect's design authority. **How:** gates are technically enforced (an agent cannot proceed without an explicit positive decision), routed by `config/reviewers.yaml`, risk-tiered to avoid both over-gating and under-gating, and delivered to the responsible participants on their surface — architects in a shared Slack channel, functional reviewers in the product's Telegram group, where any role-holder may decide ([ADR-0011](architecture/decisions/0011-multi-surface-human-control.md)).
 
 ## 3. Agents propose, humans dispose
 

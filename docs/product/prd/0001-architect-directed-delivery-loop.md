@@ -15,6 +15,7 @@ related:
   - docs/product/user-stories/EP-01-delivery-loop/US-0015-independent-reviewer-agent.md
   - docs/product/user-stories/EP-01-delivery-loop/US-0016-docs-agent-updates-docs.md
   - docs/product/user-stories/EP-01-delivery-loop/US-0012-route-review-by-product-type.md
+  - docs/product/user-stories/EP-01-delivery-loop/US-0017-group-surface-gate-approval.md
   - docs/product/user-stories/EP-02-engine-foundation/US-0020-orchestrate-delivery-task.md
   - docs/product/user-stories/EP-02-engine-foundation/US-0021-modelclient-single-egress.md
   - docs/product/user-stories/EP-02-engine-foundation/US-0022-audit-and-event-log.md
@@ -69,7 +70,7 @@ The full method — artifact templates, gate mechanics, the Definition of Done, 
 - **Two human gates** — functional (pre-code) and technical (design, and merge) — routed by `config/reviewers.yaml` against the product's `product_type`.
 - **Automated quality gates** that must be green before the technical merge gate opens (Definition of Done — [ADR-0006](../../architecture/decisions/0006-spec-driven-sdlc.md)).
 - **Requirement → task → PR/commit traceability**, surfaced on the PR.
-- **Slack** as the control surface: dispatch, per-gate per-participant actionable approvals, status.
+- **Per-role human surfaces** ([ADR-0011](../../architecture/decisions/0011-multi-surface-human-control.md)): architects in a shared **Slack** channel (dispatch, architect-gate approvals, status); functional reviewers in the product's **Telegram** group via a per-product bot. Gates post to the group; any role-holder may decide.
 - **GitHub** as substrate and enforcement: `maestro/*` branches, draft PR per task, branch protection + required checks + CODEOWNERS as the real merge lock.
 - **Claude via a single internal `ModelClient`**, calling the Anthropic API directly, recording cost/audit per call ([ADR-0002](../../architecture/decisions/0002-claude-api-direct-via-modelclient.md)).
 
@@ -78,7 +79,7 @@ The full method — artifact templates, gate mechanics, the Definition of Done, 
 - Product / participant management as a flow (PRD-0002 planned).
 - A single delivery task spanning **multiple repos** at once (v1 targets one repo per task; the product may have many).
 - Deployment/hosting of built products to lab servers or cloud (target model in [ADR-0007](../../architecture/decisions/0007-per-product-deployment-targets.md); build is a later phase).
-- A bespoke maestro web UI (Slack + GitHub UI only).
+- A bespoke maestro web UI (Slack, Telegram, and GitHub UI only).
 - Automated merge or automated production deploy.
 
 ## Requirements
@@ -109,7 +110,7 @@ The full method — artifact templates, gate mechanics, the Definition of Done, 
 |----------|-------|-----|
 | ~~State of record for delivery-task/gate/traceability?~~ | @architect | **Resolved** — git-config register + maestro-owned event-sourced operational store + GitHub for code, mirrored via webhooks ([ADR-0008](../../architecture/decisions/0008-system-of-record-and-persistence.md)) |
 | Does the merge gate reuse GitHub's native PR review/approval, a Slack approval, or both (Slack UX + GitHub enforcement)? | @architect | 2026-06-15 |
-| How does a functional reviewer who is not a GitHub collaborator approve a spec — Slack-only, or a lightweight GitHub identity? | @architect | 2026-06-15 |
+| ~~How does a functional reviewer who is not a GitHub collaborator approve a spec?~~ | @architect | **Resolved** — functional reviewers approve in the product's Telegram group, never in GitHub ([ADR-0011](../../architecture/decisions/0011-multi-surface-human-control.md)) |
 | Which automated gates are required vs advisory at v1, and what are the risk tiers for auto-eligible vs human-required merges? | @architect | 2026-06-30 |
 
 ## Out of scope decisions deferred to engineering

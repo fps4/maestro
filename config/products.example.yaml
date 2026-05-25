@@ -10,6 +10,12 @@
 #
 # A product has 1+ repos and 1+ participants (the architect always included), one product_type
 # (commercial | technical) its repos inherit, a visibility (private by default), and a deploy target.
+#
+# Surfaces (ADR-0011): architects approve in one shared Slack channel — an INSTANCE setting
+# (ARCHITECT_SLACK_CHANNEL), not per product. A commercial product's functional reviewers approve in
+# the product's own Telegram group via the product's own bot, declared per product below. Bot TOKENS
+# are secrets (env/secret manager), referenced here only by logical name. Participant surface ids
+# (slack_user_id / telegram_user_id) let maestro authorise and attribute a decision.
 
 version: 1
 
@@ -24,8 +30,10 @@ products:
       production: aws
     repos:
       - your-org/maestro
+    # technical product: architect-only, reached on the shared architect Slack channel —
+    # no functional reviewer, so no Telegram group/bot.
     participants:
-      - { handle: "@you", role: architect }
+      - { handle: "@you", role: architect, slack_user_id: U0ARCHITECT }
 
   # Example: a commercial product (private — the common case).
   - id: acme-billing
@@ -37,6 +45,11 @@ products:
     repos:
       - acme/billing-api
       - acme/billing-web
-    participants:
-      - { handle: "@you", role: architect }
-      - { handle: "@reviewer", role: functional_reviewer }
+    functional_channel:           # where this product's functional gates are posted (ADR-0011)
+      surface: telegram
+      bot: acme-billing-bot       # logical name; the token is a SECRET (env/secret mgr), not here
+      group_chat_id: "-1001234567890"   # the product's own Telegram group
+    participants:                 # 2+ functional reviewers share the group; any may decide, others monitor
+      - { handle: "@you",   role: architect,           slack_user_id: U0ARCHITECT }
+      - { handle: "@priya", role: functional_reviewer, telegram_user_id: "987654321" }
+      - { handle: "@sam",   role: functional_reviewer, telegram_user_id: "123456789" }

@@ -23,7 +23,7 @@ The gap is a way for one architect to direct the building of many systems at onc
 
 ## What maestro is
 
-maestro is the architect's **agentic engineering org**: a crew of Claude-powered agents that take a unit of work from intent → functional spec → technical design → implementation → reviewed pull request, on real GitHub, coordinated through Slack, gated by the right human at each step.
+maestro is the architect's **agentic engineering org**: a crew of Claude-powered agents that take a unit of work from intent → functional spec → technical design → implementation → reviewed pull request, on real GitHub, coordinated through Slack and Telegram, gated by the right human at each step.
 
 It organises work around a **product** — the unit no competing tool models:
 
@@ -65,7 +65,7 @@ Full text in [`docs/principles.md`](../principles.md):
 
 - **Not an end-user app generator.** maestro serves the architect and targets real systems; it does not turn a layperson's natural-language request into a finished app.
 - **Not autonomous delivery.** Removing the human gates would turn maestro into an ungoverned code generator. The architect-in-the-loop and the split functional/technical review are the product.
-- **No bespoke UI in v1.** The human surface is Slack and GitHub's own UI; there is no maestro web app or design-system layer yet.
+- **No bespoke UI in v1.** The human surfaces are Slack (architects), Telegram (functional reviewers), and GitHub's own UI; there is no maestro web app or design-system layer yet.
 - **No mandatory LLM proxy.** maestro calls the Claude API directly for native prompt caching / extended thinking / tool use, behind a single internal client that records cost and audit (see [ADR-0002](../architecture/decisions/0002-claude-api-direct-via-modelclient.md)).
 
 ## Success metrics
@@ -76,7 +76,7 @@ Full text in [`docs/principles.md`](../principles.md):
 
 ## Where maestro deliberately differs from the market
 
-Validated against Devin, Factory.ai, GitHub Copilot coding agent, Cursor, Jules, Sweep, OpenHands and others (2025–2026). maestro's safe bets — issue→plan→PR, agents-never-merge, coordinator + bounded-role crew, Slack control surface, persistent context — are all mainstream best practice. Its defensible novelty is the **governance model** that none of them implement:
+Validated against Devin, Factory.ai, GitHub Copilot coding agent, Cursor, Jules, Sweep, OpenHands and others (2025–2026). maestro's safe bets — issue→plan→PR, agents-never-merge, coordinator + bounded-role crew, a chat control surface, persistent context — are all mainstream best practice. Its defensible novelty is the **governance model** that none of them implement:
 
 1. **Architect-owned design gate** as the central organising principle (not "PR review by whoever's around").
 2. **Split functional vs technical review** as two separately-owned gates.

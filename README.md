@@ -2,7 +2,7 @@
 
 *An architect-directed agentic delivery platform.*
 
-maestro is a crew of AI agents that build real software on real infrastructure — **GitHub** for the codebase, **Slack** as the human control surface, and **Claude** for reasoning — with a human architect (technical product owner) in the loop at every gate.
+maestro is a crew of AI agents that build real software on real infrastructure — **GitHub** for the codebase, **Slack** and **Telegram** as the human control surfaces (architects in Slack, functional reviewers in Telegram), and **Claude** for reasoning — with a human architect (technical product owner) in the loop at every gate.
 
 You describe a unit of work; the crew writes the spec, designs it, implements it on a branch, runs the full quality suite, and opens a pull request. You review and merge. Agents propose; **humans dispose**.
 

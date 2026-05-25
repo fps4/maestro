@@ -43,6 +43,7 @@ Documentation index. maestro is **spec-driven**: product intent precedes archite
 | [0008](architecture/decisions/0008-system-of-record-and-persistence.md) | System of record & persistence (register as config; event-sourced operational store; GitHub for code) |
 | [0009](architecture/decisions/0009-audit-logging-and-observability.md) | Audit, logging & observability (four stores, one correlation ID) |
 | [0010](architecture/decisions/0010-public-engine-private-instance-data.md) | Open-core — public engine, private instance data |
+| [0011](architecture/decisions/0011-multi-surface-human-control.md) | Multi-surface human control — Slack for architects, Telegram (per-product bots) for functional reviewers *(proposed)* |
 
 ## Guides
 

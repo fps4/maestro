@@ -16,6 +16,7 @@ owners: [architect]
 - [ ] **[[US-0015-independent-reviewer-agent|US-0015 — Critique the diff with an independent reviewer agent]]** #delivery-loop `(0)`
 - [ ] **[[US-0016-docs-agent-updates-docs|US-0016 — Update affected docs in the same PR]]** #delivery-loop `(0)`
 - [ ] **[[US-0012-route-review-by-product-type|US-0012 — Route each gate to the right reviewer]]** #delivery-loop `(0)`
+- [ ] **[[US-0017-group-surface-gate-approval|US-0017 — Approve a gate from a group surface (Slack / per-product Telegram)]]** #delivery-loop `(0)`
 - [ ] **[[US-0020-orchestrate-delivery-task|US-0020 — Orchestrate a delivery task through its stages and gates]]** #engine-foundation `(0)`
 - [ ] **[[US-0021-modelclient-single-egress|US-0021 — Route every LLM call through the audited ModelClient]]** #engine-foundation `(0)`
 - [ ] **[[US-0022-audit-and-event-log|US-0022 — Record an append-only, correlated audit & event log]]** #engine-foundation `(0)`

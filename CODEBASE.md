@@ -17,6 +17,7 @@ maestro is an architect-directed agentic delivery platform: a crew of Claude-pow
 | `orchestrator/` | *(planned)* Sequences agents and owns gate state; performs no LLM inference |
 | `agents/` | *(planned)* The crew — spec, architect, builder, test, reviewer, docs; LLM logic lives here |
 | `model/` | *(planned)* The single `ModelClient` — the only place that calls Claude; records cost + audit |
+| `storage/` | *(planned)* The single S3-compatible `ArtifactStore` — stores artefacts (specs, designs, test reports, SBOMs) and mints short-TTL presigned share links; MinIO on ds1 by default, AWS S3 per-product opt-in (ADR-0012) |
 | `adapters/github/` | *(planned)* GitHub integration — branches, PRs, Actions, Issues/Projects |
 | `adapters/slack/` | *(planned)* Slack adapter — the **architect** surface: intent intake + architect-gate approvals |
 | `adapters/telegram/` | *(planned)* Telegram adapter — the **functional-reviewer** surface: one bot + group per product (ADR-0011) |
@@ -26,6 +27,7 @@ maestro is an architect-directed agentic delivery platform: a crew of Claude-pow
 - **Human intent (in):** Slack message (architect) → `adapters/slack/` → orchestrator *(planned)*
 - **Human approval (in):** an architect's Slack action, or a functional reviewer's Telegram in-group action → orchestrator gate resolution; any role-holder in the group may decide (ADR-0011) *(planned)*
 - **Work output (out):** GitHub pull request opened by the builder agent via `adapters/github/` *(planned)*
+- **Artefact sharing (out):** an agent's artefact → `storage/ArtifactStore` → short-TTL presigned URL posted to the reviewer's surface (ADR-0012) *(planned)*
 - **LLM calls:** every agent → `model/ModelClient` → Anthropic API (native prompt caching, extended thinking, tool use); every call is recorded to the audit log
 
 ## Naming notes

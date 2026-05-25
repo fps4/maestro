@@ -1,0 +1,52 @@
+# Architectural patterns — injected into agent prompts. Apply to maestro's services and to the
+# services the crew builds. Stack-agnostic floors; a product implements them in its chosen stack.
+# Adapted from the foundry; re-anchored to maestro (ADR-0002/0004/0008/0009/0014).
+concern: patterns
+
+health_checks:
+  required: true
+  endpoints: { liveness: GET /health, readiness: GET /ready }   # readiness 200 only when deps are up
+  response_format: { status: ok | degraded | error }
+
+logging:
+  format: structured-json
+  required_fields: [timestamp, level, service, message, run_id]   # run_id threads the event log (ADR-0009)
+  rules:
+    - never log secrets, tokens, keys, or PII — redact before persistence (ADR-0009)
+    - carry run_id on every line within a run's context
+    - WARNING+ in production by default
+
+http_services:
+  graceful_shutdown: { required: true, drain_seconds: 10 }
+  timeouts: { read: 30s, write: 30s, idle: 60s }
+
+workers_and_background_tasks:
+  idempotency: every task must be safe to retry          # enforced: always
+  dead_letter: tasks failing after 3 retries go to a DLQ
+  observability: emit an event for every task start / success / failure (ADR-0008)
+
+persistence:
+  migrations:
+    rule: never modify an existing migration — always add a new one   # enforced: always
+  connection_pooling: a bounded pool per service instance
+  backups: owned at the host/infra layer, not by the service
+
+configuration:
+  source: environment variables only — no config baked into images
+  secrets: injected at runtime via a secret manager / env — never in source control (ADR-0010)
+  defaults: provide safe defaults for every non-secret setting
+
+agents:                            # the maestro crew (ADR-0001/0002/0014)
+  run_logging:
+    rule: every significant step emits an event to the append-only event log (ADR-0008/0009)
+    events: ["<stage>.start", "<stage>.done", "<stage>.failed"]   # with run_id + duration / error
+  model_selection:
+    rule: select the model by TIER through the ModelClient (ADR-0002); never hardcode model names   # enforced: always
+    tiers: { fast: Haiku-class, standard: Sonnet-class, strong: Opus-class }
+  contracts:
+    rule: inter-agent / inter-stage calls use typed (e.g. Pydantic) request/response models
+  orchestrator_boundary:
+    rule: agents are invoked ONLY through the orchestrator's workflow (LangGraph; ADR-0014) — never ad-hoc   # enforced: always
+    why: ad-hoc invocation makes the run unrecoverable on restart and bypasses the audit log (ADR-0008/0009)
+  reviewer_not_author:
+    rule: a reviewer agent may not review a feature it authored (ADR-0004)   # enforced: always

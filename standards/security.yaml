@@ -24,3 +24,23 @@ open_source_governance:
   sbom: emit per build artifact
   provenance: track origin, license, and vuln status of every dependency
   attribution: scan agent output for substantial similarity to known OSS
+
+# Runtime / container floor — for maestro's services and the services the crew builds.
+runtime:
+  base_images:
+    rule: pin to an explicit version tag (never `latest`); prefer slim/alpine; run as a non-root user   # enforced: always
+  image_scanning:
+    rule: scan every image on build (e.g. Trivy/Grype); no known-critical CVE may be deployed   # enforced: always
+  container:
+    rules:
+      - read-only root filesystem where possible
+      - drop all Linux capabilities, add back only what is needed
+      - no privileged containers
+      - CPU + memory limits required on every service
+  network:
+    rules:
+      - expose only the ports a service actually uses
+      - internal services are not on a public-facing network
+      - external traffic enters through a single ingress/proxy
+  provenance_labels:
+    rule: label managed images with version + source repo (ties to sbom/provenance above)

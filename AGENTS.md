@@ -25,6 +25,8 @@ These are maestro's product safety contract **for the products maestro builds** 
 3. Every delivery task passes its applicable gate(s) before merge. Gate routing is resolved from `config/reviewers.yaml`, never hardcoded.
 4. A commercial product's functional spec is not "approved" until its functional reviewer signs off; everything else is the architect.
 5. All automated quality gates (Definition of Done) are green before a human is asked to review.
+6. Agents are invoked **only through the orchestrator's workflow** (LangGraph; ADR-0014) — never ad-hoc. Ad-hoc invocation makes a run unrecoverable on restart and bypasses the audit log (`standards/patterns.yaml`).
+7. Select the model by **tier** through the `ModelClient` (ADR-0002) — never hardcode model names (`standards/patterns.yaml`).
 
 ## How maestro builds (and is built)
 

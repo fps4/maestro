@@ -25,3 +25,32 @@ definition_of_done:                # all green before the human technical (merge
 
 authoring:
   rule: the test agent writes/runs tests; it does not refactor production code
+
+# Agent quality testing — non-deterministic LLM agents need layered tests (adapted from the foundry).
+agent_testing:
+  layers:
+    contract:
+      llm: mocked
+      validates: [request/response schema, error handling, fallback logic, standards loading]
+      ci_gate: required on every PR        # fast + deterministic
+    behavioral:
+      llm: real (via the ModelClient)
+      validates: right behaviour on representative fixtures, with DETERMINISTIC criteria (field presence, schema, syntax, counts)
+      ci_gate: required on merge to the default branch
+    quality:
+      llm: real (agent under test) + LLM-as-judge
+      judge: a STRONG-tier model (tiers per patterns.yaml)
+      validates: subjective dimensions scored 0–1 (e.g. spec clarity, fix specificity, code quality)
+      ci_gate: advisory — alert on >10% regression vs the stored per-agent baseline
+      cadence: scheduled + before each release
+  infrastructure:
+    mock_model: a drop-in for the ModelClient returning scripted responses (contract layer; no network)
+    evaluator: LLM-as-judge scorer (quality layer) — output + rubric -> 0–1 per criterion
+    harness: a client wrapper targeting the agent under test
+    fixtures:
+      - reference inputs per stage
+      - reference good outputs per stage
+      - VIOLATION_FILES   # files with planted naming/security/pattern violations, to test the reviewer agent
+  quality_regression:
+    baseline: stored per agent, per dimension
+    alert_threshold: 10%

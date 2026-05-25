@@ -17,3 +17,14 @@ identifiers:
 
 domain_terms:
   rule: use the GLOSSARY term where business language and code diverge; keep the glossary current
+
+# Infrastructure naming — defaults a product adopts (maestro is multi-stack, so not mandated globally).
+infrastructure:
+  docker_images:
+    pattern: <registry>/<project>/<service>:<semver>
+    rules: [semantic versioning, never `latest` in production, also tag with the git short SHA]
+  environment_variables: SCREAMING_SNAKE_CASE
+  database_objects:
+    tables: snake_case plural        # e.g. user_sessions
+    columns: snake_case              # e.g. created_at
+    indexes: idx_<table>_<column>    # e.g. idx_users_email

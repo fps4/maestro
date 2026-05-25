@@ -9,8 +9,15 @@ related:
   - docs/guides/sdlc.md
   - docs/product/user-stories/EP-00-platform-scaffold/US-0001-platform-setup.md
   - docs/product/user-stories/EP-01-delivery-loop/US-0010-draft-functional-spec.md
+  - docs/product/user-stories/EP-01-delivery-loop/US-0013-produce-technical-design.md
   - docs/product/user-stories/EP-01-delivery-loop/US-0011-implement-and-open-pr.md
+  - docs/product/user-stories/EP-01-delivery-loop/US-0014-generate-spec-derived-tests.md
+  - docs/product/user-stories/EP-01-delivery-loop/US-0015-independent-reviewer-agent.md
+  - docs/product/user-stories/EP-01-delivery-loop/US-0016-docs-agent-updates-docs.md
   - docs/product/user-stories/EP-01-delivery-loop/US-0012-route-review-by-product-type.md
+  - docs/product/user-stories/EP-02-engine-foundation/US-0020-orchestrate-delivery-task.md
+  - docs/product/user-stories/EP-02-engine-foundation/US-0021-modelclient-single-egress.md
+  - docs/product/user-stories/EP-02-engine-foundation/US-0022-audit-and-event-log.md
   - docs/architecture/decisions/0005-product-domain-model.md
   - docs/architecture/decisions/0006-spec-driven-sdlc.md
 ---

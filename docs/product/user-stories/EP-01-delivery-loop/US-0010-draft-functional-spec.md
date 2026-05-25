@@ -28,7 +28,7 @@ The entry point of the delivery loop. The spec agent converts free-form intent i
 ## Out of scope
 
 - Who the reviewer is and how routing is decided (US-0012).
-- The technical design stage that follows approval (separate story when built).
+- The technical design stage that follows approval (US-0013).
 
 ## Notes
 

@@ -7,6 +7,7 @@ related:
   - docs/architecture/overview.md
   - docs/architecture/decisions/0005-product-domain-model.md
   - docs/architecture/decisions/0011-multi-surface-human-control.md
+  - docs/architecture/decisions/0012-artifact-storage-and-sharing.md
   - docs/product/prd/0001-architect-directed-delivery-loop.md
 ---
 
@@ -31,6 +32,7 @@ The core entities maestro reasons about, per [ADR-0005](decisions/0005-product-d
 | **Trace** | First-class link: requirement → task → PR/commit. | `requirement_id`, `task_id`, `pr_id` |
 | **Event** | An append-only record of a state change or agent/human action — the operational **source of truth**; current state is a projection of these (ADR-0008/0009). | `id`, `run_id`, `seq`, `timestamp`, `actor`, `type`, `target`, `payload`, `prev_hash` |
 | **LLMCall** | One `ModelClient` call — the LLM-call audit record (OTel GenAI; ADR-0009). | `id`, `run_id`, `agent`, `model`, `input_tokens`, `output_tokens`, `cache_read`, `cache_write`, `cost`, `latency_ms` |
+| **Artifact** | A stored work product (spec/design export, diff snapshot, test report, SBOM). Bytes live in the `ArtifactStore`; the event log holds the reference (ADR-0012). | `id`, `product_id`, `task_id?`, `kind`, `storage_uri`, `sha256`, `created_at` |
 
 ## Relationships
 
@@ -72,6 +74,7 @@ Per [ADR-0008](decisions/0008-system-of-record-and-persistence.md) and [ADR-0009
 | Feature, Requirement, DeliveryTask, Gate, Trace | **maestro-owned, event-sourced store** — current state is a projection of the `Event` log | maestro |
 | PullRequest, branches, commits, CI checks | **GitHub**, mirrored into the store read-only via webhooks | GitHub |
 | Event, LLMCall | append-only **audit tier** (immutable; WORM + hash-chained) | maestro |
+| Artifact (bytes) | **S3-compatible object store** — MinIO on ds1 by default, AWS S3 per-product opt-in (ADR-0012); per-product bucket/prefix | the store holds bytes; the event log holds the reference |
 
 A single `run_id` (correlation ID) threads `Event`, `LLMCall`, and operational logs for a delivery task, so any run is reconstructible end to end.
 

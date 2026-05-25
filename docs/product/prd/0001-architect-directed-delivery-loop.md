@@ -19,6 +19,7 @@ related:
   - docs/product/user-stories/EP-02-engine-foundation/US-0020-orchestrate-delivery-task.md
   - docs/product/user-stories/EP-02-engine-foundation/US-0021-modelclient-single-egress.md
   - docs/product/user-stories/EP-02-engine-foundation/US-0022-audit-and-event-log.md
+  - docs/product/user-stories/EP-02-engine-foundation/US-0023-artifact-store-and-sharing.md
   - docs/architecture/decisions/0005-product-domain-model.md
   - docs/architecture/decisions/0006-spec-driven-sdlc.md
 ---

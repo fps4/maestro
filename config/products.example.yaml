@@ -16,6 +16,10 @@
 # the product's own Telegram group via the product's own bot, declared per product below. Bot TOKENS
 # are secrets (env/secret manager), referenced here only by logical name. Participant surface ids
 # (slack_user_id / telegram_user_id) let maestro authorise and attribute a decision.
+#
+# Artefacts (ADR-0012): specs/designs/test reports go to the instance ArtifactStore (MinIO on ds1)
+# by default, under a per-product bucket/prefix. A product may override to AWS S3 (artifact_store
+# below). Object-store credentials are secrets, never here.
 
 version: 1
 
@@ -49,6 +53,9 @@ products:
       surface: telegram
       bot: acme-billing-bot       # logical name; the token is a SECRET (env/secret mgr), not here
       group_chat_id: "-1001234567890"   # the product's own Telegram group
+    artifact_store:               # optional override; default is the instance MinIO on ds1 (ADR-0012)
+      backend: aws-s3             # AWS from day one, so this product's artefacts live on S3 too
+      bucket: acme-billing-artifacts
     participants:                 # 2+ functional reviewers share the group; any may decide, others monitor
       - { handle: "@you",   role: architect,           slack_user_id: U0ARCHITECT }
       - { handle: "@priya", role: functional_reviewer, telegram_user_id: "987654321" }

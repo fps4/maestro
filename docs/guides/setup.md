@@ -23,6 +23,7 @@ maestro runs on a cloud substrate. Its external connections (human surfaces are 
 | **Slack** | A Slack app able to post and receive interactive actions in the shared **architect** channel | The architect surface — intent in, architect-gate approvals out |
 | **Telegram** | One **bot per product** (with a functional reviewer), added to that product's group | The functional-reviewer surface; per-product bots isolate products (ADR-0011) — set up when onboarding a product, not a single global step |
 | **Anthropic / Claude** | An `ANTHROPIC_API_KEY` for the `ModelClient` | maestro's only LLM egress (ADR-0002); native prompt caching / extended thinking / tool use |
+| **Object store** | An S3-compatible endpoint + credentials — **MinIO on ds1** by default | Artefact store (ADR-0012); shared externally via short-TTL presigned URLs over a Cloudflare Tunnel; AWS S3 is a per-product opt-in |
 
 ## Environment variables (planned)
 
@@ -34,6 +35,9 @@ maestro runs on a cloud substrate. Its external connections (human surfaces are 
 | `SLACK_BOT_TOKEN` | Yes | Slack app bot token (architect surface) |
 | `ARCHITECT_SLACK_CHANNEL` | Yes | The shared architect-team channel for status + architect-gate approvals |
 | `TELEGRAM_BOT_TOKEN__<bot_name>` | Per product | One token per product's bot, keyed by the `bot:` logical name in the register (e.g. `TELEGRAM_BOT_TOKEN__acme_billing_bot`). Secret; never in the register (ADR-0011) |
+| `ARTIFACT_STORE_ENDPOINT` | Yes | S3-compatible endpoint for the default ArtifactStore (the MinIO instance on ds1); per-product AWS-S3 overrides come from the register (ADR-0012) |
+| `ARTIFACT_STORE_ACCESS_KEY` / `ARTIFACT_STORE_SECRET_KEY` | Yes | Object-store credentials (secret) |
+| `ARTIFACT_URL_TTL_SECONDS` | No | Lifetime of a presigned share link (default short, e.g. 900) |
 | `REVIEWERS_CONFIG` | No | Path to the routing matrix (default: `config/reviewers.yaml`) |
 | `PRODUCTS_REGISTER` | No | Path to your **private** product register (default: `config/products.yaml`, gitignored). Point at a private repo/overlay to keep product data out of the public repo (ADR-0010). |
 

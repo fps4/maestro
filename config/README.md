@@ -28,7 +28,8 @@ cp config/products.example.yaml config/products.yaml   # gitignored; put real pr
 - **Product code** → each product's own private repos.
 - **Specs/designs** → seed the *product's* repo (`docs/product/`), not maestro's.
 - **Operational state + audit logs** → maestro's store on your private host (ds1/ds2).
-- **Secrets** (`ANTHROPIC_API_KEY`, GitHub/Slack tokens, **per-product Telegram bot tokens**) → `.env` / secrets manager (gitignored).
+- **Artefacts** (spec/design exports, test reports, SBOMs) → the S3-compatible ArtifactStore — MinIO on ds1 by default, AWS S3 per-product opt-in (ADR-0012); per-product bucket.
+- **Secrets** (`ANTHROPIC_API_KEY`, GitHub/Slack tokens, **per-product Telegram bot tokens**, **object-store keys**) → `.env` / secrets manager (gitignored).
 
 ## Human surfaces (ADR-0011)
 

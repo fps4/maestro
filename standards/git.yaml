@@ -1,0 +1,27 @@
+# Git conventions — injected into agent prompts. See docs/architecture/decisions/0004-*.
+concern: git
+
+branches:
+  agent_namespace: "Maestro/*"        # agents create only these; never the default branch
+  default_branch_writes: forbidden    # enforced: always
+  description: Agents work on Maestro/* feature branches and open PRs from them.
+
+merge:
+  by_agents: forbidden                # enforced: always — humans merge, behind the gate
+  enforcement:
+    - GitHub branch protection on the default branch (required reviews + status checks)
+    - CODEOWNERS
+    - a GitHub credential scoped without merge rights
+  done_signal: observed-merge-event   # "Done" is the merge event, never an agent claim
+
+commits:
+  subject: imperative present tense, <= 72 chars, says what changed and why
+  body: wrap at 72; reference the requirement / task the change satisfies
+
+pull_requests:
+  one_per: delivery task
+  description_must_include:
+    - link to the delivery task and its approved spec/design
+    - which acceptance criteria (requirements) the change satisfies
+    - automated-gate status
+  reviewer_agent: may not have authored the feature it reviews   # enforced: always

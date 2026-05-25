@@ -1,0 +1,19 @@
+# Naming conventions — injected into agent prompts.
+concern: naming
+
+repos:
+  case: kebab-case
+  describe: the product or component, not the author or date
+
+files:
+  docs: kebab-case; name the subject (auth-flow.md, not notes.md)
+  prd: zero-padded numeric prefix (0001-*)
+  adr: zero-padded numeric prefix (0001-*)
+  user_stories: US-NNNN-* under EP-NN-slug/; story number tracks the epic
+
+identifiers:
+  follow: the conventions of the language/framework in the target repo
+  consistency: match the surrounding code; do not introduce a new convention without an ADR
+
+domain_terms:
+  rule: use the GLOSSARY term where business language and code diverge; keep the glossary current

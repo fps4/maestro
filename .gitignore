@@ -1,0 +1,22 @@
+# Secrets and local env
+.env
+.env.local
+*.local
+
+# Test run reports are evidence, not source — keep the folder + README, ignore the runs
+logs/test_reports/*
+!logs/test_reports/README.md
+
+# OS / editor
+.DS_Store
+.obsidian/
+*.swp
+
+# Python (planned runtime)
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Node (planned adapters/tooling)
+node_modules/

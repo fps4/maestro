@@ -1,0 +1,27 @@
+# Testing standards — injected into agent prompts. See docs/architecture/decisions/0006-*.
+concern: testing
+
+spec_adherence:
+  rule: every acceptance criterion (EARS) has at least one test derived from it
+  rationale: makes "spec adherence" machine-verifiable so reviewers trust the green check
+
+coverage:
+  unit: required
+  integration: required
+  e2e: required where the product has user-facing flows
+  threshold: maintained or improved by every PR   # no coverage regressions
+
+definition_of_done:                # all green before the human technical (merge) gate opens
+  order:
+    - spec_adherence_tests
+    - unit_integration_e2e_with_coverage
+    - sast                          # see security.yaml — enforced: always
+    - dependency_and_secret_scan    # see security.yaml — enforced: always
+    - hallucinated_dependency_check # see security.yaml — enforced: always
+    - license_and_sbom
+  risk_tiers:
+    note: may relax HUMAN review for low-blast-radius changes
+    never_relaxed: [sast, secret_scan, dependency_scan]   # enforced: always
+
+authoring:
+  rule: the test agent writes/runs tests; it does not refactor production code

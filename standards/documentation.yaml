@@ -1,0 +1,25 @@
+# Documentation standards — injected into agent prompts. Full prose: docs/guides/documentation-standards.md
+concern: documentation
+
+principle:
+  docs_with_code: doc updates ship in the same PR as the code   # part of Definition of Done
+  intent_first: product intent (docs/product/) precedes architecture precedes code
+
+frontmatter:
+  required: [title, status, last_updated, owners]
+  related: repo-root-relative paths; builds the machine-readable graph
+
+acceptance_criteria:
+  format: EARS                                  # WHEN [condition] THE SYSTEM SHALL [behaviour]
+  rationale: unambiguous and test-generable
+
+adr:
+  immutable_once: accepted                      # write a superseding ADR; never edit an accepted one
+  sections: [Context, Decision, Consequences]
+
+diagrams:
+  format: Mermaid inside markdown               # no external diagram files
+  levels: { context: C4Context, container: flowchart, component: flowchart, dynamic: sequenceDiagram }
+
+diataxis:
+  rule: each file is one of reference | explanation | how-to | tutorial — do not mix

@@ -1,0 +1,26 @@
+# Security standards — injected into agent prompts. Floors are never disabled.
+concern: security
+
+sast:
+  tool: CodeQL or Semgrep
+  policy: block on high severity        # enforced: always
+  focus: [authn/authz logic, input validation, secrets handling]
+
+dependencies:
+  scan: Dependabot or Renovate + advisory DB   # enforced: always
+  hallucinated_dependency_check:
+    rule: verify every added package exists and is the intended one
+    rationale: hallucinated/typo-squatted packages are AI code's signature failure mode
+    enforced: always
+
+secrets:
+  scanning: on by default                # enforced: always
+  in_code: forbidden                     # no hardcoded credentials, tokens, keys
+
+open_source_governance:
+  licenses:
+    rule: allowed-license policy enforced in CI regardless of repo visibility
+    prefer: permissive (MIT, Apache-2.0)
+  sbom: emit per build artifact
+  provenance: track origin, license, and vuln status of every dependency
+  attribution: scan agent output for substantial similarity to known OSS

@@ -32,12 +32,21 @@ routing:
     commercial: architect
     technical: architect
 
+# Which surface each role is reached on (ADR-0011). A gate posts to that role's GROUP, and any
+# participant holding the role for the product may decide (quorum below); the rest monitor silently.
+# Concrete destinations are instance data, not here: the architect Slack channel is an instance
+# setting; each product's Telegram group + bot live on the product (config/products.yaml).
+surfaces:
+  architect: slack                   # one shared architect-team channel
+  functional_reviewer: telegram      # the product's own group, via the product's per-product bot
+
 # Gate behaviour.
 gate:
   timeout_seconds: 86400             # how long a gate waits for a decision before escalating
   on_timeout: escalate               # escalate | cancel  (never auto-approve)
-  surface: slack                     # where approval requests are posted
+  quorum: 1                          # the first valid decision from a role-holder resolves the gate
 
-# Products (their product_type, repos, and participant rosters) are defined in the product
-# register: config/products.yaml (ADR-0008). This file holds only the routing matrix and gate
-# behaviour; the RoutingResolver combines the two to resolve (product, gate) -> reviewer handle.
+# Products (their product_type, repos, participant rosters, and per-product Telegram group/bot)
+# are defined in the product register: config/products.yaml (ADR-0008/0011). This file holds only
+# the routing matrix, the role->surface policy, and gate behaviour; the RoutingResolver combines
+# them to resolve (product, gate) -> role -> surface -> destination group.

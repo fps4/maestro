@@ -1,6 +1,6 @@
 # Codebase overview
 
-maestro is an architect-directed agentic delivery platform: a crew of Claude-powered agents that take a unit of work from intent → functional spec → technical design → implementation → reviewed pull request on real GitHub, coordinated through Slack, with a human architect approving at each gate. Work is organised around a **product** — one or more repositories and one or more human participants.
+maestro is an architect-directed agentic delivery platform: a crew of Claude-powered agents that take a unit of work from intent → functional spec → technical design → implementation → reviewed pull request on real GitHub, coordinated through Slack (architects) and Telegram (functional reviewers), with the right human approving at each gate. Work is organised around a **product** — one or more repositories and one or more human participants.
 
 > **Status:** founding scaffold. The directory map below describes the *intended* structure; today only `docs/`, `config/`, and `standards/` exist. No agent code has been written yet.
 
@@ -18,12 +18,13 @@ maestro is an architect-directed agentic delivery platform: a crew of Claude-pow
 | `agents/` | *(planned)* The crew — spec, architect, builder, test, reviewer, docs; LLM logic lives here |
 | `model/` | *(planned)* The single `ModelClient` — the only place that calls Claude; records cost + audit |
 | `adapters/github/` | *(planned)* GitHub integration — branches, PRs, Actions, Issues/Projects |
-| `adapters/slack/` | *(planned)* Slack integration — intent intake and the approval inbox |
+| `adapters/slack/` | *(planned)* Slack adapter — the **architect** surface: intent intake + architect-gate approvals |
+| `adapters/telegram/` | *(planned)* Telegram adapter — the **functional-reviewer** surface: one bot + group per product (ADR-0011) |
 
 ## Entry points
 
-- **Human intent (in):** Slack message → `adapters/slack/` → orchestrator *(planned)*
-- **Human approval (in):** Slack interactive action → orchestrator gate resolution *(planned)*
+- **Human intent (in):** Slack message (architect) → `adapters/slack/` → orchestrator *(planned)*
+- **Human approval (in):** an architect's Slack action, or a functional reviewer's Telegram in-group action → orchestrator gate resolution; any role-holder in the group may decide (ADR-0011) *(planned)*
 - **Work output (out):** GitHub pull request opened by the builder agent via `adapters/github/` *(planned)*
 - **LLM calls:** every agent → `model/ModelClient` → Anthropic API (native prompt caching, extended thinking, tool use); every call is recorded to the audit log
 
@@ -39,4 +40,4 @@ maestro is an architect-directed agentic delivery platform: a crew of Claude-pow
 
 - Building self-hosted apps for end users — maestro builds products *for the architect*, not for a layperson.
 - Autonomous merge — humans merge; see `docs/architecture/decisions/0004-agents-propose-via-pr-humans-merge.md`.
-- A bespoke web UI — the human surface is Slack and GitHub's own UI.
+- A bespoke web UI — the human surfaces are Slack, Telegram, and GitHub's own UI.

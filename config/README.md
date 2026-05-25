@@ -6,7 +6,7 @@ maestro is **open-core**: this public repo holds the engine and **templates**, n
 
 | File | Public? | What it is |
 |------|---------|-----------|
-| `reviewers.yaml` | ✅ committed | The routing matrix + gate behaviour (generic; placeholder handles). Safe to keep public. |
+| `reviewers.yaml` | ✅ committed | The routing matrix, the role→surface policy, and gate behaviour (generic; placeholder handles). Safe to keep public. |
 | `products.example.yaml` | ✅ committed | **Template** for the product register. Copy it, don't edit it in place. |
 | `products.yaml` | ❌ **gitignored** | **Your real product register** — product names, repos, participants. Private. |
 
@@ -28,4 +28,12 @@ cp config/products.example.yaml config/products.yaml   # gitignored; put real pr
 - **Product code** → each product's own private repos.
 - **Specs/designs** → seed the *product's* repo (`docs/product/`), not maestro's.
 - **Operational state + audit logs** → maestro's store on your private host (ds1/ds2).
-- **Secrets** (`ANTHROPIC_API_KEY`, GitHub/Slack tokens) → `.env` / secrets manager (gitignored).
+- **Secrets** (`ANTHROPIC_API_KEY`, GitHub/Slack tokens, **per-product Telegram bot tokens**) → `.env` / secrets manager (gitignored).
+
+## Human surfaces (ADR-0011)
+
+`reviewers.yaml` maps each role to a surface — `architect → slack`, `functional_reviewer → telegram`. The concrete destinations are instance data, kept out of the public repo:
+
+- **Architect Slack channel** — one shared channel for the architect team; an instance setting (`ARCHITECT_SLACK_CHANNEL`), not per product.
+- **Per-product Telegram group + bot** — declared on the product in `products.yaml` (`functional_channel: { surface, bot, group_chat_id }`). Each product has its **own bot**; the bot **token is a secret** referenced by logical name, never stored in the register (one token = one product's blast radius).
+- **Participant surface ids** (`slack_user_id` / `telegram_user_id`) on each participant let maestro authorise and attribute a decision; any role-holder in the group may decide (quorum 1).

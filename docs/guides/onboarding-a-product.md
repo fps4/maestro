@@ -10,6 +10,7 @@ related:
   - docs/architecture/decisions/0005-product-domain-model.md
   - docs/architecture/decisions/0008-system-of-record-and-persistence.md
   - docs/architecture/decisions/0010-public-engine-private-instance-data.md
+  - docs/architecture/decisions/0011-multi-surface-human-control.md
 ---
 
 # Onboarding a product
@@ -44,9 +45,13 @@ one `product_type` it inherits to its repos, a `visibility`, and a `deploy_targe
     repos:
       - acme/billing-api          # 1+ repos; Product↔Repo is many-to-many (ADR-0005)
       - acme/billing-web
-    participants:
-      - { handle: "@you",   role: architect }            # always present
-      - { handle: "@priya", role: functional_reviewer }  # required for commercial functional review
+    functional_channel:           # the product's Telegram group + bot (ADR-0011)
+      surface: telegram
+      bot: acme-billing-bot       # token is a SECRET in env, not here (see below)
+      group_chat_id: "-1001234567890"
+    participants:                 # 2+ functional reviewers can share the group; any decides, others monitor
+      - { handle: "@you",   role: architect,           slack_user_id: U0ARCHITECT }   # always present
+      - { handle: "@priya", role: functional_reviewer, telegram_user_id: "987654321" }
 ```
 
 How the fields drive behaviour:
@@ -57,11 +62,25 @@ How the fields drive behaviour:
 - **`participants`** is the authoritative role→handle map for *this* product; the `reviewers.yaml`
   `roles:` block is only a fallback (see `reviewers.yaml` header).
 - **`visibility: public`** is a deliberate, recorded exception — private is the default.
+- **`functional_channel`** binds the product to its own Telegram group + bot; participant
+  `telegram_user_id` / `slack_user_id` let maestro authorise and attribute a decision (ADR-0011).
 
 For PR-reviewed governance of register changes, keep the real `products.yaml` in a **separate
 private repo** and point maestro at it with `PRODUCTS_REGISTER` (see [`config/README.md`](../../config/README.md)).
 
-## 2. Put the per-repo controls in place
+## 2. Set up the functional surface (commercial products)
+
+Architects need no per-product setup — they all approve in one shared Slack channel
+(`ARCHITECT_SLACK_CHANNEL`). A product **with a functional reviewer** gets its **own Telegram bot**
+so it stays isolated from every other product (ADR-0011):
+
+- [ ] Create a Telegram bot for this product (via BotFather) and note its token.
+- [ ] Create the product's Telegram group and add the bot and the functional reviewer(s).
+- [ ] Record `functional_channel: { surface: telegram, bot: <name>, group_chat_id: <id> }` on the product.
+- [ ] Put the token in your secret store as `TELEGRAM_BOT_TOKEN__<bot_name>` — **never** in the register.
+- [ ] Record each functional reviewer's `telegram_user_id` so maestro can authorise/attribute decisions.
+
+## 3. Put the per-repo controls in place
 
 For **each** repo the product lists, apply the three enforcement layers from
 [`repo-controls.md`](repo-controls.md):
@@ -72,11 +91,13 @@ For **each** repo the product lists, apply the three enforcement layers from
 - [ ] A maestro runtime credential scoped **without merge rights** for that repo.
 - [ ] CI that runs the Definition-of-Done gates on PRs (`.github/workflows/dod.yml` as a starting point).
 
-## 3. Verify
+## 4. Verify
 
 - [ ] `config/products.yaml` is **not** tracked: `git check-ignore config/products.yaml` prints the path.
 - [ ] Each repo: a test PR cannot be merged by the runtime credential, only by a human (US-0001 / ADR-0004).
-- [ ] The functional reviewer (commercial) is a participant and reachable on the Slack surface.
+- [ ] Commercial product: a test post reaches the product's Telegram group via its bot, and an
+      in-group action from a functional reviewer is accepted (one from a non-reviewer is ignored).
+- [ ] No bot token is present in `products.yaml`; tokens live only in the secret store.
 
 ## What is NOT part of onboarding yet
 

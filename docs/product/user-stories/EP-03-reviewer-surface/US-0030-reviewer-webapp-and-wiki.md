@@ -21,8 +21,8 @@ so that I can sign off on *what* is being built — without GitHub or a chat too
 
 ## Context
 
-Implements [ADR-0015](../../../architecture/decisions/0015-reviewer-surfaces-repo-wiki-and-chat-webapp.md): the functional reviewer's surface is a **maestro-owned web app** (built on the
-in-house Minimal/Next.js base, identity via `component-auth`, reasoning via the `sovereign-llm-gateway`,
+Implements [ADR-0015](../../../architecture/decisions/0015-reviewer-surfaces-repo-wiki-and-chat-webapp.md): the functional reviewer's surface is a **maestro-owned web app** (built on an
+MIT/open base — shadcn/ui + Next.js, identity via `component-auth`, reasoning via the `sovereign-llm-gateway`,
 exposed over the Cloudflare Tunnel — ADR-0012) plus a **docs wiki rendered one-way from the product
 repo**. The webapp is a **surface/projection**; maestro's event-sourced store stays the system of
 record ([ADR-0008](../../../architecture/decisions/0008-system-of-record-and-persistence.md)). Replaces ADR-0013's Google-Docs document surface; refines [ADR-0011](../../../architecture/decisions/0011-multi-surface-human-control.md)

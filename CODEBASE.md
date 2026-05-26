@@ -2,7 +2,7 @@
 
 maestro is an architect-directed agentic delivery platform: a crew of Claude-powered agents that take a unit of work from intent → functional spec → technical design → implementation → reviewed pull request on real GitHub, coordinated through Slack (architects) and Telegram (functional reviewers), with the right human approving at each gate. Work is organised around a **product** — one or more repositories and one or more human participants.
 
-> **Status:** founding scaffold. The directory map below describes the *intended* structure; today only `docs/`, `config/`, and `standards/` exist. No agent code has been written yet.
+> **Status:** founding scaffold. The directory map below describes the *intended* structure; today `docs/`, `config/`, `standards/`, the reviewer `web/` app, and `infra/docker/` exist. No agent/orchestrator code has been written yet.
 
 ## Directory map
 
@@ -20,7 +20,9 @@ maestro is an architect-directed agentic delivery platform: a crew of Claude-pow
 | `storage/` | *(planned)* The single S3-compatible `ArtifactStore` — stores artefacts (specs, designs, test reports, SBOMs) and mints short-TTL presigned share links; MinIO on ds1 by default, AWS S3 per-product opt-in (ADR-0012) |
 | `adapters/github/` | *(planned)* GitHub integration — branches, PRs, Actions, Issues/Projects |
 | `adapters/slack/` | *(planned)* Slack adapter — the **architect** surface: intent intake + architect-gate approvals |
-| `adapters/telegram/` | *(planned)* Telegram adapter — the **functional-reviewer** surface: one bot + group per product (ADR-0011) |
+| `adapters/telegram/` | *(planned)* Telegram adapter — an *optional* functional-reviewer surface (ADR-0011; demoted by ADR-0015) |
+| `web/` | The **reviewer webapp** — read specs, discuss, decide gates (ADR-0015 / US-0030); MIT/open base (shadcn/ui + Next.js). A surface, not the system of record |
+| `infra/docker/` | Deployment stack (Compose) — sibling to the other fps4 stacks on ds1; today runs `web/` |
 
 ## Entry points
 

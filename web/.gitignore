@@ -1,0 +1,17 @@
+# deps / build
+node_modules/
+.next/
+out/
+dist/
+build/
+next-env.d.ts
+
+# env (instance config — ADR-0010); .env.example is tracked
+.env
+.env.local
+.env*.local
+
+# misc
+*.log
+.DS_Store
+.vscode/

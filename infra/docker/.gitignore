@@ -1,0 +1,4 @@
+# Instance data — never commit (ADR-0010). Only .env.example is tracked.
+.env
+config/*/.env
+*.local

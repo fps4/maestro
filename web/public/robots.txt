@@ -1,0 +1,3 @@
+# maestro reviewer surface is private (behind auth + Cloudflare Access — ADR-0012). Keep it unindexed.
+User-agent: *
+Disallow: /

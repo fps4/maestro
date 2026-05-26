@@ -1,6 +1,6 @@
 ---
 title: "0013: A web control UI for reviewers (revisiting the no-bespoke-UI non-goal)"
-status: proposed
+status: superseded by ADR-0015
 date: 2026-05-25
 related:
   - 0011-multi-surface-human-control.md
@@ -8,6 +8,12 @@ related:
   - 0010-public-engine-private-instance-data.md
   - ../../product/vision.md
 ---
+
+> **Superseded by [ADR-0015](0015-reviewer-surfaces-repo-wiki-and-chat-webapp.md).** The two-axis
+> framing (separate document vs. control surface) is retained; the **document surface** changes from
+> Google Docs to a **repo-linked docs wiki**, and the deferred **build approach** is resolved as a
+> **maestro-owned chat webapp** on the in-house Minimal/Next.js template. OpenProject + XWiki were
+> evaluated and rejected (see ADR-0015).
 
 ## Context
 

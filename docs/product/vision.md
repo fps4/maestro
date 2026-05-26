@@ -65,7 +65,7 @@ Full text in [`docs/principles.md`](../principles.md):
 
 - **Not an end-user app generator.** maestro serves the architect and targets real systems; it does not turn a layperson's natural-language request into a finished app.
 - **Not autonomous delivery.** Removing the human gates would turn maestro into an ungoverned code generator. The architect-in-the-loop and the split functional/technical review are the product.
-- **No bespoke UI in v1.** The human surfaces are Slack (architects), Telegram (functional reviewers), and GitHub's own UI; there is no maestro web app or design-system layer yet.
+- **A maestro web app for functional reviewers** (reverses the original "no bespoke UI" non-goal — [ADR-0015](../architecture/decisions/0015-reviewer-surfaces-repo-wiki-and-chat-webapp.md)). Architects stay on Slack + GitHub; functional reviewers get a maestro-owned chat webapp (on the in-house Minimal/Next.js base) plus a **repo-linked docs wiki** for reading specs. Telegram becomes an optional low-touch surface. The repo stays the single source of truth; the wiki and webapp are surfaces, not a second store (ADR-0008).
 - **No mandatory LLM proxy.** maestro calls the Claude API directly for native prompt caching / extended thinking / tool use, behind a single internal client that records cost and audit (see [ADR-0002](../architecture/decisions/0002-claude-api-direct-via-modelclient.md)).
 
 ## Success metrics

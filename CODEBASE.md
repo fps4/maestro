@@ -42,4 +42,4 @@ maestro is an architect-directed agentic delivery platform: a crew of Claude-pow
 
 - Building self-hosted apps for end users — maestro builds products *for the architect*, not for a layperson.
 - Autonomous merge — humans merge; see `docs/architecture/decisions/0004-agents-propose-via-pr-humans-merge.md`.
-- A bespoke web UI — the human surfaces are Slack, Telegram, and GitHub's own UI.
+- A bespoke web UI *for architects* — architects work in Slack + GitHub. Functional reviewers, however, get a maestro-owned chat webapp + a repo-linked docs wiki (ADR-0015); the repo stays the source of truth (ADR-0008).

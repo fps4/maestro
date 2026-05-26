@@ -46,10 +46,11 @@ Documentation index. maestro is **spec-driven**: product intent precedes archite
 | [0010](architecture/decisions/0010-public-engine-private-instance-data.md) | Open-core — public engine, private instance data |
 | [0011](architecture/decisions/0011-multi-surface-human-control.md) | Multi-surface human control — Slack for architects, Telegram (per-product bots) for functional reviewers *(proposed)* |
 | [0012](architecture/decisions/0012-artifact-storage-and-sharing.md) | Artefact storage & sharing — **MinIO on ds1** (S3-compatible) the chosen default; AWS S3 per-product opt-in |
-| [0013](architecture/decisions/0013-web-control-ui-for-reviewers.md) | A web control UI for reviewers — two-axis surfaces; revisits the no-bespoke-UI non-goal *(proposed)* |
+| [0013](architecture/decisions/0013-web-control-ui-for-reviewers.md) | A web control UI for reviewers — two-axis surfaces; revisits the no-bespoke-UI non-goal *(superseded by 0015)* |
 | [0014](architecture/decisions/0014-orchestration-runtime-langgraph.md) | Orchestration runtime — LangGraph + interrupts; `ModelClient` egress and the event log stay authoritative |
+| [0015](architecture/decisions/0015-reviewer-surfaces-repo-wiki-and-chat-webapp.md) | Reviewer surfaces — repo-linked docs wiki + a maestro chat webapp (Minimal/Next.js); OpenProject/XWiki rejected |
 
-> **Decided via spike:** the orchestration runtime is **LangGraph** (ADR-0014), validated in [`spikes/langgraph/`](../spikes/langgraph/). Still open: the reviewer surface / web-UI direction (ADR-0013).
+> **Decided via spike:** the orchestration runtime is **LangGraph** (ADR-0014), validated in [`spikes/langgraph/`](../spikes/langgraph/). The reviewer-surface direction is now decided too: a **repo-linked docs wiki + a maestro chat webapp** (ADR-0015, after evaluating and rejecting OpenProject/XWiki).
 
 ## Guides
 

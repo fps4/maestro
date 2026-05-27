@@ -1,4 +1,4 @@
-# Git conventions — injected into agent prompts. See docs/architecture/decisions/0004-*.
+# Git conventions — injected into agent prompts. See docs/architecture/decisions/0016-* (supersedes 0004-*).
 concern: git
 
 branches:
@@ -7,12 +7,14 @@ branches:
   description: Agents work on maestro/* feature branches and open PRs from them.
 
 merge:
-  by_agents: forbidden                # enforced: always — humans merge, behind the gate
+  decision: human                     # the merge gate is decided by a human, always (ADR-0016)
+  by_agents: only-on-recorded-approval # maestro executes the merge ONLY against a recorded,
+                                       # role-authorized merge-approval event (ADR-0016); never otherwise
   enforcement:
-    - GitHub branch protection on the default branch (required reviews + status checks)
-    - CODEOWNERS
-    - a GitHub credential scoped without merge rights
-  done_signal: observed-merge-event   # "Done" is the merge event, never an agent claim
+    - merge gate decided by the human in the workspace; the decision is a recorded, attributed event
+    - the github adapter refuses to merge without a valid, unconsumed, role-matched approval event
+    - DoD gates green before the merge gate opens (the quality floor; ADR-0006)
+  done_signal: observed-merge-event   # "Done" is the observed merge event, never an agent claim
 
 commits:
   subject: imperative present tense, <= 72 chars, says what changed and why

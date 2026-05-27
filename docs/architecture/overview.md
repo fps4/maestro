@@ -21,7 +21,7 @@ maestro coordinates a crew of Claude-powered agents to take a delivery task from
 C4Context
   title maestro — system context
 
-  Person(architect, "Architect", "Directs work, owns technical gates, merges. One of a team sharing a Slack channel.")
+  Person(architect, "Architect", "Directs work, owns technical gates, approves merges. One of a team sharing a Slack channel.")
   Person(freviewer, "Functional reviewer", "Reviews commercial functional specs, in the product's Telegram group.")
 
   System(maestro, "maestro", "Architect-directed agentic delivery platform.")
@@ -35,7 +35,7 @@ C4Context
   Rel(freviewer, telegram, "Approves commercial functional specs in-group")
   Rel(maestro, slack, "Posts status + architect-gate requests")
   Rel(maestro, telegram, "Posts functional-gate requests (per-product bot)")
-  Rel(maestro, github, "Branches + PRs (never merges)")
+  Rel(maestro, github, "Branches + PRs; merges on recorded approval (ADR-0016)")
   Rel(maestro, claude, "ModelClient: direct API, records cost + audit")
   Rel(architect, github, "Reviews PRs, merges")
 ```
@@ -95,13 +95,13 @@ Bounded roles, with the boundaries that make a multi-agent crew better than one 
 
 | Agent | Role | Boundary |
 |-------|------|----------|
-| **knowledge / context** | Maintains a persistent index over the product's repos + docs + history; other agents query it instead of re-reading. | Read-only over code; does not implement. |
+| **knowledge / context** | Maintains a persistent index over the product's repos + docs + history; other agents query it instead of re-reading. | **Reads** — the crew's query substrate; read-only over code, never writes. |
 | **spec** | Turns intent into a functional spec with EARS acceptance criteria; runs the clarify pass. | Produces the *what*, not the *how*. |
 | **architect / planner** | Turns the approved spec into a technical design + ordered tasks (+ ADR on a real trade-off). | Produces the *how*; proposes, does not approve. |
 | **builder** | Implements tasks on a `maestro/*` branch; opens the PR. | Never merges; never pushes to a default branch. |
 | **test** | Generates and runs tests from acceptance criteria; reports results. | Does not refactor production code. |
 | **reviewer** | Critiques the diff against `standards/`; posts triaged, severity-tagged PR comments. | **May not author the feature it reviews.** |
-| **docs** | Updates docs to track the as-merged state. | Runs after code lands. |
+| **docs** | Updates docs to track the as-merged state; queries the **knowledge / context** index to find which docs a change affects. | **Writes** docs in the PR — a consumer of the knowledge index, not the index itself. Runs after code lands. |
 
 ## The delivery loop (happy path)
 
@@ -109,7 +109,7 @@ Bounded roles, with the boundaries that make a multi-agent crew better than one 
 2. **spec** drafts a functional spec (EARS criteria); clarify pass runs. → orchestrator posts the **functional gate** (functional reviewer in the product's Telegram group for commercial; architect in Slack for technical).
 3. On approval, **architect/planner** produces a technical design + tasks. → orchestrator posts the **technical (design) gate** to the architect.
 4. On approval, **builder** (with **test**) implements on a `maestro/*` branch; the **Definition of Done** gates run. **reviewer** posts a triaged review. **docs** updates docs.
-5. When all DoD gates are green, orchestrator posts the **PR (annotated per requirement) to the technical (merge) gate**; the architect **merges manually** in GitHub.
+5. When all DoD gates are green, orchestrator posts the **PR (annotated per requirement) to the technical (merge) gate**; the architect **approves in the workspace** and maestro executes the merge against that recorded approval ([ADR-0016](decisions/0016-merge-after-workspace-approval.md)).
 6. orchestrator observes the merge event and marks the task done.
 
 ## Known limitations

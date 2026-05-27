@@ -37,7 +37,7 @@ Documentation index. maestro is **spec-driven**: product intent precedes archite
 | [0001](architecture/decisions/0001-architect-directed-agentic-delivery.md) | Architect-directed agentic delivery (the founding posture) |
 | [0002](architecture/decisions/0002-claude-api-direct-via-modelclient.md) | Claude API direct via a single `ModelClient` |
 | [0003](architecture/decisions/0003-split-review-routing-matrix.md) | Split functional/technical review routing |
-| [0004](architecture/decisions/0004-agents-propose-via-pr-humans-merge.md) | Agents propose via PR; humans merge |
+| [0004](architecture/decisions/0004-agents-propose-via-pr-humans-merge.md) | Agents propose via PR; humans merge *(superseded by 0016)* |
 | [0005](architecture/decisions/0005-product-domain-model.md) | Product as the core domain object (multi-repo, multi-participant) |
 | [0006](architecture/decisions/0006-spec-driven-sdlc.md) | Spec-driven SDLC + Definition of Done |
 | [0007](architecture/decisions/0007-per-product-deployment-targets.md) | Per-product deployment targets |
@@ -49,6 +49,7 @@ Documentation index. maestro is **spec-driven**: product intent precedes archite
 | [0013](architecture/decisions/0013-web-control-ui-for-reviewers.md) | A web control UI for reviewers — two-axis surfaces; revisits the no-bespoke-UI non-goal *(superseded by 0015)* |
 | [0014](architecture/decisions/0014-orchestration-runtime-langgraph.md) | Orchestration runtime — LangGraph + interrupts; `ModelClient` egress and the event log stay authoritative |
 | [0015](architecture/decisions/0015-reviewer-surfaces-repo-wiki-and-chat-webapp.md) | Reviewer surfaces — repo-linked docs wiki + a maestro chat webapp (Minimal/Next.js); OpenProject/XWiki rejected |
+| [0016](architecture/decisions/0016-merge-after-workspace-approval.md) | Merge after workspace approval — the human decides, the agent executes the merge *(supersedes 0004)* |
 
 > **Decided via spike:** the orchestration runtime is **LangGraph** (ADR-0014), validated in [`spikes/langgraph/`](../spikes/langgraph/). The reviewer-surface direction is now decided too: a **repo-linked docs wiki + a maestro chat webapp** (ADR-0015, after evaluating and rejecting OpenProject/XWiki).
 
@@ -58,7 +59,7 @@ Documentation index. maestro is **spec-driven**: product intent precedes archite
 - [`guides/documentation-standards.md`](guides/documentation-standards.md) — how docs are structured (frontmatter, naming, ADRs)
 - [`guides/setup.md`](guides/setup.md) — local setup
 - [`guides/onboarding-a-product.md`](guides/onboarding-a-product.md) — register a product and ready its repos
-- [`guides/repo-controls.md`](guides/repo-controls.md) — enforcing the merge boundary in GitHub (CODEOWNERS, branch protection, merge-less token)
+- [`guides/repo-controls.md`](guides/repo-controls.md) — the merge boundary ([ADR-0016](architecture/decisions/0016-merge-after-workspace-approval.md)): maestro-internal and event-gated; GitHub-side controls are not relied upon as the lock
 - [`guides/testing-agent-protocol.md`](guides/testing-agent-protocol.md) — how the test agent derives scenarios, runs the layered tests, and records evidence
 
 ## Standards

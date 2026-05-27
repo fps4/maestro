@@ -36,7 +36,7 @@ The architect needs a repeatable pipeline they can hand a unit of work to, trust
 
 ## Users and context
 
-When the architect has a unit of work, they dispatch it from Slack against a product and a target repo, and are pulled back in only to: approve the spec (if functional review is theirs), approve the design, approve the diff, and merge. For commercial products the functional reviewer approves the spec instead. The architect runs many such loops concurrently across products.
+When the architect has a unit of work, they dispatch it from Slack against a product and a target repo, and are pulled back in only to: approve the spec (if functional review is theirs), approve the design, and approve the merge (reviewing the diff) — which maestro then executes ([ADR-0016](../../architecture/decisions/0016-merge-after-workspace-approval.md)). For commercial products the functional reviewer approves the spec instead. The architect runs many such loops concurrently across products.
 
 ## The loop
 
@@ -57,7 +57,7 @@ Automated quality gates (all must pass)
   ▼
 Pull request, annotated per requirement  ──[ TECHNICAL (MERGE) GATE ]──►   (architect; risk-tiered, agent-pre-reviewed)
   │
-  ▼  a human merges in GitHub  →  delivery task done
+  ▼  architect approves; maestro merges (ADR-0016)  →  delivery task done
 ```
 
 The full method — artifact templates, gate mechanics, the Definition of Done, and the human/agent protocol — is in [`docs/guides/sdlc.md`](../../guides/sdlc.md).
@@ -72,7 +72,7 @@ The full method — artifact templates, gate mechanics, the Definition of Done, 
 - **Automated quality gates** that must be green before the technical merge gate opens (Definition of Done — [ADR-0006](../../architecture/decisions/0006-spec-driven-sdlc.md)).
 - **Requirement → task → PR/commit traceability**, surfaced on the PR.
 - **Per-role human surfaces** ([ADR-0011](../../architecture/decisions/0011-multi-surface-human-control.md)): architects in a shared **Slack** channel (dispatch, architect-gate approvals, status); functional reviewers in the product's **Telegram** group via a per-product bot. Gates post to the group; any role-holder may decide.
-- **GitHub** as substrate and enforcement: `maestro/*` branches, draft PR per task, branch protection + required checks + CODEOWNERS as the real merge lock.
+- **GitHub** as the code substrate: `maestro/*` branches, draft PR per task. The merge boundary is **maestro-internal** — the github adapter merges only against a recorded, role-authorized approval event ([ADR-0016](../../architecture/decisions/0016-merge-after-workspace-approval.md)); GitHub-side branch protection is **not** relied upon as the lock.
 - **Claude via a single internal `ModelClient`**, calling the Anthropic API directly, recording cost/audit per call ([ADR-0002](../../architecture/decisions/0002-claude-api-direct-via-modelclient.md)).
 
 ### Out of scope
@@ -81,7 +81,7 @@ The full method — artifact templates, gate mechanics, the Definition of Done, 
 - A single delivery task spanning **multiple repos** at once (v1 targets one repo per task; the product may have many).
 - Deployment/hosting of built products to lab servers or cloud (target model in [ADR-0007](../../architecture/decisions/0007-per-product-deployment-targets.md); build is a later phase).
 - A bespoke maestro web UI (Slack, Telegram, and GitHub UI only).
-- Automated merge or automated production deploy.
+- Automated production deploy. (The merge is executed by maestro, but only against a recorded human approval — not unattended autonomy; [ADR-0016](../../architecture/decisions/0016-merge-after-workspace-approval.md).)
 
 ## Requirements
 
@@ -91,17 +91,17 @@ The full method — artifact templates, gate mechanics, the Definition of Done, 
 2. The spec agent produces a **functional spec** (summary, scope, user stories, EARS acceptance criteria); a consistency/clarify pass flags ambiguities before a human is asked to review.
 3. The functional gate routes to the reviewer resolved from `config/reviewers.yaml` for the product's `product_type` (commercial → functional reviewer; technical → architect). The task does not advance until that reviewer approves.
 4. After functional approval, the architect/planner agent produces a **technical design + ordered tasks** (and an ADR when a significant trade-off exists), posted to the technical (design) gate, routed to the architect.
-5. After design approval, the crew implements on a `maestro/*` feature branch and opens a **draft pull request** — never pushing to a default branch, never merging.
+5. After design approval, the crew implements on a `maestro/*` feature branch and opens a **draft pull request** — never pushing to a default branch directly; the crew never merges (maestro executes the merge later, only on a recorded approval — [ADR-0016](../../architecture/decisions/0016-merge-after-workspace-approval.md)).
 6. Before the technical merge gate opens, **all automated quality gates pass**: spec-derived tests, unit/integration/e2e with coverage threshold, SAST (block on high), dependency + secret scan, hallucinated-dependency check, and license/SBOM check.
 7. A **reviewer agent** (which may not author the feature it reviews) posts a triaged, severity-tagged review on the diff; maestro then posts the PR to the technical merge gate for the architect.
-8. The PR shows **which requirement each change satisfies**; the architect reviews and **merges manually** in GitHub. maestro marks the task done on the observed merge event.
+8. The PR shows **which requirement each change satisfies**; the architect reviews and **approves the merge in the workspace**, and maestro executes the merge against that recorded approval ([ADR-0016](../../architecture/decisions/0016-merge-after-workspace-approval.md)). maestro marks the task done on the observed merge event.
 9. Each gate supports **approve / request-changes / reject**; request-changes returns the task to the agent that produced the artifact, with the feedback.
 10. Every LLM call goes through the internal `ModelClient` and is recorded (agent, tokens, cost, cache hits) in maestro's audit log.
 
 ### Non-functional requirements
 
 - **Auditability:** every gate decision (who/what/when/why) and every LLM call is recorded, queryable per product.
-- **Safety:** no code path merges or pushes to a default branch; the GitHub credential lacks merge rights, and branch protection enforces human merge independently.
+- **Safety:** no merge occurs without a recorded, role-authorized human approval — maestro executes the merge only against that event, which is the **sole authority** ([ADR-0016](../../architecture/decisions/0016-merge-after-workspace-approval.md)); the append-only WORM, hash-chained event log ([ADR-0009](../../architecture/decisions/0009-audit-logging-and-observability.md)) makes every merge attributable and tamper-evident. Agents never push to a default branch directly.
 - **Quality floor:** SAST, secret scanning, and dependency scanning can be risk-tiered but never disabled.
 - **Native LLM features:** prompt caching and extended thinking are used where they reduce cost/latency; the direct Anthropic path must preserve them.
 
@@ -110,9 +110,9 @@ The full method — artifact templates, gate mechanics, the Definition of Done, 
 | Question | Owner | Due |
 |----------|-------|-----|
 | ~~State of record for delivery-task/gate/traceability?~~ | @architect | **Resolved** — git-config register + maestro-owned event-sourced operational store + GitHub for code, mirrored via webhooks ([ADR-0008](../../architecture/decisions/0008-system-of-record-and-persistence.md)) |
-| Does the merge gate reuse GitHub's native PR review/approval, a Slack approval, or both (Slack UX + GitHub enforcement)? | @architect | 2026-06-15 |
+| ~~Does the merge gate reuse GitHub's native PR review/approval, a Slack approval, or both?~~ | @architect | **Resolved** — decided in the **workspace**; maestro executes the merge against the recorded approval event, the sole authority ([ADR-0016](../../architecture/decisions/0016-merge-after-workspace-approval.md)) |
 | ~~How does a functional reviewer who is not a GitHub collaborator approve a spec?~~ | @architect | **Resolved** — functional reviewers approve in the product's Telegram group, never in GitHub ([ADR-0011](../../architecture/decisions/0011-multi-surface-human-control.md)) |
-| Which automated gates are required vs advisory at v1, and what are the risk tiers for auto-eligible vs human-required merges? | @architect | 2026-06-30 |
+| Which automated gates are required vs advisory at v1, and what are the risk tiers for auto-eligible vs human-required *review* (the merge stays human-approved — ADR-0016)? | @architect | 2026-06-30 |
 
 ## Out of scope decisions deferred to engineering
 

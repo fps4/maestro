@@ -12,6 +12,12 @@ related:
   - ../../product/vision.md
 ---
 
+> **Amendment (2026-05-26).** This ADR first named the in-house **Minimals (`@minimal-kit/next-js`)**
+> template as the webapp base. Because maestro is a **public, open-core repo** (ADR-0010) and the
+> Minimals kit is **commercially licensed** (no public redistribution), the base is instead an
+> **MIT/open stack — shadcn/ui + Next.js + Tailwind** (you own the component source). The decision is
+> otherwise unchanged; see decision point 3.
+
 ## Context
 
 [ADR-0013](0013-web-control-ui-for-reviewers.md) (proposed) split the functional reviewer's need into
@@ -51,12 +57,12 @@ choice broke our source-of-truth rule.
    generated, read-only-with-comments *view*. This **replaces ADR-0013's Google-Docs document surface**
    and removes the second-source-of-truth risk by construction.
 
-3. **Control + discussion surface = a maestro-owned web app**, built on the in-house
-   **`@minimal-kit/next-js`** template (Minimals MUI / Next.js) — the same base used across fps4
-   (e.g. `sovereign-copilot`). The template is copied into maestro's repo and kept as a reusable base.
+3. **Control + discussion surface = a maestro-owned web app**, built on an **MIT/open base
+   (shadcn/ui + Next.js + Tailwind)** so it can live in the public open-core repo (see Amendment;
+   a commercial template cannot). Components are copied in and owned in-repo, kept as a reusable base.
    The app hosts the **gate** (context + approve / request-changes / reject) and a **chat** thread for
    discussion, and renders the repo-sourced wiki. This **resolves ADR-0013's deferred build approach:
-   build minimal, on our own template** — not Agent Inbox, not Google-Docs-comments.
+   build minimal, on our own open base** — not Agent Inbox, not Google-Docs-comments.
 
 4. **Reuse fps4 building blocks, not greenfield:** identity + RBAC + attribution via **`component-auth`**
    (the one thing the rejected tools gave for free — we must not lose it); shared UI via

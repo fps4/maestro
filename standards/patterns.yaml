@@ -1,6 +1,6 @@
 # Architectural patterns — injected into agent prompts. Apply to maestro's services and to the
 # services the crew builds. Stack-agnostic floors; a product implements them in its chosen stack.
-# Adapted from the foundry; re-anchored to maestro (ADR-0002/0004/0008/0009/0014).
+# Adapted from the foundry; re-anchored to maestro (ADR-0002/0008/0009/0014/0016).
 concern: patterns
 
 health_checks:
@@ -49,4 +49,4 @@ agents:                            # the maestro crew (ADR-0001/0002/0014)
     rule: agents are invoked ONLY through the orchestrator's workflow (LangGraph; ADR-0014) — never ad-hoc   # enforced: always
     why: ad-hoc invocation makes the run unrecoverable on restart and bypasses the audit log (ADR-0008/0009)
   reviewer_not_author:
-    rule: a reviewer agent may not review a feature it authored (ADR-0004)   # enforced: always
+    rule: a reviewer agent may not review a feature it authored (ADR-0016)   # enforced: always

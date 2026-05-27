@@ -11,19 +11,19 @@ prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 
 As the architect,
 I want the builder agent to implement an approved design on a feature branch and open a pull request,
-so that I review real, runnable code in GitHub and merge it myself.
+so that I review real, runnable code and approve its merge (maestro then executes it — [ADR-0016](../../../architecture/decisions/0016-merge-after-workspace-approval.md)).
 
 ## Context
 
-The builder's execution stage. After the technical (design) gate approves (US-0013), the builder implements and opens a pull request — never a direct push, never a merge. This story is the builder's slice; the tests (US-0014), independent review (US-0015), and doc updates (US-0016) that complete the Definition of Done on the open PR, and the orchestration that opens the merge gate when they are green (US-0020), are their own stories. It exercises the ADR-0004 safety boundary end to end.
+The builder's execution stage. After the technical (design) gate approves (US-0013), the builder implements and opens a pull request — never a direct push to a default branch; the builder never merges (maestro executes the merge later, only on a recorded approval — [ADR-0016](../../../architecture/decisions/0016-merge-after-workspace-approval.md)). This story is the builder's slice; the tests (US-0014), independent review (US-0015), and doc updates (US-0016) that complete the Definition of Done on the open PR, and the orchestration that opens the merge gate when they are green (US-0020), are their own stories. It exercises the ADR-0016 safety boundary end to end.
 
 ## Acceptance criteria (EARS)
 
 - WHEN a delivery task has an approved technical design, THE SYSTEM SHALL create a `maestro/*` feature branch (never the default branch) and commit the implementation to it, one branch per delivery task.
 - WHEN the implementation is complete, THE SYSTEM SHALL open a draft pull request targeting the default branch, with a description linking the delivery task and its approved spec/design and showing which requirement each change satisfies.
 - WHEN all Definition-of-Done gates are green (spec-derived tests US-0014, independent review US-0015, docs US-0016, and the security/SBOM floors), THE SYSTEM SHALL mark the PR ready for the technical (merge) gate.
-- WHEN the architect approves and merges in GitHub, THE SYSTEM SHALL mark the delivery task done on the observed merge event.
-- IF any code path attempts to push to the default branch or merge programmatically, THEN THE SYSTEM SHALL refuse and log it — maestro has no code path that performs it.
+- WHEN the architect approves the merge gate and maestro executes the merge against that recorded approval ([ADR-0016](../../../architecture/decisions/0016-merge-after-workspace-approval.md)), THE SYSTEM SHALL mark the delivery task done on the observed merge event.
+- IF any code path attempts to push to a default branch, or to merge without a valid, role-authorized merge-approval event, THEN THE SYSTEM SHALL refuse and log it ([ADR-0016](../../../architecture/decisions/0016-merge-after-workspace-approval.md)).
 
 ## Out of scope
 

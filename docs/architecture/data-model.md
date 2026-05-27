@@ -27,7 +27,7 @@ The core entities maestro reasons about, per [ADR-0005](decisions/0005-product-d
 | **Feature** | One functional spec + technical design. May produce changes across several repos. | `id`, `product_id`, `spec`, `design`, `state` |
 | **Requirement** | One acceptance criterion (EARS) within a Feature's functional spec. | `id`, `feature_id`, `text` |
 | **DeliveryTask** | One unit of implementation work; **targets** a repo (owned by the Feature, not the repo). | `id`, `feature_id`, `target_repo_id`, `stage`, `status`, `branch`, `pr_url` |
-| **PullRequest** | The GitHub PR. Mirrors GitHub state; maestro never owns the merge. | `task_id`, `repo_id`, `pr_number`, `state`, `merged` |
+| **PullRequest** | The GitHub PR. Mirrors GitHub state; the merge *decision* stays human, and maestro executes the merge against the recorded approval (ADR-0016). | `task_id`, `repo_id`, `pr_number`, `state`, `merged` |
 | **Gate** | A pending or resolved human decision, delivered to a role's group surface (ADR-0011). | `id`, `task_id`, `type` (functional \| technical), `reviewer_role`, `surface` (slack \| telegram), `destination` (the role's group), `status`, `feedback`, `resolved_by` (the deciding participant), `resolved_at` |
 | **Trace** | First-class link: requirement → task → PR/commit. | `requirement_id`, `task_id`, `pr_id` |
 | **Event** | An append-only record of a state change or agent/human action — the operational **source of truth**; current state is a projection of these (ADR-0008/0009). | `id`, `run_id`, `seq`, `timestamp`, `actor`, `type`, `target`, `payload`, `prev_hash` |
@@ -58,7 +58,7 @@ flowchart LR
 | `design` | Producing technical design + tasks | design produced |
 | `technical_gate` | Design awaiting architect review | architect approves |
 | `build` | Implementing on a `maestro/*` branch | DoD gates green, PR opened |
-| `merge_gate` | PR awaiting technical review of the diff | architect merges |
+| `merge_gate` | PR awaiting technical review of the diff | architect approves; maestro merges (ADR-0016) |
 | `done` | Merge observed | terminal |
 | `blocked` | Request-changes or rejection at any gate | returns to the relevant stage |
 

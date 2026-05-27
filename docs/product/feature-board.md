@@ -21,6 +21,7 @@ owners: [architect]
 - [ ] **[[US-0021-modelclient-single-egress|US-0021 — Route every LLM call through the audited ModelClient]]** #engine-foundation `(0)`
 - [ ] **[[US-0022-audit-and-event-log|US-0022 — Record an append-only, correlated audit & event log]]** #engine-foundation `(0)`
 - [ ] **[[US-0023-artifact-store-and-sharing|US-0023 — Store and share artefacts via an S3-compatible ArtifactStore]]** #engine-foundation `(0)`
+- [ ] **[[US-0030-reviewer-webapp-and-wiki|US-0030 — Read, discuss, and decide a gate in the maestro reviewer webapp (with a repo-linked spec wiki)]]** #reviewer-surface `(0)`
 
 
 ## Accepted

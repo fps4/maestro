@@ -35,7 +35,7 @@ The gates are the product, not friction. Two gates, separately owned:
 
 ## 3. Agents propose, humans dispose
 
-Agents work on `maestro/*` branches and open pull requests. They never push to a default branch and never merge. **Merge is a human action**, enforced in GitHub (branch protection + required checks + CODEOWNERS + a credential without merge rights), not by agent goodwill. A **reviewer agent may not author the feature it reviews** — independent checks, not self-grading. See [ADR-0004](architecture/decisions/0004-agents-propose-via-pr-humans-merge.md).
+Agents work on `maestro/*` branches and open pull requests; they never push to a default branch. **The merge decision is a human action** — the architect approves the merge gate in the maestro workspace, and maestro then executes the merge against that recorded, role-authorized approval event (the event is the sole authority; nothing merges without it). A **reviewer agent may not author the feature it reviews** — independent checks, not self-grading. See [ADR-0016](architecture/decisions/0016-merge-after-workspace-approval.md) (supersedes [ADR-0004](architecture/decisions/0004-agents-propose-via-pr-humans-merge.md)).
 
 ## 4. Fully automated testing and quality gates
 

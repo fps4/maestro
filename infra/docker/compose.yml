@@ -1,0 +1,39 @@
+# maestro — infra Compose stack.
+#
+# maestro's own deployment, sibling to the other fps4 stacks on ds1 (copilot,
+# sovereign-llm-gateway). Environment-agnostic; a per-site overlay (config/<site>/.env,
+# gitignored — ADR-0010) carries hosts/ports/secrets.
+#
+# Today: the reviewer webapp (ADR-0015 / US-0030) — a surface, not the system of record (ADR-0008).
+# The orchestrator, ArtifactStore (MinIO, ADR-0012), and auth (component-auth) join as they're built.
+#
+# Deploy to ds1 from the Mac (runs against ds1's daemon over SSH):
+#   DOCKER_HOST=ssh://ds1 docker compose --env-file config/ds1/.env -f compose.yml up -d --build
+name: maestro
+
+networks:
+  maestro:
+    driver: bridge
+
+services:
+  web:
+    image: maestro-web:${MAESTRO_IMAGE_TAG:-dev}
+    build:
+      context: ../../web
+      dockerfile: ../infra/docker/web.Dockerfile
+      args:
+        NEXT_PUBLIC_ORCHESTRATOR_URL: ${NEXT_PUBLIC_ORCHESTRATOR_URL:-http://localhost:8000}
+    container_name: maestro-web
+    restart: unless-stopped
+    ports:
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-3034}:3034"
+    networks: [maestro]
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3034/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options: { max-size: "100m", max-file: "10" }

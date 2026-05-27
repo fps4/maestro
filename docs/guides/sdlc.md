@@ -84,15 +84,15 @@ maestro's runtime crew and any AI agent working on maestro itself follow the sam
 
 | Party | Role |
 |-------|------|
-| **Human (architect / reviewer)** | Sets direction, approves at gates, makes architectural decisions, merges. |
-| **Agent** | Produces specs/designs/code/tests/docs, runs the gates, reports status — never merges. |
+| **Human (architect / reviewer)** | Sets direction, approves at gates (including the merge), makes architectural decisions. |
+| **Agent** | Produces specs/designs/code/tests/docs, runs the gates, reports status; never decides a gate; executes the merge only on a recorded human approval ([ADR-0016](../architecture/decisions/0016-merge-after-workspace-approval.md)). |
 
 **Lifecycle** (mirrors the feature board columns):
 
 ```
 intent → Draft (spec) ──[human accepts scope]──► Accepted
    → In Progress (design → build, DoD gates) → PR
-   → green CI + gates ──► human review ──► merge ──► Done (CI-confirmed)
+   → green CI + gates ──► human approves merge ──► maestro merges ──► Done (CI-confirmed)
    (any gate request-changes → back to the producing stage; blocker → Blocked)
 ```
 
@@ -105,7 +105,7 @@ intent → Draft (spec) ──[human accepts scope]──► Accepted
 
 **What an agent must not do**
 
-- Push to a default branch, or merge any PR — ever.
+- Push to a default branch, or merge any PR without a recorded human approval at the merge gate ([ADR-0016](../architecture/decisions/0016-merge-after-workspace-approval.md)).
 - Author a feature *and* sign off its review (reviewer ≠ implementer).
 - Disable a Definition-of-Done floor gate (SAST / secret / dependency scan).
 - Move a card to **Done** — `Draft → Accepted` is human-only; `In Progress → Done` is CI-only on green merge.

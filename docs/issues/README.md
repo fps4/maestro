@@ -1,7 +1,7 @@
 ---
 title: maestro issues and known limitations
 status: current
-last_updated: 2026-05-25
+last_updated: 2026-05-27
 owners: [architect]
 related:
   - ../guides/documentation-standards.md
@@ -28,4 +28,8 @@ Numbers are repo-local, zero-padded, sequentially assigned.
 
 Open an issue file when an investigation produces a finding that took non-trivial work to diagnose, could plausibly recur, or surfaced a divergence between intent (PRDs, ADRs) and behaviour. Do **not** open one for one-off user errors or bugs caught during normal development before anything deployed was affected — a commit message suffices.
 
-_No issues recorded yet._
+## Recorded
+
+| ID | Title | Severity | Status |
+|----|-------|----------|--------|
+| [LIMITATION-0001](LIMITATION-0001-spec-index-not-incremental.md) | Spec index is head-commit-cached, not incremental (fix: M3) | low | current |

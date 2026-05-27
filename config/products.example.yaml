@@ -33,11 +33,13 @@ products:
       default: ds1
       production: aws
     repos:
-      - your-org/maestro
-    # technical product: architect-only, reached on the shared architect Slack channel —
-    # no functional reviewer, so no Telegram group/bot.
+      - your-org/maestro          # maestro dogfoods itself; add more repos/products below as the portfolio grows
+    # technical product: architect-only. The architect works in the maestro workspace (Google SSO via
+    # component-auth — ADR-0019) and on the shared architect Slack channel; no functional reviewer.
     participants:
-      - { handle: "@you", role: architect, slack_user_id: U0ARCHITECT }
+      # email = the participant's Google identity for the workspace (ADR-0019); slack/telegram ids are
+      # for the notification surfaces. Role + product membership is the authorization (ADR-0011), not the IdP.
+      - { handle: "@you", role: architect, email: you@example.com, slack_user_id: U0ARCHITECT }
 
   # Example: a commercial product (private — the common case).
   - id: acme-billing
@@ -56,7 +58,7 @@ products:
     artifact_store:               # optional override; default is the instance MinIO on ds1 (ADR-0012)
       backend: aws-s3             # AWS from day one, so this product's artefacts live on S3 too
       bucket: acme-billing-artifacts
-    participants:                 # 2+ functional reviewers share the group; any may decide, others monitor
-      - { handle: "@you",   role: architect,           slack_user_id: U0ARCHITECT }
-      - { handle: "@priya", role: functional_reviewer, telegram_user_id: "987654321" }
-      - { handle: "@sam",   role: functional_reviewer, telegram_user_id: "123456789" }
+    participants:                 # 2+ functional reviewers; any may decide in the workspace, others monitor
+      - { handle: "@you",   role: architect,           email: you@example.com,   slack_user_id: U0ARCHITECT }
+      - { handle: "@priya", role: functional_reviewer, email: priya@example.com,  telegram_user_id: "987654321" }
+      - { handle: "@sam",   role: functional_reviewer, email: sam@example.com,    telegram_user_id: "123456789" }

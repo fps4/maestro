@@ -3,6 +3,10 @@ title: "Contract: the workspace read API (S1 — read-only specs)"
 status: draft
 last_updated: 2026-05-27
 owners: [architect]
+maestro:
+  feature: workspace-read-api
+  kind: technical_design
+  task: US-0030
 related:
   - docs/architecture/components/workspace-backend.md
   - docs/architecture/decisions/0018-workspace-read-api-and-frontmatter-index.md

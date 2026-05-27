@@ -5,6 +5,10 @@ last_updated: 2026-05-27
 owners: [architect]
 c4_level: component
 container: orchestrator
+maestro:
+  feature: workspace-backend
+  kind: technical_design
+  task: US-0030
 related:
   - docs/architecture/components/orchestrator.md
   - docs/architecture/decisions/0017-github-app-and-webhook-ingestion.md

@@ -4,8 +4,9 @@
 # sovereign-llm-gateway). Environment-agnostic; a per-site overlay (config/<site>/.env,
 # gitignored — ADR-0010) carries hosts/ports/secrets.
 #
-# Today: the reviewer webapp (ADR-0015 / US-0030) — a surface, not the system of record (ADR-0008).
-# The orchestrator, ArtifactStore (MinIO, ADR-0012), and auth (component-auth) join as they're built.
+# Today: the reviewer webapp (the surface, ADR-0015) + the orchestrator read API (S1, read-only —
+# ADR-0018) it reads specs/designs from. The ArtifactStore (MinIO, ADR-0012) and auth (component-auth)
+# join as they're built. The webapp is a surface; maestro's event-sourced store stays authoritative.
 #
 # Deploy to ds1 from the Mac (runs against ds1's daemon over SSH):
 #   DOCKER_HOST=ssh://ds1 docker compose --env-file config/ds1/.env -f compose.yml up -d --build
@@ -14,6 +15,9 @@ name: maestro
 networks:
   maestro:
     driver: bridge
+
+volumes:
+  maestro-data:        # the orchestrator's SQLite event log (ADR-0008)
 
 services:
   web:
@@ -25,12 +29,14 @@ services:
         NEXT_PUBLIC_ORCHESTRATOR_URL: ${NEXT_PUBLIC_ORCHESTRATOR_URL:-http://localhost:8000}
     container_name: maestro-web
     restart: unless-stopped
+    depends_on:
+      orchestrator:
+        condition: service_started
     environment:
-      # Server-side, runtime (no rebuild to change). The orchestrator read API the webapp reads
-      # specs/designs from (ADR-0018). On ds1 this points at the orchestrator service once it joins the
-      # stack (e.g. http://orchestrator:8800); until then it's empty and the webapp shows a clear
-      # "read API unreachable" notice — 127.0.0.1 would only reach the web container itself.
-      MAESTRO_API_URL: ${MAESTRO_API_URL:-}
+      # Server-side, runtime (no rebuild to change). The webapp reads specs/designs from the
+      # orchestrator read API (ADR-0018) by its service name on this network — 127.0.0.1 would only
+      # reach the web container itself.
+      MAESTRO_API_URL: ${MAESTRO_API_URL:-http://orchestrator:8800}
       # Dev/stub workspace identity until component-auth is wired (ADR-0019); leave empty in production,
       # where the Cloudflare Access + component-auth edge establishes the user.
       MAESTRO_DEV_IDENTITY: ${MAESTRO_DEV_IDENTITY:-}
@@ -43,6 +49,32 @@ services:
       timeout: 5s
       retries: 5
       start_period: 20s
+    logging:
+      driver: json-file
+      options: { max-size: "100m", max-file: "10" }
+
+  orchestrator:
+    image: maestro-orchestrator:${MAESTRO_IMAGE_TAG:-dev}
+    build:
+      context: ../..
+      dockerfile: infra/docker/orchestrator.Dockerfile
+    container_name: maestro-orchestrator
+    restart: unless-stopped
+    environment:
+      # Authenticated GitHub reads (5000/hr) for the content path. Unauthenticated works for PUBLIC
+      # repos but is 60/hr — too low, since the index scans docs/** per request (no cache yet).
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+      # The git ref a product's docs render from when no delivery task pins a branch (default: main).
+      MAESTRO_DEFAULT_BRANCH: ${MAESTRO_DEFAULT_BRANCH:-main}
+    volumes:
+      # The private register (ADR-0010) — provided from the host, never baked into the image. On ds1,
+      # set MAESTRO_REGISTER_HOST_PATH to an absolute path on the daemon host (the file must exist there).
+      - ${MAESTRO_REGISTER_HOST_PATH:-../../config/products.yaml}:/app/config/products.yaml:ro
+      - maestro-data:/data
+    ports:
+      # Loopback on the host by default — reachable for checks via the daemon host, not the LAN.
+      - "${ORCH_BIND:-127.0.0.1}:${ORCH_PORT:-8800}:8800"
+    networks: [maestro]
     logging:
       driver: json-file
       options: { max-size: "100m", max-file: "10" }

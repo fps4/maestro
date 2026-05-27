@@ -22,7 +22,9 @@ class GitHubError(Exception):
 
 
 class HttpGitHubClient:
-    def __init__(self, token: str, api_base: str = API_BASE):
+    def __init__(self, token: Optional[str] = None, api_base: str = API_BASE):
+        # Token optional: the read-only content path (ADR-0018) works unauthenticated against PUBLIC
+        # repos (rate-limited). The write paths (branch/PR/merge) always need a scoped token.
         self._token = token
         self._api_base = api_base.rstrip("/")
 
@@ -76,7 +78,8 @@ class HttpGitHubClient:
     def _request(self, method: str, path: str, body: Optional[dict] = None) -> Any:
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(f"{self._api_base}{path}", data=data, method=method)
-        req.add_header("Authorization", f"Bearer {self._token}")
+        if self._token:
+            req.add_header("Authorization", f"Bearer {self._token}")
         req.add_header("Accept", "application/vnd.github+json")
         req.add_header("X-GitHub-Api-Version", "2022-11-28")
         if data is not None:

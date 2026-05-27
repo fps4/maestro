@@ -1,0 +1,18 @@
+# Keep the Docker build context (repo root → orchestrator image) small over the ds1 SSH connection.
+.git
+.venv
+**/node_modules
+**/.next
+data
+logs
+*.egg-info
+.pytest_cache
+.obsidian
+.claude
+spikes
+tests
+web
+docs
+standards
+infra
+config/products.yaml

@@ -43,6 +43,7 @@ class Engine:
     register: Register
     routing: RoutingResolver
     github: GitHubAdapter
+    github_client: object          # the raw GitHubClient — also the read API's RepoContentReader
     connections: list[ConnectionStatus]
 
 
@@ -70,7 +71,7 @@ def boot(*, db_path: Optional[str] = None, probe: bool = False,
 
     github = GitHubAdapter(events, register, routing, github_client) if github_client else None
     return Engine(conn=conn, events=events, audit=audit, model=model, register=register,
-                  routing=routing, github=github, connections=checks)
+                  routing=routing, github=github, github_client=github_client, connections=checks)
 
 
 def _check_github(client: Optional[HttpGitHubClient], probe: bool) -> ConnectionStatus:

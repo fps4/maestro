@@ -1,7 +1,7 @@
 ---
 title: maestro documentation index
 status: current
-last_updated: 2026-05-25
+last_updated: 2026-05-27
 owners: [architect]
 ---
 
@@ -29,6 +29,8 @@ Documentation index. maestro is **spec-driven**: product intent precedes archite
 - [`architecture/overview.md`](architecture/overview.md) — C4 system context + containers + the agent crew
 - [`architecture/data-model.md`](architecture/data-model.md) — product / repo / participant / task model
 - [`architecture/components/orchestrator.md`](architecture/components/orchestrator.md) — the conductor (C4 L3)
+- [`architecture/components/workspace-backend.md`](architecture/components/workspace-backend.md) — workspace read API + GitHub sync + frontmatter spec index (C4 L3)
+- [`architecture/contracts/workspace-read-api.md`](architecture/contracts/workspace-read-api.md) — the workspace ↔ orchestrator HTTP/JSON contract (S1, read-only)
 
 ### Decisions (ADRs)
 
@@ -50,6 +52,9 @@ Documentation index. maestro is **spec-driven**: product intent precedes archite
 | [0014](architecture/decisions/0014-orchestration-runtime-langgraph.md) | Orchestration runtime — LangGraph + interrupts; `ModelClient` egress and the event log stay authoritative |
 | [0015](architecture/decisions/0015-reviewer-surfaces-repo-wiki-and-chat-webapp.md) | Reviewer surfaces — repo-linked docs wiki + a maestro chat webapp (Minimal/Next.js); OpenProject/XWiki rejected |
 | [0016](architecture/decisions/0016-merge-after-workspace-approval.md) | Merge after workspace approval — the human decides, the agent executes the merge *(supersedes 0004)* |
+| [0017](architecture/decisions/0017-github-app-and-webhook-ingestion.md) | GitHub App + webhook ingestion — GitHub-origin facts become events; installation-token client for the adapter |
+| [0018](architecture/decisions/0018-workspace-read-api-and-frontmatter-index.md) | Workspace read API + frontmatter spec index — the surface contract (status × content join) |
+| [0019](architecture/decisions/0019-workspace-identity-component-auth-google-sso.md) | Workspace identity — `component-auth` (Google SSO) at the edge, authorization from the register |
 
 > **Decided via spike:** the orchestration runtime is **LangGraph** (ADR-0014), validated in [`spikes/langgraph/`](../spikes/langgraph/). The reviewer-surface direction is now decided too: a **repo-linked docs wiki + a maestro chat webapp** (ADR-0015, after evaluating and rejecting OpenProject/XWiki).
 

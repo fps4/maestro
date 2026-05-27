@@ -3,6 +3,7 @@
   maestro boot [--probe]        boot + report connection status (--probe makes the live calls)
   maestro selftest              boot, make one real ModelClient call, show the recorded audit row
   maestro verify-chain          confirm the event log's hash chain is intact (ADR-0009)
+  maestro serve [--port]        serve the workspace read API (S1, read-only — ADR-0018)
 
 ``--example`` lets a local run fall back to config/products.example.yaml when the private register is
 absent (ADR-0010). Real runs use config/products.yaml.
@@ -62,6 +63,26 @@ def cmd_verify_chain(a) -> int:
     return 0
 
 
+def cmd_serve(a) -> int:
+    try:
+        engine = boot(probe=False, allow_example_register=a.example)
+    except StartupError as exc:
+        print(f"✗ startup refused: {exc}", file=sys.stderr)
+        return 1
+    if engine.github_client is None:
+        print("✗ serve needs GITHUB_TOKEN — the read API fetches repo content (ADR-0018)",
+              file=sys.stderr)
+        return 1
+    from orchestrator.httpserver import serve
+    from orchestrator.readapi import ReadAPI
+    # A dedicated, read-only connection: the API serves from request threads (ThreadingHTTPServer),
+    # so it must not share the engine's single-threaded write connection (ADR-0008).
+    read_conn = db.connect(check_same_thread=False)
+    api = ReadAPI(engine.register, EventLog(read_conn), engine.github_client)
+    serve(api, host=a.host, port=a.port)
+    return 0
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="maestro")
     p.add_argument("--example", action="store_true",
@@ -75,6 +96,11 @@ def main(argv=None) -> int:
 
     v = sub.add_parser("verify-chain"); v.add_argument("--db", default=None)
     v.set_defaults(fn=cmd_verify_chain)
+
+    sv = sub.add_parser("serve")
+    sv.add_argument("--host", default="127.0.0.1")
+    sv.add_argument("--port", type=int, default=8800)
+    sv.set_defaults(fn=cmd_serve)
 
     args = p.parse_args(argv)
     return args.fn(args)

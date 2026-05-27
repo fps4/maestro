@@ -1,0 +1,191 @@
+"""The workspace read API — the orchestrator's first HTTP surface (ADR-0018), S1: read-only.
+
+This is the **framework-agnostic core** of the contract in
+``docs/architecture/contracts/workspace-read-api.md``. It performs the join the workspace renders —
+**status** (the event-log projection, ``projection.py``) × **content** (the repo, as-committed, via a
+:class:`~orchestrator.specindex.RepoContentReader`) × **where** (the frontmatter :mod:`spec index
+<orchestrator.specindex>`) — and enforces **per-product isolation server-side** (ADR-0010/0011): a
+caller only ever sees products they participate in, matched by identity through the register (ADR-0019).
+
+It holds no GitHub token and no authoritative state (ADR-0015). The HTTP binding lives in
+:mod:`orchestrator.httpserver`; keeping the logic here means it is tested with no sockets and no network.
+
+**S1 scope of the status join.** A spec's status is the delivery task working on the *same repo+branch*
+(the task's open PR, from the projection). Specs on the default branch, or branches with no task yet,
+carry ``status: null`` — honest for the dogfood slice. The precise ``feature → run_id`` link arrives
+with crew events that record the producing ref (ADR-0018); this layers on without changing the contract.
+"""
+import threading
+from typing import Optional
+from urllib.parse import quote
+
+from orchestrator.projection import TaskState, project
+from orchestrator.register import Register
+from orchestrator.specindex import (
+    KINDS,
+    KIND_FUNCTIONAL,
+    IndexedSpec,
+    RepoContentReader,
+    SpecRef,
+    build_branch_index,
+    parse_frontmatter,
+)
+
+
+class APIError(Exception):
+    """Base for read-API errors — carries a stable ``code`` and HTTP ``status`` for the binding."""
+    code = "error"
+    status = 500
+
+    def __init__(self, message: str = "", ref: Optional[dict] = None):
+        self.message = message or self.code
+        self.ref = ref
+        super().__init__(self.message)
+
+
+class Unauthenticated(APIError):
+    code = "unauthenticated"
+    status = 401
+
+
+class NotFound(APIError):
+    """Unknown product *to this caller* (isolation: existence not revealed) or unknown spec."""
+    code = "not_found"
+    status = 404
+
+
+class Degraded(APIError):
+    """An upstream content fetch failed on a detail call — retryable (``standards/reliability.yaml``)."""
+    code = "degraded"
+    status = 503
+
+
+class ReadAPI:
+    def __init__(self, register: Register, events, content: RepoContentReader,
+                 default_branch: str = "main"):
+        self._register = register
+        self._events = events
+        self._content = content
+        self._default_branch = default_branch
+        self._read_lock = threading.Lock()  # serialise event-log reads across request threads
+
+    # --- endpoints ------------------------------------------------------------------------------
+
+    def list_products(self, identity: str) -> list[dict]:
+        """``GET /api/products`` — the caller's products (register membership)."""
+        self._require_identity(identity)
+        out = []
+        for p in self._register.products_for(identity):
+            part = p.participant_for(identity)
+            out.append({"id": p.id, "name": p.name, "product_type": p.product_type,
+                        "role": part.role if part else None})
+        return out
+
+    def list_specs(self, identity: str, product_id: str, *, branch: Optional[str] = None,
+                   kind: Optional[str] = None, feature: Optional[str] = None) -> dict:
+        """``GET /api/products/{id}/specs`` — the Specs index: where × status × availability."""
+        product = self._authorize_product(identity, product_id)
+        status_map = self._status_map()
+        specs: list[dict] = []
+        unindexed: list[dict] = []
+        for repo in product.repos:
+            for b in self._branches(repo, status_map):
+                if branch and b != branch:
+                    continue
+                try:
+                    idx = build_branch_index(self._content, repo, b)
+                except Exception:
+                    continue  # a branch that cannot be listed yields nothing; the rest still serve
+                task = status_map.get((repo, b))
+                specs += [self._summary(product_id, s, task) for s in idx.specs]
+                unindexed += [{"ref": _ref_json(u.ref), "reason": u.reason} for u in idx.unindexed]
+        if kind:
+            specs = [s for s in specs if s["kind"] == kind]
+        if feature:
+            specs = [s for s in specs if s["feature"] == feature]
+        return {"product": {"id": product.id, "name": product.name},
+                "specs": specs, "unindexed": unindexed}
+
+    def get_spec(self, identity: str, product_id: str, feature: str, kind: str,
+                 branch: Optional[str] = None) -> dict:
+        """``GET /api/products/{id}/specs/{feature}/{kind}`` — one rendered doc + status."""
+        product = self._authorize_product(identity, product_id)
+        if kind not in KINDS:
+            raise NotFound(f"unknown kind {kind!r}")
+        target = branch or self._default_branch
+        for repo in product.repos:
+            try:
+                idx = build_branch_index(self._content, repo, target)
+            except Exception:
+                continue
+            spec = next((s for s in idx.specs if s.feature == feature and s.kind == kind), None)
+            if spec is None:
+                continue
+            try:
+                obj = self._content.get_contents(repo, spec.ref.path, target)
+            except Exception:
+                raise Degraded(f"content fetch failed for {spec.ref.path}", ref=_ref_json(spec.ref))
+            meta, _ = parse_frontmatter(obj.get("content", ""))
+            task = self._status_map().get((repo, target))
+            ref = SpecRef(repo, target, spec.ref.path, obj.get("sha", spec.ref.commit))
+            return {"feature": spec.feature, "task": spec.task, "kind": spec.kind,
+                    "title": spec.title, "ref": _ref_json(ref), "frontmatter": meta or {},
+                    "content": obj.get("content", ""),
+                    "status": _status(task, spec.kind) if task else None}
+        raise NotFound(f"no {kind} for feature {feature!r} on branch {target!r}")
+
+    # --- isolation + identity -------------------------------------------------------------------
+
+    @staticmethod
+    def _require_identity(identity: str) -> None:
+        if not identity:
+            raise Unauthenticated("no caller identity")
+
+    def _authorize_product(self, identity: str, product_id: str):
+        """Resolve the product *and* the caller's membership in one step. Unknown-to-caller → 404
+        (existence is not revealed — ADR-0010/0011), never 403."""
+        self._require_identity(identity)
+        product = self._register.product(product_id)
+        if product is None or product.participant_for(identity) is None:
+            raise NotFound(f"product {product_id!r} not found")
+        return product
+
+    # --- the status join ------------------------------------------------------------------------
+
+    def _status_map(self) -> dict[tuple[str, str], TaskState]:
+        """``(repo, branch) → TaskState`` for tasks with an open PR — the S1 join key."""
+        with self._read_lock:                       # the only DB touch; content fetches stay concurrent
+            raw = self._events.read()
+        m: dict[tuple[str, str], TaskState] = {}
+        for t in project(raw).values():
+            if t.pr and t.pr.get("repo") and t.branch:
+                m[(t.pr["repo"], t.branch)] = t
+        return m
+
+    def _branches(self, repo: str, status_map: dict[tuple[str, str], TaskState]) -> list[str]:
+        branches = {self._default_branch} | {b for (r, b) in status_map if r == repo}
+        return sorted(branches)
+
+    def _summary(self, product_id: str, spec: IndexedSpec, task: Optional[TaskState]) -> dict:
+        return {"feature": spec.feature, "task": spec.task, "kind": spec.kind, "title": spec.title,
+                "ref": _ref_json(spec.ref), "availability": "indexed",
+                "status": _status(task, spec.kind) if task else None,
+                "href": _href(product_id, spec)}
+
+
+def _status(task: TaskState, kind: str) -> dict:
+    gate_name = "functional" if kind == KIND_FUNCTIONAL else "technical_design"
+    gate_type = "functional" if kind == KIND_FUNCTIONAL else "technical"
+    decisions = [g for g in task.gates if g.gate == gate_name]
+    return {"task_id": task.task_id, "stage": task.stage,
+            "gate": {"type": gate_type, "decision": decisions[-1].decision if decisions else "pending"},
+            "branch": task.branch, "merged": task.merged}
+
+
+def _ref_json(ref: SpecRef) -> dict:
+    return {"repo": ref.repo, "branch": ref.branch, "path": ref.path, "commit": ref.commit}
+
+
+def _href(product_id: str, spec: IndexedSpec) -> str:
+    return (f"/api/products/{quote(product_id)}/specs/{quote(spec.feature)}/{quote(spec.kind)}"
+            f"?branch={quote(spec.ref.branch, safe='')}")

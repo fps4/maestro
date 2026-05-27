@@ -2,7 +2,7 @@
 
 maestro is an architect-directed agentic delivery platform: a crew of Claude-powered agents that take a unit of work from intent → functional spec → technical design → implementation → reviewed pull request on real GitHub, coordinated through Slack (architects) and Telegram (functional reviewers), with the right human approving at each gate. Work is organised around a **product** — one or more repositories and one or more human participants.
 
-> **Status:** the **M0 engine spine** has landed — the first real engine code. Built and tested: the audited `ModelClient` egress (`model/`), the event-sourced `StateStore` (hash-chained event log + projection) and fail-fast boot (`orchestrator/`), and the GitHub adapter's event-gated merge boundary (`adapters/github/`). Still `planned`: the crew (`agents/`), the `ArtifactStore` (`storage/`), the Slack/Telegram adapters, and the LangGraph wiring of the delivery-loop stages (the event log is already authoritative under it — ADR-0014). `docs/`, `config/`, `standards/`, the reviewer `web/` app, and `infra/docker/` exist as before.
+> **Status:** the **M0 engine spine** has landed — the first real engine code. Built and tested: the audited `ModelClient` egress (`model/`), the event-sourced `StateStore` (hash-chained event log + projection) and fail-fast boot (`orchestrator/`), and the GitHub adapter's event-gated merge boundary (`adapters/github/`). The **workspace read API (S1)** has landed too: the orchestrator's first HTTP surface — read-only specs/designs joined with status, per-product isolated (`orchestrator/readapi.py` + `specindex.py` + `httpserver.py`, served by `maestro serve`; ADR-0018/0019). Still `planned`: the crew (`agents/`), the `ArtifactStore` (`storage/`), the Slack/Telegram adapters, the webhook ingestion + spec-index reconciler (ADR-0017), and the LangGraph wiring of the delivery-loop stages (the event log is already authoritative under it — ADR-0014). `docs/`, `config/`, `standards/`, the reviewer `web/` app, and `infra/docker/` exist as before.
 
 ## Directory map
 
@@ -14,7 +14,7 @@ maestro is an architect-directed agentic delivery platform: a crew of Claude-pow
 | `config/products.yaml` | Your **private** product register — gitignored; only `products.example.yaml` is public (ADR-0010) |
 | `logs/test_reports/` | Timestamped acceptance-test evidence (git-ignored except README) |
 | `.github/` | Merge-boundary enforcement: CODEOWNERS, PR template, the `dod` quality-gate workflow (see `docs/guides/repo-controls.md`) |
-| `orchestrator/` | The conductor: the event-sourced `StateStore` (hash-chained event log + projection), register loader, `RoutingResolver`, fail-fast boot + CLI. Owns gate state; performs no LLM inference. *(LangGraph stage-wiring planned — ADR-0014)* |
+| `orchestrator/` | The conductor: the event-sourced `StateStore` (hash-chained event log + projection), register loader, `RoutingResolver`, fail-fast boot + CLI, and the **workspace read API** (`readapi.py` join + isolation, `specindex.py` frontmatter index, `httpserver.py` stdlib binding — ADR-0018). Owns gate state; performs no LLM inference. *(LangGraph stage-wiring planned — ADR-0014)* |
 | `agents/` | *(planned)* The crew — spec, architect, builder, test, reviewer, docs; LLM logic lives here |
 | `model/` | The single `ModelClient` — the only place that calls Claude (tier-selected, `base_url`-configurable); records per-call cost + audit (ADR-0002/0009) |
 | `storage/` | *(planned)* The single S3-compatible `ArtifactStore` — stores artefacts (specs, designs, test reports, SBOMs) and mints short-TTL presigned share links; MinIO on ds1 by default, AWS S3 per-product opt-in (ADR-0012) |
@@ -30,6 +30,7 @@ maestro is an architect-directed agentic delivery platform: a crew of Claude-pow
 - **Human intent (in):** Slack message (architect) → `adapters/slack/` → orchestrator *(planned)*
 - **Human approval (in):** an architect's Slack action, or a functional reviewer's Telegram in-group action → orchestrator gate resolution; any role-holder in the group may decide (ADR-0011) *(planned)*
 - **Work output (out):** GitHub pull request opened by the builder agent via `adapters/github/` *(planned)*
+- **Workspace surface (out):** the `web/` app → orchestrator **read API** (`orchestrator/readapi.py`, `maestro serve`) → repo content (as-committed) joined with event-log status, scoped to the caller's products (ADR-0018/0019)
 - **Artefact sharing (out):** an agent's artefact → `storage/ArtifactStore` → short-TTL presigned URL posted to the reviewer's surface (ADR-0012) *(planned)*
 - **LLM calls:** every agent → `model/ModelClient` → Anthropic API (native prompt caching, extended thinking, tool use); every call is recorded to the audit log
 

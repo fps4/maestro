@@ -1,0 +1,145 @@
+"""The read-API service core (ADR-0018) — the status×content×where join, and per-product isolation.
+
+Isolation is the security-relevant behaviour: a caller must never receive a product they don't
+participate in, and the boundary must not even reveal that product's existence (ADR-0010/0011/0019).
+"""
+import pytest
+
+from orchestrator.readapi import Degraded, NotFound, ReadAPI, Unauthenticated
+from orchestrator.register import Participant, Product, Register
+
+ARCH = "arch@example.com"
+OUTSIDER = "nobody@example.com"
+REPO = "acme/widget"
+
+
+def _spec(feature, kind, task=None, title="A doc"):
+    t = f"\n  task: {task}" if task else ""
+    return (f"---\ntitle: {title}\nmaestro:\n  feature: {feature}\n  kind: {kind}{t}\n---\n"
+            f"# {title}\nbody of {feature}")
+
+
+@pytest.fixture
+def register():
+    """Two products; the architect (by email) participates only in 'maestro' — 'secret' must stay hidden."""
+    return Register(products={
+        "maestro": Product(id="maestro", name="maestro", product_type="technical", visibility="public",
+                           repos=(REPO,),
+                           participants=(Participant(handle="@arch", role="architect", email=ARCH),)),
+        "secret": Product(id="secret", name="Secret", product_type="commercial", visibility="private",
+                          repos=("acme/secret",),
+                          participants=(Participant(handle="@other", role="architect",
+                                                    email="other@example.com"),)),
+    })
+
+
+@pytest.fixture
+def api(register, events, content_reader):
+    content_reader.put(REPO, "main", "docs/spec.md", _spec("invoice-export", "functional_spec", "US-0042"))
+    return ReadAPI(register, events, content_reader)
+
+
+# --- identity + isolation ----------------------------------------------------------------------
+
+def test_list_products_scopes_to_membership(api):
+    assert api.list_products(ARCH) == [
+        {"id": "maestro", "name": "maestro", "product_type": "technical", "role": "architect"}]
+
+
+def test_outsider_sees_no_products(api):
+    assert api.list_products(OUTSIDER) == []
+
+
+def test_no_identity_is_unauthenticated(api):
+    with pytest.raises(Unauthenticated):
+        api.list_products("")
+
+
+def test_isolation_hides_other_products_as_404(api):
+    # 'secret' exists but the caller isn't a member — must be 404 (not 403), revealing nothing.
+    with pytest.raises(NotFound):
+        api.list_specs(ARCH, "secret")
+    with pytest.raises(NotFound):
+        api.get_spec(ARCH, "secret", "anything", "functional_spec")
+
+
+# --- the specs index ---------------------------------------------------------------------------
+
+def test_list_specs_renders_main_spec_with_null_status(api):
+    out = api.list_specs(ARCH, "maestro")
+    assert out["product"]["id"] == "maestro"
+    [spec] = out["specs"]
+    assert spec["feature"] == "invoice-export" and spec["kind"] == "functional_spec"
+    assert spec["task"] == "US-0042" and spec["availability"] == "indexed"
+    assert spec["status"] is None  # no delivery task owns a doc sitting on main
+    assert spec["href"] == (
+        "/api/products/maestro/specs/invoice-export/functional_spec?branch=main")
+
+
+def test_list_specs_joins_status_for_a_branch_with_an_open_pr(register, events, content_reader):
+    # A delivery task with an open PR on maestro/feat, and its design lives on that branch.
+    events.append(run_id="t1", actor="@arch", type="branch.created", target=f"{REPO}:maestro/feat",
+                  payload={"repo": REPO, "branch": "maestro/feat"})
+    events.append(run_id="t1", actor="@arch", type="pr.opened", target=f"{REPO}#7",
+                  payload={"repo": REPO, "branch": "maestro/feat", "pr_number": 7, "pr_url": "u"})
+    events.append(run_id="t1", actor="@arch", type="gate.resolved", target=f"{REPO}#7",
+                  payload={"gate": "technical_design", "decision": {"decision": "approve", "by": "@arch"}})
+    content_reader.put(REPO, "maestro/feat", "docs/design.md", _spec("widget-x", "technical_design"))
+    api = ReadAPI(register, events, content_reader)
+
+    specs = {s["feature"]: s for s in api.list_specs(ARCH, "maestro")["specs"]}
+    st = specs["widget-x"]["status"]
+    assert st["task_id"] == "t1" and st["branch"] == "maestro/feat" and st["stage"] == "merge_gate"
+    assert st["gate"] == {"type": "technical", "decision": "approve"}
+    assert st["merged"] is False
+
+
+def test_list_specs_filters(api, content_reader):
+    content_reader.put(REPO, "main", "docs/design.md", _spec("invoice-export", "technical_design"))
+    assert len(api.list_specs(ARCH, "maestro")["specs"]) == 2
+    only = api.list_specs(ARCH, "maestro", kind="technical_design")["specs"]
+    assert [s["kind"] for s in only] == ["technical_design"]
+
+
+def test_list_specs_surfaces_unindexed(api, content_reader):
+    content_reader.put(REPO, "main", "docs/bad.md", _spec("bad", "not-a-kind"))
+    out = api.list_specs(ARCH, "maestro")
+    assert [u["reason"] for u in out["unindexed"]] == ["malformed maestro: frontmatter (kind)"]
+
+
+# --- one rendered doc --------------------------------------------------------------------------
+
+def test_get_spec_returns_content_and_frontmatter(api):
+    doc = api.get_spec(ARCH, "maestro", "invoice-export", "functional_spec")
+    assert doc["title"] == "A doc"
+    assert "body of invoice-export" in doc["content"]
+    assert doc["frontmatter"]["maestro"]["feature"] == "invoice-export"
+    assert doc["ref"]["path"] == "docs/spec.md" and doc["ref"]["commit"].startswith("sha-")
+
+
+def test_get_spec_unknown_is_404(api):
+    with pytest.raises(NotFound):
+        api.get_spec(ARCH, "maestro", "does-not-exist", "functional_spec")
+
+
+def test_get_spec_unknown_kind_is_404(api):
+    with pytest.raises(NotFound):
+        api.get_spec(ARCH, "maestro", "invoice-export", "bogus_kind")
+
+
+def test_get_spec_content_fetch_failure_is_degraded(register, events):
+    """Indexed at scan time, but the dedicated content re-fetch fails → 503 degraded (retryable)."""
+    class FlakyReader:
+        def __init__(self):
+            self.calls = 0
+        def list_tree(self, repo, ref, path_prefix=""):
+            return ["docs/spec.md"] if ref == "main" else []
+        def get_contents(self, repo, path, ref):
+            self.calls += 1
+            if self.calls > 1:  # the index-build read succeeds; the detail re-fetch fails
+                raise RuntimeError("transient upstream error")
+            return {"content": _spec("invoice-export", "functional_spec"), "sha": "c0ffee", "path": path}
+
+    api = ReadAPI(register, events, FlakyReader())
+    with pytest.raises(Degraded):
+        api.get_spec(ARCH, "maestro", "invoice-export", "functional_spec")

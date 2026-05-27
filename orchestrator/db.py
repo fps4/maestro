@@ -56,15 +56,20 @@ CREATE TABLE IF NOT EXISTS schema_meta (
 """
 
 
-def connect(path: str | None = None) -> sqlite3.Connection:
+def connect(path: str | None = None, *, check_same_thread: bool = True) -> sqlite3.Connection:
     """Open (creating if needed) a configured connection and ensure the schema exists.
 
     Pass ``":memory:"`` for an ephemeral store (tests). A real path's parent dir is created.
+
+    ``check_same_thread`` defaults to True (sqlite3's thread-affinity guard — the engine's write path is
+    single-threaded). The **read-only** workspace API serves from request threads, so it opens a
+    dedicated connection with this relaxed (``readapi.py`` serialises its reads); concurrency hardening
+    is the SQLite→Postgres cutover (ADR-0008).
     """
     db_path = path or os.environ.get("MAESTRO_DB", DEFAULT_DB)
     if db_path != ":memory:":
         pathlib.Path(db_path).parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, check_same_thread=check_same_thread)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(_SCHEMA)

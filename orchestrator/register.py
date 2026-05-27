@@ -23,16 +23,19 @@ EXAMPLE_REGISTER = "config/products.example.yaml"
 class Participant:
     handle: str
     role: str
+    email: Optional[str] = None          # the workspace (Google SSO) identity — ADR-0019
     slack_user_id: Optional[str] = None
     telegram_user_id: Optional[str] = None
 
     def matches(self, identity: str) -> bool:
-        """True if ``identity`` names this participant — by handle or any per-surface id (ADR-0011).
+        """True if ``identity`` names this participant — by handle, email, or any per-surface id.
 
-        Attribution can arrive as a workspace/Slack/Telegram identity, so all are accepted.
+        Attribution/authn can arrive as a workspace identity (email, via component-auth — ADR-0019) or
+        a Slack/Telegram id (ADR-0011), so all are accepted. This is the one place identity is matched,
+        used by both the merge boundary and the workspace read API.
         """
         return identity is not None and identity in {
-            self.handle, self.slack_user_id, self.telegram_user_id,
+            self.handle, self.email, self.slack_user_id, self.telegram_user_id,
         } - {None}
 
 
@@ -51,6 +54,10 @@ class Product:
     def has_repo(self, full_name: str) -> bool:
         return full_name in self.repos
 
+    def participant_for(self, identity: str) -> Optional[Participant]:
+        """The participant this identity names, or None — the read API's authz lookup (ADR-0019)."""
+        return next((p for p in self.participants if p.matches(identity)), None)
+
 
 @dataclass
 class Register:
@@ -64,6 +71,13 @@ class Register:
             if p.has_repo(full_name):
                 return p
         return None
+
+    def products_for(self, identity: str) -> list[Product]:
+        """Every product this identity participates in — the read API's per-caller scope (ADR-0010/0011).
+
+        Isolation is enforced from this set server-side: a caller never sees a product not returned here.
+        """
+        return [p for p in self.products.values() if p.participant_for(identity) is not None]
 
 
 def load_register(path: Optional[str] = None, *, allow_example: bool = False) -> Register:
@@ -87,6 +101,7 @@ def load_register(path: Optional[str] = None, *, allow_example: bool = False) ->
             Participant(
                 handle=pp.get("handle"),
                 role=pp.get("role"),
+                email=pp.get("email"),
                 slack_user_id=pp.get("slack_user_id"),
                 telegram_user_id=str(pp["telegram_user_id"]) if pp.get("telegram_user_id") else None,
             )

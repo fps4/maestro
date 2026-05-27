@@ -5,8 +5,10 @@ Auth is a fine-grained PAT (or App token) scoped to branch-create + PR-open + **
 the token is read from the environment, never source (standards/security.yaml). This client is pure
 I/O: all merge *authorization* lives in the adapter's guard, never here.
 """
+import base64
 import json
 import urllib.error
+import urllib.parse
 import urllib.request
 from typing import Any, Optional
 
@@ -47,6 +49,27 @@ class HttpGitHubClient:
         res = self._request("PUT", f"/repos/{repo}/pulls/{number}/merge",
                           {"merge_method": method})
         return {"merged": res.get("merged", False), "sha": res.get("sha")}
+
+    # --- RepoContentReader (read-only; the workspace read API, ADR-0017/0018) --------------------
+    # Read of repo content as-committed. The merge boundary above is unchanged: there is still no
+    # write path into a default branch here — these are GET-only.
+
+    def get_contents(self, repo: str, path: str, ref: str) -> dict:
+        """Return ``{content, sha, path}`` for one file as-committed on ``ref`` (branch/sha)."""
+        q = urllib.parse.quote(path)
+        res = self._request("GET", f"/repos/{repo}/contents/{q}?ref={urllib.parse.quote(ref)}")
+        content = res.get("content", "")
+        if res.get("encoding") == "base64":
+            content = base64.b64decode(content).decode("utf-8", errors="replace")
+        return {"content": content, "sha": res.get("sha", ""), "path": path}
+
+    def list_tree(self, repo: str, ref: str, path_prefix: str = "") -> list[str]:
+        """List blob paths under ``path_prefix`` at ``ref`` — one recursive trees call (ADR-0018)."""
+        head = self._request("GET", f"/repos/{repo}/git/ref/heads/{urllib.parse.quote(ref)}")
+        sha = head["object"]["sha"]
+        tree = self._request("GET", f"/repos/{repo}/git/trees/{sha}?recursive=1")
+        return [t["path"] for t in tree.get("tree", [])
+                if t.get("type") == "blob" and t["path"].startswith(path_prefix)]
 
     # --- transport ------------------------------------------------------------------------------
 

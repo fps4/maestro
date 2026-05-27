@@ -76,6 +76,40 @@ def github_client():
     return FakeGitHubClient()
 
 
+# --- fake repo content reader (the read API's RepoContentReader) -------------------------------
+
+class FakeContentReader:
+    """In-memory repo content for read-API tests — files keyed by ``(repo, branch) -> {path: text}``.
+
+    Mirrors the github adapter's read surface offline: ``list_tree`` raises for an unknown branch (as a
+    real ref-miss would); ``get_contents`` raises for an unknown path.
+    """
+
+    def __init__(self):
+        self.files: dict[tuple[str, str], dict[str, str]] = {}
+
+    def put(self, repo, branch, path, text):
+        self.files.setdefault((repo, branch), {})[path] = text
+        return self
+
+    def list_tree(self, repo, ref, path_prefix=""):
+        if (repo, ref) not in self.files:
+            raise FileNotFoundError(f"no such ref {repo}@{ref}")
+        return [p for p in self.files[(repo, ref)] if p.startswith(path_prefix)]
+
+    def get_contents(self, repo, path, ref):
+        try:
+            text = self.files[(repo, ref)][path]
+        except KeyError:
+            raise FileNotFoundError(f"{repo}@{ref}:{path}")
+        return {"content": text, "sha": f"sha-{abs(hash((repo, ref, path))) % 100000}", "path": path}
+
+
+@pytest.fixture
+def content_reader():
+    return FakeContentReader()
+
+
 @pytest.fixture
 def github(events, register, routing, github_client):
     return GitHubAdapter(events, register, routing, github_client)

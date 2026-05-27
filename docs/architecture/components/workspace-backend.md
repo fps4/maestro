@@ -102,8 +102,9 @@ sequenceDiagram
 
 ## Open questions
 
-- **HTTP framework / API shape** — likely FastAPI (Python; `CODEBASE.md`); the exact endpoint/JSON
-  contract is a follow-up under `docs/architecture/contracts/`.
+- ~~**HTTP framework / API shape**~~ — the endpoint/JSON contract is now pinned in
+  [`contracts/workspace-read-api.md`](../contracts/workspace-read-api.md). Framework stays an
+  implementation detail (likely FastAPI; Python, `CODEBASE.md`).
 - **Caller auth handshake** — Cloudflare Access + register vs. full `component-auth` OIDC ([ADR-0018](../decisions/0018-workspace-read-api-and-frontmatter-index.md) open question); settle in the webapp-auth slice.
 - **Content caching** — commit-keyed cache to stay within rate limits; safe because the webhook keeps it fresh.
 - **Receiver → projector coupling** — synchronous append to start; a queue when bursts demand it

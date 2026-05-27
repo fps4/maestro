@@ -35,7 +35,7 @@ C4Context
   Rel(freviewer, telegram, "Approves commercial functional specs in-group")
   Rel(maestro, slack, "Posts status + architect-gate requests")
   Rel(maestro, telegram, "Posts functional-gate requests (per-product bot)")
-  Rel(maestro, github, "Branches + PRs; merges on recorded approval (ADR-0016)")
+  Rel(maestro, github, "Branches + PRs; merges on recorded approval (ADR-0016); ingests PR/check/merge facts via webhooks (ADR-0017)")
   Rel(maestro, claude, "ModelClient: direct API, records cost + audit")
   Rel(architect, github, "Reviews PRs, merges")
 ```
@@ -78,6 +78,15 @@ flowchart TB
   orch -. "functional gate" .-> tg
 ```
 
+> **Being added (post-baseline, not yet in the diagrams above).** The **maestro workspace** is now the
+> primary human surface for all roles ([ADR-0015](decisions/0015-reviewer-surfaces-repo-wiki-and-chat-webapp.md));
+> the architect approves the merge there and maestro executes it ([ADR-0016](decisions/0016-merge-after-workspace-approval.md)).
+> GitHub integration moves to a **GitHub App with webhook ingestion** ([ADR-0017](decisions/0017-github-app-and-webhook-ingestion.md)),
+> and a **workspace backend** (read API + GitHub sync + frontmatter spec index — [ADR-0018](decisions/0018-workspace-read-api-and-frontmatter-index.md),
+> [`components/workspace-backend.md`](components/workspace-backend.md)) serves the Specs view as a join of
+> repo content (as-committed) and event-log status. These layer onto the orchestrator without changing
+> the loop below; the event log stays authoritative (ADR-0008).
+
 ## Layers
 
 | Layer | Container(s) | LLM logic? | Role |
@@ -115,6 +124,6 @@ Bounded roles, with the boundaries that make a multi-agent crew better than one 
 ## Known limitations
 
 - Single target repo per delivery task in v1; cross-repo features are modelled (ADR-0005) but realised later.
-- No bespoke UI — Slack, Telegram, and GitHub's own surfaces only (ADR-0011).
+- The maestro workspace is the primary surface (ADR-0015); Slack/Telegram demote to notification channels. The container diagram above predates this and shows only the chat surfaces.
 - Persistence of delivery-task / gate / product state is an open PRD-0001 decision; the diagram shows the orchestrator owning state without committing to where it lives.
 - Whether the crew is built on the Claude Agent SDK (subagents, hooks, MCP) is an open engineering decision; the ModelClient boundary holds either way.

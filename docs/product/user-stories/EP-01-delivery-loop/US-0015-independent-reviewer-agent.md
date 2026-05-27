@@ -6,7 +6,7 @@ complexity: M
 last_updated: 2026-05-25
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
-  - docs/architecture/decisions/0004-agents-propose-via-pr-humans-merge.md
+  - docs/architecture/decisions/0016-merge-after-workspace-approval.md
   - standards/git.yaml
 ---
 
@@ -18,7 +18,7 @@ so that my technical merge gate sees pre-triaged work and the review is never an
 
 ## Context
 
-A pre-merge step on the open PR from US-0011. Enforces the reviewer ≠ author rule ([ADR-0004](../../../architecture/decisions/0004-agents-propose-via-pr-humans-merge.md)) — independent checks, not self-grading.
+A pre-merge step on the open PR from US-0011. Enforces the reviewer ≠ author rule ([ADR-0016](../../../architecture/decisions/0016-merge-after-workspace-approval.md), retained from ADR-0004) — independent checks, not self-grading.
 
 ## Acceptance criteria (EARS)
 
@@ -29,9 +29,9 @@ A pre-merge step on the open PR from US-0011. Enforces the reviewer ≠ author r
 
 ## Out of scope
 
-- The human merge decision (architect, ADR-0004) and the orchestration that opens the gate (US-0020).
+- The human merge decision (architect, ADR-0016) and the orchestration that opens the gate (US-0020).
 - Generating the tests (US-0014).
 
 ## Notes
 
-Reviewer comments are advisory input to the human gate, not an auto-merge signal. "Independent checks, not self-grading" (principle 3 / ADR-0004).
+Reviewer comments are advisory input to the human gate, not an auto-merge signal. "Independent checks, not self-grading" (principle 3 / ADR-0016).

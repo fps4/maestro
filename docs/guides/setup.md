@@ -19,7 +19,7 @@ maestro runs on a cloud substrate. Its external connections (human surfaces are 
 
 | Dependency | What maestro needs | Critical constraint |
 |---|---|---|
-| **GitHub** | Credentials for the target repo(s) scoped to **branch-create + PR-open**, with **no merge rights** | The missing merge right is the safety boundary (ADR-0004), verified at first run |
+| **GitHub** | Credentials for the target repo(s) scoped to **branch-create + PR-open + merge** | maestro executes the merge **only** against a recorded, role-authorized merge-approval event (ADR-0016); first run verifies it *refuses* to merge without one |
 | **Slack** | A Slack app able to post and receive interactive actions in the shared **architect** channel | The architect surface — intent in, architect-gate approvals out |
 | **Telegram** | One **bot per product** (with a functional reviewer), added to that product's group | The functional-reviewer surface; per-product bots isolate products (ADR-0011) — set up when onboarding a product, not a single global step |
 | **Anthropic / Claude** | An `ANTHROPIC_API_KEY` for the `ModelClient` | maestro's only LLM egress (ADR-0002); native prompt caching / extended thinking / tool use |
@@ -31,7 +31,7 @@ maestro runs on a cloud substrate. Its external connections (human surfaces are 
 |---|---|---|
 | `ANTHROPIC_API_KEY` | Yes | Claude API key used by the `ModelClient` |
 | `MAESTRO_MODEL_BASE_URL` | No | Override to route the `ModelClient` through an OpenAI/Anthropic-compatible proxy (optional; default is the Anthropic API directly) |
-| `GITHUB_TOKEN` | Yes | Token scoped to branch + PR, **without** merge permission |
+| `GITHUB_TOKEN` | Yes | Token scoped to branch + PR + **merge**; maestro merges only on a recorded human approval (ADR-0016) |
 | `SLACK_BOT_TOKEN` | Yes | Slack app bot token (architect surface) |
 | `ARCHITECT_SLACK_CHANNEL` | Yes | The shared architect-team channel for status + architect-gate approvals |
 | `TELEGRAM_BOT_TOKEN__<bot_name>` | Per product | One token per product's bot, keyed by the `bot:` logical name in the register (e.g. `TELEGRAM_BOT_TOKEN__acme_billing_bot`). Secret; never in the register (ADR-0011) |
@@ -53,7 +53,7 @@ See [`../../config/README.md`](../../config/README.md) for keeping product data 
 
 ## First-run verification (from US-0001)
 
-1. maestro can create a branch and open a PR on the target repo — and **cannot** merge it.
+1. maestro can create a branch and open a PR on the target repo; and it **refuses to merge** without a valid, role-authorized, unconsumed merge-approval event (ADR-0016) — an unapproved / forged / replayed merge is rejected and logged.
 2. maestro can post to the architect Slack channel and receive a button-click action back.
 3. For a product with a functional reviewer: maestro can post to that product's Telegram group via its bot and receive an in-group action back.
 4. A test `ModelClient` call returns a completion and appears in maestro's audit log (tokens, cost, cache hits).

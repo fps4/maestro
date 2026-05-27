@@ -8,7 +8,7 @@ prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
   - docs/architecture/components/orchestrator.md
   - docs/architecture/decisions/0008-system-of-record-and-persistence.md
-  - docs/architecture/decisions/0004-agents-propose-via-pr-humans-merge.md
+  - docs/architecture/decisions/0016-merge-after-workspace-approval.md
   - docs/architecture/data-model.md
 ---
 
@@ -30,7 +30,7 @@ The conductor ([`orchestrator.md`](../../../architecture/components/orchestrator
 - WHEN a reviewer selects request-changes at a gate, THE SYSTEM SHALL return the task to the stage that produced the artifact, carrying the feedback.
 - IF a gate reaches its timeout with no decision, THEN THE SYSTEM SHALL act per `config/reviewers.yaml` `on_timeout` (escalate or cancel) and SHALL NEVER auto-approve.
 - IF an agent or `ModelClient` call fails past its retry budget, THEN THE SYSTEM SHALL move the task to `blocked` and notify the architect in Slack.
-- THE SYSTEM SHALL contain no code path that merges a pull request or pushes to a default branch (ADR-0004).
+- THE SYSTEM SHALL merge a pull request **only** against a recorded, role-authorized, unconsumed merge-approval event, and SHALL contain no code path that pushes to a default branch directly ([ADR-0016](../../../architecture/decisions/0016-merge-after-workspace-approval.md)).
 
 ## Out of scope
 

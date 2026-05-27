@@ -17,7 +17,7 @@ The gap is a way for one architect to direct the building of many systems at onc
 
 ## Users
 
-- **Primary: the architect / technical product owner** (a single experienced engineer — the user). Sets direction, owns every architectural and technical decision, and merges. Participates in *every* product. Wants leverage — to ship more systems than they could build by hand — without surrendering control of *what* gets built or *how*.
+- **Primary: the architect / technical product owner** (a single experienced engineer — the user). Sets direction, owns every architectural and technical decision, and approves every merge. Participates in *every* product. Wants leverage — to ship more systems than they could build by hand — without surrendering control of *what* gets built or *how*.
 - **Secondary: the functional reviewer.** A product/business participant who signs off on *what* a commercial product should do. They review functional specs, not code. They exist for commercial products; for technical products the architect performs functional review too.
 - **Other participants.** A product may include additional humans (stakeholders, domain reviewers) with product-scoped roles. The architect is always among them.
 
@@ -38,14 +38,14 @@ maestro standardises a **spec-driven SDLC**: the specification is the durable so
 1. **Charter** (product, durable) — the product's principles and constraints. Set once.
 2. **Functional spec** — what & why, user stories, acceptance criteria in EARS form. → **functional gate** (functional reviewer for commercial; architect for technical), *before any code*.
 3. **Technical design + tasks** — architecture, data/contracts, ordered task list. → **technical (design) gate** (architect).
-4. **Implementation** — the crew builds on a `maestro/*` branch across the product's repos, automated quality gates run, a pull request opens annotated with which requirement each change satisfies. → **technical (merge) gate** (architect) → **a human merges in GitHub**.
+4. **Implementation** — the crew builds on a `maestro/*` branch across the product's repos, automated quality gates run, a pull request opens annotated with which requirement each change satisfies. → **technical (merge) gate** (architect, decided in the workspace) → **maestro executes the merge against that recorded approval** ([ADR-0016](../architecture/decisions/0016-merge-after-workspace-approval.md)).
 
 Requirement → task → PR traceability is first-class, so the functional reviewer can confirm "was my intent built?" without reading code. The full method is in [`docs/guides/sdlc.md`](../guides/sdlc.md).
 
 ## Goals
 
 - The architect takes a system from intent to a merged, reviewed PR — across a multi-repo product — **without writing the implementation by hand**, while personally approving every architectural and technical decision.
-- Every change reaches a default branch **only through a human-approved pull request**; no agent merges, enforced by GitHub (branch protection + reserved `maestro/*` branches + no merge rights), not by convention.
+- Every change reaches a default branch **only through a human-approved merge gate**; maestro executes the merge only against that recorded, role-authorized approval event — nothing merges without it ([ADR-0016](../architecture/decisions/0016-merge-after-workspace-approval.md)).
 - Functional sign-off on commercial products is owned by the functional reviewer, not the architect — the architect's attention stays on technical correctness.
 - Quality is **machine-enforced before a human looks**: spec-derived tests, security and dependency scans, and license/SBOM checks all pass before the technical gate opens.
 - Every agent action and every gate decision is **auditable** — who, what, when, why — per product.
@@ -56,7 +56,7 @@ Full text in [`docs/principles.md`](../principles.md):
 
 - **Spec-driven** — specs are the source of truth; nothing is built without an approved spec.
 - **Human-in-the-loop by design** — the gates are the product, not friction.
-- **Agents propose, humans merge** — agents open PRs on `maestro/*` branches; they never merge.
+- **Agents propose, humans decide the merge** — agents open PRs on `maestro/*` branches; the architect approves the merge gate in the workspace and maestro executes the merge against that recorded approval ([ADR-0016](../architecture/decisions/0016-merge-after-workspace-approval.md)).
 - **Fully automated testing** — every product has CI; tests and quality gates block merge.
 - **Open-source as a value, private by default** — favour OSS dependencies and permissive licenses, build so a repo *can* be opened; repos are private by default and made public as a deliberate per-product decision.
 - **Deploy where the product needs** — default to lab servers; **AWS** for production; **AWS/Azure/GCP from day one** when the product's technology requires it.
@@ -76,7 +76,7 @@ Full text in [`docs/principles.md`](../principles.md):
 
 ## Where maestro deliberately differs from the market
 
-Validated against Devin, Factory.ai, GitHub Copilot coding agent, Cursor, Jules, Sweep, OpenHands and others (2025–2026). maestro's safe bets — issue→plan→PR, agents-never-merge, coordinator + bounded-role crew, a chat control surface, persistent context — are all mainstream best practice. Its defensible novelty is the **governance model** that none of them implement:
+Validated against Devin, Factory.ai, GitHub Copilot coding agent, Cursor, Jules, Sweep, OpenHands and others (2025–2026). maestro's safe bets — issue→plan→PR, no merge without a human decision, coordinator + bounded-role crew, a chat control surface, persistent context — are all mainstream best practice. Its defensible novelty is the **governance model** that none of them implement:
 
 1. **Architect-owned design gate** as the central organising principle (not "PR review by whoever's around").
 2. **Split functional vs technical review** as two separately-owned gates.

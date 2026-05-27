@@ -1,13 +1,21 @@
 ---
 title: "0004: Agents propose via pull request; humans merge"
-status: accepted
+status: superseded by ADR-0016
 date: 2026-05-24
 related:
   - 0001-architect-directed-agentic-delivery.md
   - 0003-split-review-routing-matrix.md
   - 0006-spec-driven-sdlc.md
+  - 0016-merge-after-workspace-approval.md
   - ../../product/user-stories/EP-01-delivery-loop/US-0011-implement-and-open-pr.md
 ---
+
+> **Superseded by [ADR-0016](0016-merge-after-workspace-approval.md).** The *purpose* below still holds
+> — no change reaches a default branch without an explicit, attributed human decision, and reviewer ≠
+> author. The **mechanic** changed: the human now decides the merge **in the maestro workspace** and
+> maestro executes the merge against that recorded, role-authorized approval event (the event is the
+> sole authority). The platform-level "credential without merge rights" backstop described here is
+> **removed** by ADR-0016; read this ADR as the prior state.
 
 ## Context
 

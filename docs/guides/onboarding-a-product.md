@@ -82,19 +82,21 @@ so it stays isolated from every other product (ADR-0011):
 
 ## 3. Put the per-repo controls in place
 
-For **each** repo the product lists, apply the three enforcement layers from
-[`repo-controls.md`](repo-controls.md):
+The merge boundary is **maestro-internal**, not a GitHub setting
+([ADR-0016](../architecture/decisions/0016-merge-after-workspace-approval.md) / [`repo-controls.md`](repo-controls.md)).
+For **each** repo the product lists:
 
-- [ ] `.github/CODEOWNERS` with the architect (and a `pull_request_template.md`).
-- [ ] Branch protection on the default branch — required review + code-owner review + the DoD
-      status checks.
-- [ ] A maestro runtime credential scoped **without merge rights** for that repo.
-- [ ] CI that runs the Definition-of-Done gates on PRs (`.github/workflows/dod.yml` as a starting point).
+- [ ] A maestro runtime credential scoped to branch + PR + **merge** for that repo (maestro merges only
+      against a recorded, role-authorized approval event — ADR-0016).
+- [ ] CI that runs the Definition-of-Done gates on PRs (`.github/workflows/dod.yml` as a starting
+      point) — the quality signal the orchestrator reads before opening the merge gate.
+- [ ] *(Optional, hygiene only)* `.github/CODEOWNERS` + `pull_request_template.md`. GitHub-side branch
+      protection / required reviews are **not** used as the merge lock under the single-layer model.
 
 ## 4. Verify
 
 - [ ] `config/products.yaml` is **not** tracked: `git check-ignore config/products.yaml` prints the path.
-- [ ] Each repo: a test PR cannot be merged by the runtime credential, only by a human (US-0001 / ADR-0004).
+- [ ] Each repo: maestro **refuses to merge** a test PR without a valid, role-authorized merge-approval event — an unapproved / forged / replayed merge is rejected and logged (US-0001 / [ADR-0016](../architecture/decisions/0016-merge-after-workspace-approval.md)).
 - [ ] Commercial product: a test post reaches the product's Telegram group via its bot, and an
       in-group action from a functional reviewer is accepted (one from a non-reviewer is ignored).
 - [ ] No bot token is present in `products.yaml`; tokens live only in the secret store.

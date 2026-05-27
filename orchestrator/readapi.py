@@ -24,6 +24,7 @@ from orchestrator.register import Register
 from orchestrator.specindex import (
     KINDS,
     KIND_FUNCTIONAL,
+    BranchIndex,
     IndexedSpec,
     RepoContentReader,
     SpecRef,
@@ -68,6 +69,12 @@ class ReadAPI:
         self._content = content
         self._default_branch = default_branch
         self._read_lock = threading.Lock()  # serialise event-log reads across request threads
+        # Index cache: rebuild a branch's index only when its head commit changes — not per request.
+        # Blob cache: content-addressed frontmatter, shared across branches/rebuilds. The webhook `push`
+        # reconciler (ADR-0017) will keep these fresh incrementally; for now the head-SHA check does.
+        self._index_cache: dict[tuple[str, str], tuple[str, BranchIndex]] = {}
+        self._blob_cache: dict[str, object] = {}
+        self._index_lock = threading.Lock()
 
     # --- endpoints ------------------------------------------------------------------------------
 
@@ -93,7 +100,7 @@ class ReadAPI:
                 if branch and b != branch:
                     continue
                 try:
-                    idx = build_branch_index(self._content, repo, b)
+                    idx = self._branch_index(repo, b)
                 except Exception:
                     continue  # a branch that cannot be listed yields nothing; the rest still serve
                 task = status_map.get((repo, b))
@@ -115,7 +122,7 @@ class ReadAPI:
         target = branch or self._default_branch
         for repo in product.repos:
             try:
-                idx = build_branch_index(self._content, repo, target)
+                idx = self._branch_index(repo, target)
             except Exception:
                 continue
             spec = next((s for s in idx.specs if s.feature == feature and s.kind == kind), None)
@@ -149,6 +156,23 @@ class ReadAPI:
         if product is None or product.participant_for(identity) is None:
             raise NotFound(f"product {product_id!r} not found")
         return product
+
+    # --- the spec index (cached) ----------------------------------------------------------------
+
+    def _branch_index(self, repo: str, branch: str) -> BranchIndex:
+        """A branch's index, rebuilt only when its head commit changes. One cheap ``head_sha`` call
+        revalidates the cache (vs. re-scanning every file per request); the build reuses the shared
+        blob cache, so only changed files are ever fetched. Raises if the branch can't be resolved."""
+        head = self._content.head_sha(repo, branch)   # raises for an unknown branch → caller handles
+        key = (repo, branch)
+        with self._index_lock:
+            hit = self._index_cache.get(key)
+            if hit and hit[0] == head:
+                return hit[1]
+        idx = build_branch_index(self._content, repo, branch, blob_cache=self._blob_cache)
+        with self._index_lock:
+            self._index_cache[key] = (head, idx)
+        return idx
 
     # --- the status join ------------------------------------------------------------------------
 

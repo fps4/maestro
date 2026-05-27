@@ -20,8 +20,8 @@ from orchestrator.register import Participant, Product, Register
 ARCH = "arch@example.com"
 REPO = "acme/widget"
 
-SPEC = ("---\ntitle: Invoice export\nmaestro:\n  feature: invoice-export\n  kind: functional_spec\n"
-        "  task: US-0042\n---\n# Invoice export\nthe body")
+SPEC = ("---\ntitle: Invoice export\nlast_updated: 2026-05-27\nmaestro:\n  feature: invoice-export\n"
+        "  kind: functional_spec\n  task: US-0042\n---\n# Invoice export\nthe body")
 
 
 @pytest.fixture
@@ -92,6 +92,8 @@ def test_get_spec_and_etag_304(base_url, monkeypatch):
     url = f"{base_url}/api/products/maestro/specs/invoice-export/functional_spec?branch=main"
     status, body, headers = _get(url)
     assert status == 200 and "the body" in body["content"]
+    # frontmatter dates (YAML → datetime.date) must serialize as ISO strings, not 500 the response
+    assert body["frontmatter"]["last_updated"] == "2026-05-27"
     etag = headers["ETag"]
     # a conditional re-request with the same commit-keyed ETag → 304, no body
     status2, _, _ = _get(url, {"If-None-Match": etag})

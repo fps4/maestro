@@ -22,7 +22,9 @@ class GitHubError(Exception):
 
 
 class HttpGitHubClient:
-    def __init__(self, token: str, api_base: str = API_BASE):
+    def __init__(self, token: Optional[str] = None, api_base: str = API_BASE):
+        # Token optional: the read-only content path (ADR-0018) works unauthenticated against PUBLIC
+        # repos (rate-limited). The write paths (branch/PR/merge) always need a scoped token.
         self._token = token
         self._api_base = api_base.rstrip("/")
 
@@ -54,6 +56,11 @@ class HttpGitHubClient:
     # Read of repo content as-committed. The merge boundary above is unchanged: there is still no
     # write path into a default branch here — these are GET-only.
 
+    def head_sha(self, repo: str, ref: str) -> str:
+        """The commit SHA at the tip of branch ``ref`` — the index cache key (one cheap call)."""
+        head = self._request("GET", f"/repos/{repo}/git/ref/heads/{urllib.parse.quote(ref)}")
+        return head["object"]["sha"]
+
     def get_contents(self, repo: str, path: str, ref: str) -> dict:
         """Return ``{content, sha, path}`` for one file as-committed on ``ref`` (branch/sha)."""
         q = urllib.parse.quote(path)
@@ -63,12 +70,15 @@ class HttpGitHubClient:
             content = base64.b64decode(content).decode("utf-8", errors="replace")
         return {"content": content, "sha": res.get("sha", ""), "path": path}
 
-    def list_tree(self, repo: str, ref: str, path_prefix: str = "") -> list[str]:
-        """List blob paths under ``path_prefix`` at ``ref`` — one recursive trees call (ADR-0018)."""
-        head = self._request("GET", f"/repos/{repo}/git/ref/heads/{urllib.parse.quote(ref)}")
-        sha = head["object"]["sha"]
+    def list_tree_entries(self, repo: str, ref: str, path_prefix: str = "") -> list[tuple[str, str]]:
+        """List ``(path, blob_sha)`` under ``path_prefix`` at ``ref`` — one recursive trees call.
+
+        The blob SHA is the file's content hash: it lets the index skip re-fetching unchanged files
+        (ADR-0018). Returns the tip's tree.
+        """
+        sha = self.head_sha(repo, ref)
         tree = self._request("GET", f"/repos/{repo}/git/trees/{sha}?recursive=1")
-        return [t["path"] for t in tree.get("tree", [])
+        return [(t["path"], t["sha"]) for t in tree.get("tree", [])
                 if t.get("type") == "blob" and t["path"].startswith(path_prefix)]
 
     # --- transport ------------------------------------------------------------------------------
@@ -76,7 +86,8 @@ class HttpGitHubClient:
     def _request(self, method: str, path: str, body: Optional[dict] = None) -> Any:
         data = json.dumps(body).encode() if body is not None else None
         req = urllib.request.Request(f"{self._api_base}{path}", data=data, method=method)
-        req.add_header("Authorization", f"Bearer {self._token}")
+        if self._token:
+            req.add_header("Authorization", f"Bearer {self._token}")
         req.add_header("Accept", "application/vnd.github+json")
         req.add_header("X-GitHub-Api-Version", "2022-11-28")
         if data is not None:

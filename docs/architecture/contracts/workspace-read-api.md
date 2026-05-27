@@ -3,6 +3,10 @@ title: "Contract: the workspace read API (S1 — read-only specs)"
 status: draft
 last_updated: 2026-05-27
 owners: [architect]
+maestro:
+  feature: workspace-read-api
+  kind: technical_design
+  task: US-0030
 related:
   - docs/architecture/components/workspace-backend.md
   - docs/architecture/decisions/0018-workspace-read-api-and-frontmatter-index.md
@@ -246,9 +250,11 @@ stance. FastAPI (the "likely" choice) stays a drop-in for that one thin file.
   (or header negotiation) lands when an external/independent consumer appears.
 - **No pagination in S1.** `specs[]` returns in full; `?limit=`/`?cursor=` is the forward extension when
   a product's spec count warrants it (ADR-0018 open question).
-- **Index built per request (no cache yet).** The list/detail scan `docs/**` live each call; the
-  commit-keyed cache (ETag is in place; a server-side store is not) and a persisted index land with the
-  webhook reconciler (ADR-0017/0018).
+- **Index caching is head-commit-keyed (Phase 1), not yet incremental.** A branch's index is rebuilt
+  only when its head commit changes (one cheap `head_sha` check revalidates per request); frontmatter is
+  content-addressed by blob SHA, so a rebuild only fetches changed files, in parallel. The **incremental**
+  path — the webhook `push` reconciler updating only changed files + crew-event seeding, so the list
+  makes *zero* GitHub calls — is Phase 2 (ADR-0017). A persisted (cross-restart) index lands with it.
 - **Concurrency is light.** Served via `ThreadingHTTPServer` over a dedicated read-only SQLite
   connection with event reads serialised by a lock; the Postgres cutover is the real concurrency story
   (ADR-0008).

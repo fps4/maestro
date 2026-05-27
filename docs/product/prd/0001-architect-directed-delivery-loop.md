@@ -3,6 +3,9 @@ title: "0001: Architect-directed delivery loop"
 status: draft
 last_updated: 2026-05-25
 owners: [architect]
+maestro:
+  feature: delivery-loop
+  kind: functional_spec
 related:
   - docs/product/vision.md
   - docs/principles.md

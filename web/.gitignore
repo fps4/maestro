@@ -5,6 +5,7 @@ out/
 dist/
 build/
 next-env.d.ts
+*.tsbuildinfo
 
 # env (instance config — ADR-0010); .env.example is tracked
 .env

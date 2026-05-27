@@ -85,7 +85,9 @@ def make_handler(api: ReadAPI):
             self._send(err.status, body)
 
         def _send(self, status: int, body, extra_headers: dict | None = None):
-            payload = b"" if body is None else json.dumps(body).encode("utf-8")
+            # default=str: frontmatter is arbitrary YAML — dates (e.g. `last_updated: 2026-05-27`) parse
+            # to datetime.date, which json can't serialize. Render them as their ISO string form.
+            payload = b"" if body is None else json.dumps(body, default=str).encode("utf-8")
             self.send_response(status)
             if body is not None:
                 self.send_header("Content-Type", "application/json; charset=utf-8")

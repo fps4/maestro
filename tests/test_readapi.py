@@ -94,6 +94,28 @@ def test_list_specs_joins_status_for_a_branch_with_an_open_pr(register, events, 
     assert st["merged"] is False
 
 
+def test_index_cache_avoids_refetch_until_the_branch_changes(api, content_reader):
+    api.list_specs(ARCH, "maestro")
+    after_first = content_reader.reads
+    assert after_first > 0
+    api.list_specs(ARCH, "maestro")              # same head commit → served from cache
+    assert content_reader.reads == after_first   # no new content fetches
+    # a new commit on the branch (content change) invalidates the cached index → one refetch
+    content_reader.put(REPO, "main", "docs/spec.md", _spec("invoice-export", "functional_spec", "US-0042", "Edited"))
+    api.list_specs(ARCH, "maestro")
+    assert content_reader.reads > after_first
+
+
+def test_blob_cache_skips_unchanged_files_across_rebuilds(api, content_reader):
+    api.list_specs(ARCH, "maestro")
+    base = content_reader.reads
+    # Add a second doc → the branch head changes, so the index rebuilds; but the unchanged first doc's
+    # blob is already cached, so only the new file is fetched.
+    content_reader.put(REPO, "main", "docs/two.md", _spec("second", "technical_design"))
+    api.list_specs(ARCH, "maestro")
+    assert content_reader.reads == base + 1      # only the new blob fetched, not both
+
+
 def test_list_specs_filters(api, content_reader):
     content_reader.put(REPO, "main", "docs/design.md", _spec("invoice-export", "technical_design"))
     assert len(api.list_specs(ARCH, "maestro")["specs"]) == 2
@@ -114,7 +136,7 @@ def test_get_spec_returns_content_and_frontmatter(api):
     assert doc["title"] == "A doc"
     assert "body of invoice-export" in doc["content"]
     assert doc["frontmatter"]["maestro"]["feature"] == "invoice-export"
-    assert doc["ref"]["path"] == "docs/spec.md" and doc["ref"]["commit"].startswith("sha-")
+    assert doc["ref"]["path"] == "docs/spec.md" and doc["ref"]["commit"].startswith("blob-")
 
 
 def test_get_spec_unknown_is_404(api):
@@ -132,13 +154,15 @@ def test_get_spec_content_fetch_failure_is_degraded(register, events):
     class FlakyReader:
         def __init__(self):
             self.calls = 0
-        def list_tree(self, repo, ref, path_prefix=""):
-            return ["docs/spec.md"] if ref == "main" else []
+        def head_sha(self, repo, ref):
+            return "c0ffee" if ref == "main" else (_ for _ in ()).throw(FileNotFoundError(ref))
+        def list_tree_entries(self, repo, ref, path_prefix=""):
+            return [("docs/spec.md", "blob-1")] if ref == "main" else []
         def get_contents(self, repo, path, ref):
             self.calls += 1
             if self.calls > 1:  # the index-build read succeeds; the detail re-fetch fails
                 raise RuntimeError("transient upstream error")
-            return {"content": _spec("invoice-export", "functional_spec"), "sha": "c0ffee", "path": path}
+            return {"content": _spec("invoice-export", "functional_spec"), "sha": "blob-1", "path": path}
 
     api = ReadAPI(register, events, FlakyReader())
     with pytest.raises(Degraded):

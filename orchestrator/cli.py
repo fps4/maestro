@@ -3,12 +3,13 @@
   maestro boot [--probe]        boot + report connection status (--probe makes the live calls)
   maestro selftest              boot, make one real ModelClient call, show the recorded audit row
   maestro verify-chain          confirm the event log's hash chain is intact (ADR-0009)
-  maestro serve [--port]        serve the workspace read API (S1, read-only — ADR-0018)
+  maestro serve [--host --port] serve the workspace read API (S1, read-only — ADR-0018)
 
 ``--example`` lets a local run fall back to config/products.example.yaml when the private register is
 absent (ADR-0010). Real runs use config/products.yaml.
 """
 import argparse
+import os
 import sys
 
 from orchestrator import db
@@ -64,21 +65,30 @@ def cmd_verify_chain(a) -> int:
 
 
 def cmd_serve(a) -> int:
-    try:
-        engine = boot(probe=False, allow_example_register=a.example)
-    except StartupError as exc:
-        print(f"✗ startup refused: {exc}", file=sys.stderr)
-        return 1
-    if engine.github_client is None:
-        print("✗ serve needs GITHUB_TOKEN — the read API fetches repo content (ADR-0018)",
-              file=sys.stderr)
-        return 1
+    """Serve the workspace read API. Booted lean — no LLM egress, no merge adapter: the read API does
+    no inference (workspace-backend.md), so it needs only the register, the event log, and a GitHub
+    content reader. That also means serve does not require an ANTHROPIC_API_KEY."""
+    from adapters.github.http_client import HttpGitHubClient
     from orchestrator.httpserver import serve
     from orchestrator.readapi import ReadAPI
+    from orchestrator.register import load_register
+
+    try:
+        register = load_register(allow_example=a.example)
+    except FileNotFoundError as exc:
+        print(f"✗ {exc}", file=sys.stderr)
+        return 1
+
+    token = os.environ.get("GITHUB_TOKEN")
+    if not token:
+        print("• no GITHUB_TOKEN — unauthenticated GitHub reads (public repos only, rate-limited)")
+    default_branch = os.environ.get("MAESTRO_DEFAULT_BRANCH", "main")
+
     # A dedicated, read-only connection: the API serves from request threads (ThreadingHTTPServer),
-    # so it must not share the engine's single-threaded write connection (ADR-0008).
-    read_conn = db.connect(check_same_thread=False)
-    api = ReadAPI(engine.register, EventLog(read_conn), engine.github_client)
+    # so it must not share a single-threaded write connection (ADR-0008).
+    conn = db.connect(check_same_thread=False)
+    api = ReadAPI(register, EventLog(conn), HttpGitHubClient(token), default_branch=default_branch)
+    print(f"✓ workspace read API — {len(register.products)} product(s); default branch {default_branch!r}")
     serve(api, host=a.host, port=a.port)
     return 0
 

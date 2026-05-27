@@ -11,6 +11,7 @@ Content is read through :class:`RepoContentReader` (the github adapter implement
 holds **no GitHub token and no authoritative state** (ADR-0015) — it projects the repo, one way.
 """
 import re
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import Optional, Protocol, runtime_checkable
 
@@ -25,13 +26,16 @@ DOCS_PREFIX = "docs/"
 _FEATURE_RE = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _TASK_RE = re.compile(r"^US-\d{3,4}$")
 
+_FETCH_FAILED = object()   # sentinel: a blob fetch failed this round (don't cache; retry next time)
+
 
 @runtime_checkable
 class RepoContentReader(Protocol):
     """The minimal, read-only GitHub surface the index needs; injectable so it is testable offline."""
 
+    def head_sha(self, repo: str, ref: str) -> str: ...
+    def list_tree_entries(self, repo: str, ref: str, path_prefix: str = "") -> list[tuple[str, str]]: ...
     def get_contents(self, repo: str, path: str, ref: str) -> dict: ...   # -> {content, sha, path}
-    def list_tree(self, repo: str, ref: str, path_prefix: str = "") -> list[str]: ...
 
 
 @dataclass(frozen=True)
@@ -125,25 +129,46 @@ def _title(meta: dict, body: str, fallback: str) -> str:
 
 
 def build_branch_index(reader: RepoContentReader, repo: str, branch: str,
-                       path_prefix: str = DOCS_PREFIX) -> BranchIndex:
-    """Scan ``path_prefix`` markdown on one branch and build its index (the S1 bootstrap).
+                       path_prefix: str = DOCS_PREFIX, *,
+                       blob_cache: Optional[dict] = None, max_workers: int = 12) -> BranchIndex:
+    """Build one branch's index from its tree, fetching only the files we must.
 
-    A single file whose content cannot be fetched is skipped (the read API marks it ``unavailable`` at
-    serve time) — never all-or-nothing (``workspace-backend.md``). Two docs claiming the same
-    ``(feature, kind)`` on the branch are both flagged ``duplicate`` rather than silently colliding.
+    The recursive tree gives every markdown file's **blob SHA** (its content hash), so we
+    content-address the parse: a blob already in ``blob_cache`` (from a prior build or another branch)
+    is **never re-fetched** — only changed/new blobs are. Those fetches run in parallel. A blob whose
+    content can't be fetched is skipped this round (not cached, so it retries) — never all-or-nothing
+    (``workspace-backend.md``). Two docs claiming the same ``(feature, kind)`` are both flagged
+    ``duplicate``. The read API keeps this index keyed by the branch head commit (rebuild only on a new
+    commit); this scan is the cold path and the webhook ``push`` reconciler (ADR-0017) the incremental one.
     """
-    candidates: list[tuple[dict, SpecRef]] = []
-    unindexed: list[UnindexedDoc] = []
-    for path in sorted(reader.list_tree(repo, branch, path_prefix)):
-        if not path.endswith(".md"):
-            continue
+    cache = blob_cache if blob_cache is not None else {}
+    entries = [(p, sha) for p, sha in reader.list_tree_entries(repo, branch, path_prefix)
+               if p.endswith(".md")]
+    missing = [(p, sha) for p, sha in entries if sha not in cache]
+
+    def fetch(item: tuple[str, str]):
+        path, sha = item
         try:
             obj = reader.get_contents(repo, path, branch)
         except Exception:
-            continue
-        ref = SpecRef(repo=repo, branch=branch, path=path, commit=obj.get("sha", ""))
+            return sha, _FETCH_FAILED
         meta, body = parse_frontmatter(obj.get("content", ""))
-        fields, reason = classify(meta, body)
+        return sha, classify(meta, body)   # (fields, reason)
+
+    if missing:
+        with ThreadPoolExecutor(max_workers=min(max_workers, len(missing))) as pool:
+            for sha, result in pool.map(fetch, missing):
+                if result is not _FETCH_FAILED:
+                    cache[sha] = result
+
+    candidates: list[tuple[dict, SpecRef]] = []
+    unindexed: list[UnindexedDoc] = []
+    for path, sha in sorted(entries):
+        result = cache.get(sha)
+        if result is None:        # never fetched (transient failure) — skip this round
+            continue
+        fields, reason = result
+        ref = SpecRef(repo=repo, branch=branch, path=path, commit=sha)
         if reason:
             unindexed.append(UnindexedDoc(ref=ref, reason=reason))
         elif fields:

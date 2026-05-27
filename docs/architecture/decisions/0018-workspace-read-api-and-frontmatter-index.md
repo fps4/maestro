@@ -94,9 +94,10 @@ GitHub token and no authoritative state), and **(b)** how repo `docs/` files map
 
 ## Open questions
 
-- **Caller auth handshake** — Cloudflare Access (edge-injected identity) + register mapping vs. full
-  `component-auth` OIDC/RBAC in-app. Settle before the webapp is reachable externally; the thin slice
-  can render against a dev/stub identity while enforcing the isolation logic.
+- ~~**Caller auth handshake**~~ — **resolved by [ADR-0019](0019-workspace-identity-component-auth-google-sso.md)**:
+  identity via `component-auth` (Google SSO) with Cloudflare Access as the perimeter; **authorization
+  stays in the register** (this ADR's isolation contract). The thin slice renders against a dev/stub
+  identity; component-auth OIDC is wired before the webapp is externally reachable.
 - **Large docs / pagination** and **diagram rendering** (Mermaid in technical designs, ADR cross-links)
   — rendering details for the build slice.
 - **Caching** repo content fetched via the adapter (ETag/commit-keyed) to stay inside rate limits — an

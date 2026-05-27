@@ -25,6 +25,15 @@ services:
         NEXT_PUBLIC_ORCHESTRATOR_URL: ${NEXT_PUBLIC_ORCHESTRATOR_URL:-http://localhost:8000}
     container_name: maestro-web
     restart: unless-stopped
+    environment:
+      # Server-side, runtime (no rebuild to change). The orchestrator read API the webapp reads
+      # specs/designs from (ADR-0018). On ds1 this points at the orchestrator service once it joins the
+      # stack (e.g. http://orchestrator:8800); until then it's empty and the webapp shows a clear
+      # "read API unreachable" notice — 127.0.0.1 would only reach the web container itself.
+      MAESTRO_API_URL: ${MAESTRO_API_URL:-}
+      # Dev/stub workspace identity until component-auth is wired (ADR-0019); leave empty in production,
+      # where the Cloudflare Access + component-auth edge establishes the user.
+      MAESTRO_DEV_IDENTITY: ${MAESTRO_DEV_IDENTITY:-}
     ports:
       - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-3034}:3034"
     networks: [maestro]

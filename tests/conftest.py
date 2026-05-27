@@ -78,31 +78,45 @@ def github_client():
 
 # --- fake repo content reader (the read API's RepoContentReader) -------------------------------
 
+def _blob_sha(text: str) -> str:
+    """A content-addressed blob SHA — changes iff the content changes (like git)."""
+    return f"blob-{abs(hash(text)) % 10**9}"
+
+
 class FakeContentReader:
     """In-memory repo content for read-API tests — files keyed by ``(repo, branch) -> {path: text}``.
 
-    Mirrors the github adapter's read surface offline: ``list_tree`` raises for an unknown branch (as a
-    real ref-miss would); ``get_contents`` raises for an unknown path.
+    Mirrors the github adapter's read surface offline. ``head_sha``/``list_tree_entries`` raise for an
+    unknown branch (a real ref-miss); ``get_contents`` raises for an unknown path. ``reads`` counts
+    content fetches, so tests can assert the index cache avoids re-fetching.
     """
 
     def __init__(self):
         self.files: dict[tuple[str, str], dict[str, str]] = {}
+        self.reads = 0
 
     def put(self, repo, branch, path, text):
         self.files.setdefault((repo, branch), {})[path] = text
         return self
 
-    def list_tree(self, repo, ref, path_prefix=""):
+    def head_sha(self, repo, ref):
+        files = self.files.get((repo, ref))
+        if files is None:
+            raise FileNotFoundError(f"no such ref {repo}@{ref}")
+        return f"head-{abs(hash(tuple(sorted(files.items())))) % 10**9}"
+
+    def list_tree_entries(self, repo, ref, path_prefix=""):
         if (repo, ref) not in self.files:
             raise FileNotFoundError(f"no such ref {repo}@{ref}")
-        return [p for p in self.files[(repo, ref)] if p.startswith(path_prefix)]
+        return [(p, _blob_sha(t)) for p, t in self.files[(repo, ref)].items() if p.startswith(path_prefix)]
 
     def get_contents(self, repo, path, ref):
         try:
             text = self.files[(repo, ref)][path]
         except KeyError:
             raise FileNotFoundError(f"{repo}@{ref}:{path}")
-        return {"content": text, "sha": f"sha-{abs(hash((repo, ref, path))) % 100000}", "path": path}
+        self.reads += 1
+        return {"content": text, "sha": _blob_sha(text), "path": path}
 
 
 @pytest.fixture

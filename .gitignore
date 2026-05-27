@@ -24,11 +24,14 @@ logs/test_reports/*
 .obsidian/
 *.swp
 
-# Python (planned runtime)
+# Python runtime
 __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
+*.egg-info/
+build/
+dist/
 
 # Node (planned adapters/tooling)
 node_modules/

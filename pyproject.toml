@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "maestro"
+version = "0.1.0"
+description = "maestro — architect-directed agentic delivery platform (engine)"
+requires-python = ">=3.11"
+# Runtime deps for the M0 engine spine. The LangGraph runtime (ADR-0014) is added in the
+# slice that wires the delivery-loop stages; the event log below is authoritative under it,
+# so it layers on without changing this core.
+dependencies = [
+    "anthropic>=0.40",   # the only provider SDK — reached ONLY through model.ModelClient (ADR-0002)
+    "PyYAML>=6",         # read the product register / routing matrix (ADR-0008)
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+maestro = "orchestrator.cli:main"
+
+# The engine packages match the directory map in CODEBASE.md (top-level components).
+[tool.setuptools]
+packages = ["model", "orchestrator", "adapters", "adapters.github"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

@@ -2,7 +2,7 @@
 
 maestro is an architect-directed agentic delivery platform: a crew of Claude-powered agents that take a unit of work from intent → functional spec → technical design → implementation → reviewed pull request on real GitHub, coordinated through Slack (architects) and Telegram (functional reviewers), with the right human approving at each gate. Work is organised around a **product** — one or more repositories and one or more human participants.
 
-> **Status:** founding scaffold. The directory map below describes the *intended* structure; today `docs/`, `config/`, `standards/`, the reviewer `web/` app, and `infra/docker/` exist. No agent/orchestrator code has been written yet.
+> **Status:** the **M0 engine spine** has landed — the first real engine code. Built and tested: the audited `ModelClient` egress (`model/`), the event-sourced `StateStore` (hash-chained event log + projection) and fail-fast boot (`orchestrator/`), and the GitHub adapter's event-gated merge boundary (`adapters/github/`). Still `planned`: the crew (`agents/`), the `ArtifactStore` (`storage/`), the Slack/Telegram adapters, and the LangGraph wiring of the delivery-loop stages (the event log is already authoritative under it — ADR-0014). `docs/`, `config/`, `standards/`, the reviewer `web/` app, and `infra/docker/` exist as before.
 
 ## Directory map
 
@@ -14,11 +14,12 @@ maestro is an architect-directed agentic delivery platform: a crew of Claude-pow
 | `config/products.yaml` | Your **private** product register — gitignored; only `products.example.yaml` is public (ADR-0010) |
 | `logs/test_reports/` | Timestamped acceptance-test evidence (git-ignored except README) |
 | `.github/` | Merge-boundary enforcement: CODEOWNERS, PR template, the `dod` quality-gate workflow (see `docs/guides/repo-controls.md`) |
-| `orchestrator/` | *(planned)* Sequences agents and owns gate state; performs no LLM inference |
+| `orchestrator/` | The conductor: the event-sourced `StateStore` (hash-chained event log + projection), register loader, `RoutingResolver`, fail-fast boot + CLI. Owns gate state; performs no LLM inference. *(LangGraph stage-wiring planned — ADR-0014)* |
 | `agents/` | *(planned)* The crew — spec, architect, builder, test, reviewer, docs; LLM logic lives here |
-| `model/` | *(planned)* The single `ModelClient` — the only place that calls Claude; records cost + audit |
+| `model/` | The single `ModelClient` — the only place that calls Claude (tier-selected, `base_url`-configurable); records per-call cost + audit (ADR-0002/0009) |
 | `storage/` | *(planned)* The single S3-compatible `ArtifactStore` — stores artefacts (specs, designs, test reports, SBOMs) and mints short-TTL presigned share links; MinIO on ds1 by default, AWS S3 per-product opt-in (ADR-0012) |
-| `adapters/github/` | *(planned)* GitHub integration — branches, PRs, Actions, Issues/Projects |
+| `adapters/github/` | GitHub integration — branches, PRs, and the **event-gated merge** that refuses without a valid, role-authorized, unconsumed approval event (ADR-0016). *(Actions, Issues/Projects planned)* |
+| `tests/` | The engine test suite (pytest) — contract layer: mocked LLM, no network |
 | `adapters/slack/` | *(planned)* Slack adapter — the **architect** surface: intent intake + architect-gate approvals |
 | `adapters/telegram/` | *(planned)* Telegram adapter — an *optional* functional-reviewer surface (ADR-0011; demoted by ADR-0015) |
 | `web/` | The **reviewer webapp** — read specs, discuss, decide gates (ADR-0015 / US-0030); MIT/open base (shadcn/ui + Next.js). A surface, not the system of record |

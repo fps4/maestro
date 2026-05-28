@@ -65,31 +65,40 @@ def cmd_verify_chain(a) -> int:
 
 
 def cmd_serve(a) -> int:
-    """Serve the workspace read API. Booted lean — no LLM egress, no merge adapter: the read API does
-    no inference (workspace-backend.md), so it needs only the register, the event log, and a GitHub
-    content reader. That also means serve does not require an ANTHROPIC_API_KEY."""
+    """Serve the workspace API — read (S1) + write (S2/S3 + M1 dispatch). Booted lean: no LLM egress,
+    no merge adapter; the API does no inference (workspace-backend.md), so it needs only the register,
+    the event log, the routing matrix, the idempotency store, and a GitHub content reader. That also
+    means serve does not require an ANTHROPIC_API_KEY."""
     from adapters.github.http_client import HttpGitHubClient
     from orchestrator.httpserver import serve
+    from orchestrator.idempotency import IdempotencyStore
     from orchestrator.readapi import ReadAPI
     from orchestrator.register import load_register
+    from orchestrator.routing import RoutingResolver
+    from orchestrator.writeapi import WriteAPI
 
     try:
         register = load_register(allow_example=a.example)
     except FileNotFoundError as exc:
         print(f"✗ {exc}", file=sys.stderr)
         return 1
+    routing = RoutingResolver.load()
 
     token = os.environ.get("GITHUB_TOKEN")
     if not token:
         print("• no GITHUB_TOKEN — unauthenticated GitHub reads (public repos only, rate-limited)")
     default_branch = os.environ.get("MAESTRO_DEFAULT_BRANCH", "main")
 
-    # A dedicated, read-only connection: the API serves from request threads (ThreadingHTTPServer),
-    # so it must not share a single-threaded write connection (ADR-0008).
+    # A dedicated, cross-thread-tolerant connection: the API serves from request threads
+    # (ThreadingHTTPServer), so it cannot share a single-threaded write connection (ADR-0008).
+    # The read API uses its own read lock; the write API has its own write lock. One conn, two locks.
     conn = db.connect(check_same_thread=False)
-    api = ReadAPI(register, EventLog(conn), HttpGitHubClient(token), default_branch=default_branch)
-    print(f"✓ workspace read API — {len(register.products)} product(s); default branch {default_branch!r}")
-    serve(api, host=a.host, port=a.port)
+    events = EventLog(conn)
+    read = ReadAPI(register, events, HttpGitHubClient(token), default_branch=default_branch)
+    write = WriteAPI(register, events, routing, IdempotencyStore(conn))
+    print(f"✓ workspace API (read+write) — {len(register.products)} product(s); "
+          f"default branch {default_branch!r}")
+    serve(read, write, host=a.host, port=a.port)
     return 0
 
 

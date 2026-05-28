@@ -6,8 +6,10 @@ from model.audit import LLMAudit
 from model.client import ModelClient
 from orchestrator import db
 from orchestrator.eventlog import EventLog
+from orchestrator.idempotency import IdempotencyStore
 from orchestrator.register import Participant, Product, Register
 from orchestrator.routing import RoutingResolver
+from orchestrator.writeapi import WriteAPI
 
 
 @pytest.fixture
@@ -47,6 +49,22 @@ def register():
 def routing():
     """The real routing matrix (config/reviewers.yaml) — tests run from the repo root."""
     return RoutingResolver.load()
+
+
+@pytest.fixture
+def idempotency(conn):
+    """24h-TTL idempotency store sharing the in-memory event-log conn."""
+    return IdempotencyStore(conn)
+
+
+@pytest.fixture
+def write_api(register, events, routing, idempotency):
+    """The workspace write API — deterministic run ids (run-1, run-2, ...) for replay-correct tests."""
+    counter = {"n": 0}
+    def make_id():
+        counter["n"] += 1
+        return f"run-{counter['n']}"
+    return WriteAPI(register, events, routing, idempotency, id_factory=make_id)
 
 
 # --- fake GitHub client ------------------------------------------------------------------------

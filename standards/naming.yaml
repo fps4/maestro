@@ -11,6 +11,21 @@ files:
   adr: zero-padded numeric prefix (0001-*)
   user_stories: US-NNNN-* under EP-NN-slug/; story number tracks the epic
 
+# Branches the crew creates. The maestro/* namespace is policy (standards/git.yaml,
+# adapter-enforced); this section pins the per-task slug WITHIN that namespace.
+branches:
+  agent_namespace: "maestro/*"                       # policy lives in standards/git.yaml; repeated for proximity
+  per_task_pattern:                                  # decided 2026-05-28
+    when_bound_to_us: "maestro/{us_id_lower}-{slug}" # e.g. maestro/us-0042-invoice-export
+    when_unbound:     "maestro/task-{run_id_short}"  # e.g. maestro/task-9c2e3f — for PRD-driven or future tasks
+  slug:
+    derive_from: the task's functional-spec title (or the dispatched intent's first noun phrase)
+    case: kebab-case
+    max_length: 48                                   # keeps PR-list rows readable
+    forbidden_chars: "/ : * ? \" < > | space"        # GitHub branch-name safety
+  us_id_format: "us-NNNN"                            # lowercased; e.g. US-0042 → us-0042
+  validation_authority: the github adapter           # branches outside this pattern are rejected at create time
+
 identifiers:
   follow: the conventions of the language/framework in the target repo
   consistency: match the surrounding code; do not introduce a new convention without an ADR

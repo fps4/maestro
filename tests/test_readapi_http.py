@@ -135,7 +135,39 @@ def test_get_task_over_http_200(content_reader, monkeypatch):
         assert body["task_id"] == "run-http" and body["product_id"] == "maestro"
         assert body["stage"] == "intake" and body["status"] == "active"
         assert body["branch"] is None and body["pr"] is None and body["merged"] is False
-        assert body["gates"] == []
+        assert body["gates"] == [] and body["comments"] == []
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_get_task_includes_comments_over_http(content_reader, monkeypatch):
+    """End-to-end: a posted comment surfaces in the per-task response, so the discuss/decide UI
+    can render gate + thread in one round-trip."""
+    _as_arch(monkeypatch)
+    register = Register(products={
+        "maestro": Product(id="maestro", name="maestro", product_type="technical", visibility="public",
+                           repos=(REPO,),
+                           participants=(Participant(handle="@arch", role="architect", email=ARCH),)),
+    })
+    events = EventLog(db.connect(":memory:", check_same_thread=False))
+    events.append(run_id="run-c", actor="@arch", type="task.dispatched", target="task:run-c",
+                  payload={"task_id": "run-c", "product_id": "maestro", "repo": REPO,
+                           "intent": "do the thing"})
+    events.append(run_id="run-c", actor="@arch", type="comment.posted", target="comment:cmt-1",
+                  payload={"comment_id": "cmt-1", "task_id": "run-c", "product_id": "maestro",
+                           "body": "First note", "anchor": None, "in_reply_to": None,
+                           "attributed_to": {"email": ARCH, "role": "architect"}})
+    server = make_server(ReadAPI(register, events, content_reader), host="127.0.0.1", port=0)
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    try:
+        url = f"http://127.0.0.1:{server.server_address[1]}/api/products/maestro/tasks/run-c"
+        status, body, _ = _get(url)
+        assert status == 200
+        [c] = body["comments"]
+        assert c["comment_id"] == "cmt-1" and c["body"] == "First note"
+        assert c["author"] == ARCH and c["anchor"] is None
     finally:
         server.shutdown()
         server.server_close()

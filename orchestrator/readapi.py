@@ -19,7 +19,7 @@ import threading
 from typing import Optional
 from urllib.parse import quote
 
-from orchestrator.projection import GateDecision, TaskState, project, project_task
+from orchestrator.projection import Comment, GateDecision, TaskState, project, project_task
 from orchestrator.register import Register
 from orchestrator.specindex import (
     KINDS,
@@ -143,6 +143,10 @@ class ReadAPI:
             "pr": task.pr,
             "merged": task.merged,
             "gates": [_gate_json(g) for g in task.gates],
+            # Anchored comments in chronological order (data-model.md Comment; projected from
+            # comment.posted events). The discuss/decide UI renders these inline with the
+            # artefact; the per-task fetch returns them eagerly so a gate page is one round-trip.
+            "comments": [_comment_json(c) for c in task.comments],
         }
 
     def get_spec(self, identity: str, product_id: str, feature: str, kind: str,
@@ -263,6 +267,12 @@ def _status(task: TaskState, kind: str) -> dict:
 def _gate_json(g: GateDecision) -> dict:
     return {"gate": g.gate, "decision": g.decision, "resolved_by": g.resolved_by,
             "resolved_at": g.resolved_at, "seq": g.seq}
+
+
+def _comment_json(c: Comment) -> dict:
+    return {"comment_id": c.comment_id, "author": c.author, "body": c.body,
+            "anchor": c.anchor, "in_reply_to": c.in_reply_to,
+            "created_at": c.created_at, "seq": c.seq}
 
 
 def _ref_json(ref: SpecRef) -> dict:

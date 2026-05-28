@@ -181,7 +181,8 @@ def test_get_task_returns_projected_state(api, events):
     _dispatch(events, "run-9c2e3f")
     out = api.get_task(ARCH, "maestro", "run-9c2e3f")
     assert out == {"task_id": "run-9c2e3f", "product_id": "maestro", "stage": "intake",
-                   "status": "active", "branch": None, "pr": None, "merged": False, "gates": []}
+                   "status": "active", "branch": None, "pr": None, "merged": False,
+                   "gates": [], "comments": []}
 
 
 def test_get_task_unknown_is_404(api):
@@ -222,3 +223,40 @@ def test_get_task_with_gates_renders_decisions(api, events):
     [g] = out["gates"]
     assert g["gate"] == "functional" and g["decision"] == "approve" and g["resolved_by"] == "@arch"
     assert isinstance(g["resolved_at"], float) and g["seq"] >= 1
+
+
+def test_get_task_renders_comments_in_chronological_order(api, events):
+    """Comments from ``comment.posted`` events surface in ``get_task`` so the gate page is one
+    round-trip (joins the parallel narrative ADR-0008's projection now carries — TaskState.comments)."""
+    _dispatch(events, "run-c")
+    events.append(run_id="run-c", actor="@arch", type="comment.posted", target="comment:cmt-1",
+                  payload={"comment_id": "cmt-1", "task_id": "run-c", "product_id": "maestro",
+                           "body": "First impression", "anchor": None, "in_reply_to": None,
+                           "attributed_to": {"email": ARCH, "role": "architect"}})
+    events.append(run_id="run-c", actor="@dev", type="comment.posted", target="comment:cmt-2",
+                  payload={"comment_id": "cmt-2", "task_id": "run-c", "product_id": "maestro",
+                           "body": "AC-3 missing the empty case",
+                           "anchor": {
+                               "artefact": {"kind": "functional_spec",
+                                            "ref": {"repo": REPO, "branch": "maestro/us-c",
+                                                    "path": "docs/spec.md", "commit": "abc"}},
+                               "locator": {"criterion_id": "AC-3"},
+                           },
+                           "in_reply_to": "cmt-1",
+                           "attributed_to": {"email": "dev@example.com",
+                                             "role": "functional_reviewer"}})
+    out = api.get_task(ARCH, "maestro", "run-c")
+    assert [c["comment_id"] for c in out["comments"]] == ["cmt-1", "cmt-2"]
+    second = out["comments"][1]
+    assert second["body"] == "AC-3 missing the empty case"
+    assert second["author"] == "dev@example.com"
+    assert second["in_reply_to"] == "cmt-1"
+    assert second["anchor"]["locator"] == {"criterion_id": "AC-3"}
+    assert isinstance(second["created_at"], float) and second["seq"] > out["comments"][0]["seq"]
+
+
+def test_get_task_comments_default_empty(api, events):
+    """A task with no posted comments returns an empty list, not a missing key."""
+    _dispatch(events, "run-noc")
+    out = api.get_task(ARCH, "maestro", "run-noc")
+    assert out["comments"] == []

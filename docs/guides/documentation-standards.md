@@ -26,11 +26,12 @@ repo-root/
 ├── docs/
 │   ├── README.md              # index
 │   ├── principles.md          # charter (durable rules)
+│   ├── roadmap.md             # milestone-level roadmap (build + adoption tracks)
+│   ├── roadmap/mN-*.md        # per-milestone scoping doc — lands when a milestone opens
 │   ├── product/               # pre-code intent
 │   │   ├── vision.md
 │   │   ├── prd/NNNN-*.md
-│   │   ├── user-stories/EP-NN-*/US-NNNN-*.md
-│   │   └── feature-board.md
+│   │   └── user-stories/EP-NN-*/US-NNNN-*.md
 │   ├── architecture/
 │   │   ├── overview.md        # C4 L1+L2
 │   │   ├── data-model.md
@@ -45,8 +46,20 @@ repo-root/
 
 - Lowercase, hyphen-separated; name describes the subject, not the author/date.
 - PRDs and ADRs: zero-padded numeric prefix (`0001-…`).
-- User stories: `US-NNNN-*`, grouped under epics `EP-NN-slug/`; story numbers track the epic (EP-01 → US-001x).
+- User stories: `US-NNNN-*`, grouped under epics `EP-NN-slug/`; story numbers track the epic (EP-01 → US-001x). Each story carries `milestone: M<n>` frontmatter (see *Roadmap and milestones*).
+- Per-milestone scoping docs: `roadmap/mN-short-slug.md` (e.g. `roadmap/m1-spec-to-design.md`).
 - Issues: `ISSUE-NNNN-*` (with RCA) / `LIMITATION-NNNN-*` (accepted constraint).
+
+## Roadmap and milestones
+
+maestro plans in **milestones**, and decomposes a milestone into user stories only when that milestone opens for engineering. Two layers:
+
+1. **`docs/roadmap.md` — milestone-level only.** It names *what* each milestone ships, what it proves, and how milestones sequence. It does **not** decompose milestones into stories. Speculative per-story decomposition of later milestones gets stale faster than it pays off, so the roadmap keeps a "currently open scoping docs" table and nothing more granular.
+2. **`docs/roadmap/mN-*.md` — per-milestone scoping doc.** Lands when a milestone **opens for engineering**. It decomposes the milestone into user stories distributed across the **structural epics** under `docs/product/user-stories/`, and carries: a *deliverables → stories* table, a *dependency order*, *what it does/does not ship*, *what it proves*, a *definition of complete*, and *open questions*.
+
+**Epics persist across milestones.** An epic (`EP-01-delivery-loop`) is a product-capability bucket that outlives any one milestone; milestone slicing happens in the scoping doc, not in the epic structure. Each story carries `milestone: M<n>` in its frontmatter, so the same epic accumulates stories as milestones open. (A story that genuinely spans steps across milestones — e.g. a multi-step surface — may carry a span like `M0–M3` with an inline note, and is split into per-step stories when convenient.)
+
+**No markdown feature board.** Per-story build/review status is **not** kept in a checked-in kanban file. It lives in the **maestro workspace** (the UI), read from each story's `status:` frontmatter and the event-log status (ADR-0018). The lifecycle is unchanged — `draft → accepted → in-progress → done → blocked`, with `draft → accepted` human-only (the architect locks scope) and `in-progress → done` CI-only on a green merge — only the surface moved off Markdown and into the product.
 
 ## Per-file structure
 

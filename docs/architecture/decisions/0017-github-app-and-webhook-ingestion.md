@@ -11,7 +11,7 @@ related:
   - 0009-audit-logging-and-observability.md
   - ../components/orchestrator.md
   - ../components/workspace-backend.md
-  - ../../product/roadmap.md
+  - ../../roadmap.md
 ---
 
 ## Context
@@ -19,7 +19,7 @@ related:
 [ADR-0008](0008-system-of-record-and-persistence.md) decided maestro **ingests facts from GitHub
 (PR opened, checks passed, merged) via webhooks, not polling** — a polling orchestrator hits GitHub's
 ~5k req/hr limit and has no transactional gate state. It left *how maestro authenticates* to GitHub
-open; the [roadmap](../../product/roadmap.md) recorded the choice as "fine-grained **PAT (or App)** with
+open; the [roadmap](../../roadmap.md) recorded the choice as "fine-grained **PAT (or App)** with
 merge" and deferred it. The engine spine shipped with a fine-grained-PAT HTTP client behind a
 `GitHubClient` protocol.
 

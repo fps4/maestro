@@ -3,7 +3,8 @@ title: "US-0013: Produce a technical design from an approved spec and post it to
 persona: architect
 status: draft
 complexity: L
-last_updated: 2026-05-25
+milestone: M1
+last_updated: 2026-05-27
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
   - docs/architecture/decisions/0006-spec-driven-sdlc.md

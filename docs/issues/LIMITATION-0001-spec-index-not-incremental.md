@@ -9,7 +9,7 @@ related:
   - docs/architecture/contracts/workspace-read-api.md
   - docs/architecture/decisions/0017-github-app-and-webhook-ingestion.md
   - docs/architecture/decisions/0018-workspace-read-api-and-frontmatter-index.md
-  - docs/product/roadmap.md
+  - docs/roadmap.md
 ---
 
 # LIMITATION-0001 — the spec index is head-commit-cached, not incremental
@@ -42,7 +42,7 @@ own slice — not worth blocking the MVP on.
 
 ## The fix (planned: M3)
 
-**Phase 2** makes the index **incremental and persisted** ([roadmap](../product/roadmap.md) M3):
+**Phase 2** makes the index **incremental and persisted** ([roadmap](../roadmap.md) M3):
 
 - the webhook `push` reconciler (ADR-0017) re-reads frontmatter for **only the files a push changed**;
 - crew events that produce a spec seed the index directly (they carry the ref);

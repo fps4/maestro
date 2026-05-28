@@ -6,6 +6,10 @@ deleted or graduated into an ADR + real engine code.
 
 | Spike | Question | Status |
 |------|----------|--------|
-| [`langgraph/`](langgraph/) | Is LangGraph the right orchestration runtime for maestro's gated delivery loop? | open — runtime ADR **deferred** until this is evaluated |
+| _none active_ | — | — |
 
-Spikes may fake anything that isn't the thing under test (here: the LLM, the DoD gates, the GitHub/Slack adapters).
+Spikes may fake anything that isn't the thing under test (the LLM, the DoD gates, the GitHub/Slack adapters).
+
+## Retired
+
+- **`langgraph/`** (2026-05-25 → 2026-05-28) — answered the question *"is LangGraph the right orchestration runtime for maestro's gated delivery loop?"* with **yes** ([ADR-0014](../docs/architecture/decisions/0014-orchestration-runtime-langgraph.md)); retired once the decision was acted on. Code lived at `spikes/langgraph/`; see `git log` for the proof-of-concept history.

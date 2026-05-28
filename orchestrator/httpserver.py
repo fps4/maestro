@@ -110,6 +110,8 @@ def make_handler(read: ReadAPI, write: Optional[WriteAPI] = None):
                     self._send(304, None)
                 else:
                     self._send(200, doc, extra_headers={"ETag": etag})
+            elif len(parts) == 5 and parts[:2] == ["api", "products"] and parts[3] == "tasks":
+                self._send(200, read.get_task(identity, parts[2], parts[4]))
             else:
                 raise NotFoundRoute()
 

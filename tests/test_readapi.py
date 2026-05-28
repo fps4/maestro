@@ -167,3 +167,58 @@ def test_get_spec_content_fetch_failure_is_degraded(register, events):
     api = ReadAPI(register, events, FlakyReader())
     with pytest.raises(Degraded):
         api.get_spec(ARCH, "maestro", "invoice-export", "functional_spec")
+
+
+# --- per-task detail ---------------------------------------------------------------------------
+
+def _dispatch(events, run_id, product_id="maestro", repo=REPO):
+    events.append(run_id=run_id, actor="@arch", type="task.dispatched", target=f"task:{run_id}",
+                  payload={"task_id": run_id, "product_id": product_id, "repo": repo,
+                           "intent": "do the thing"})
+
+
+def test_get_task_returns_projected_state(api, events):
+    _dispatch(events, "run-9c2e3f")
+    out = api.get_task(ARCH, "maestro", "run-9c2e3f")
+    assert out == {"task_id": "run-9c2e3f", "product_id": "maestro", "stage": "intake",
+                   "status": "active", "branch": None, "pr": None, "merged": False, "gates": []}
+
+
+def test_get_task_unknown_is_404(api):
+    with pytest.raises(NotFound):
+        api.get_task(ARCH, "maestro", "no-such-task")
+
+
+def test_get_task_outsider_sees_no_task_as_404(api, events):
+    # The task exists, but the caller isn't a participant in any product → 404 (existence hidden).
+    _dispatch(events, "run-secret")
+    with pytest.raises(NotFound):
+        api.get_task(OUTSIDER, "maestro", "run-secret")
+
+
+def test_get_task_wrong_product_id_is_404(register, events, content_reader):
+    # The caller participates in BOTH products (so _authorize_product passes for either URL); the
+    # task belongs to 'maestro'. A request against 'secret' for the same task must still 404 —
+    # otherwise URL-guessing would enumerate tasks across products the caller co-participates in.
+    from orchestrator.register import Participant
+    secret = register.products["secret"]
+    register.products["secret"] = type(secret)(
+        id=secret.id, name=secret.name, product_type=secret.product_type, visibility=secret.visibility,
+        repos=secret.repos,
+        participants=secret.participants + (Participant(handle="@arch", role="architect", email=ARCH),),
+    )
+    api = ReadAPI(register, events, content_reader)
+    _dispatch(events, "run-x")                                          # dispatched into maestro
+    assert api.get_task(ARCH, "maestro", "run-x")["product_id"] == "maestro"
+    with pytest.raises(NotFound):
+        api.get_task(ARCH, "secret", "run-x")
+
+
+def test_get_task_with_gates_renders_decisions(api, events):
+    _dispatch(events, "run-g")
+    events.append(run_id="run-g", actor="@arch", type="gate.resolved", target="task:run-g",
+                  payload={"gate": "functional", "decision": {"decision": "approve", "by": "@arch"}})
+    out = api.get_task(ARCH, "maestro", "run-g")
+    [g] = out["gates"]
+    assert g["gate"] == "functional" and g["decision"] == "approve" and g["resolved_by"] == "@arch"
+    assert isinstance(g["resolved_at"], float) and g["seq"] >= 1

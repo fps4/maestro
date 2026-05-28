@@ -87,7 +87,7 @@ maestro's runtime crew and any AI agent working on maestro itself follow the sam
 | **Human (architect / reviewer)** | Sets direction, approves at gates (including the merge), makes architectural decisions. |
 | **Agent** | Produces specs/designs/code/tests/docs, runs the gates, reports status; never decides a gate; executes the merge only on a recorded human approval ([ADR-0016](../architecture/decisions/0016-merge-after-workspace-approval.md)). |
 
-**Lifecycle** (mirrors the feature board columns):
+**Lifecycle** (the story `status:` states, surfaced on the workspace board — not a Markdown file):
 
 ```
 intent → Draft (spec) ──[human accepts scope]──► Accepted

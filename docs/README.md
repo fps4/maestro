@@ -20,9 +20,8 @@ Documentation index. maestro is **spec-driven**: product intent precedes archite
 
 - [`product/vision.md`](product/vision.md) — problem, users, goals, non-goals
 - [`product/prd/0001-architect-directed-delivery-loop.md`](product/prd/0001-architect-directed-delivery-loop.md) — the founding delivery loop
-- [`product/user-stories/`](product/user-stories/) — discrete capabilities with acceptance criteria (EARS)
-- [`product/feature-board.md`](product/feature-board.md) — live status of each story
-- [`product/roadmap.md`](product/roadmap.md) — building it up (M0–M4) and adopting it stepwise (the adoption ladder)
+- [`product/user-stories/`](product/user-stories/) — discrete capabilities with acceptance criteria (EARS); per-story status lives in the workspace UI, not a Markdown board
+- [`roadmap.md`](roadmap.md) — milestone-level build track (M0–M4) + the adoption ladder; per-milestone scoping docs land in [`roadmap/`](roadmap/) as each milestone opens
 
 ## Architecture — how it's built
 

@@ -8,7 +8,6 @@ related:
   - docs/guides/sdlc.md
   - docs/product/user-stories/EP-01-delivery-loop/US-0014-generate-spec-derived-tests.md
   - logs/test_reports/README.md
-  - docs/product/feature-board.md
 ---
 
 # Testing-agent protocol
@@ -31,8 +30,9 @@ flowchart LR
   dod -- no --> block["task → blocked;<br/>request-changes to the producing agent"]
 ```
 
-The test agent **does not move cards to Done** — `In Progress → Done` is CI-only on the observed
-merge (see the feature board rules). It produces evidence; the architect decides at the gate.
+The test agent **does not move a story to Done** — `in-progress → done` is CI-only on the observed
+merge (the status lifecycle is in [`sdlc.md`](sdlc.md) and surfaced on the workspace board). It
+produces evidence; the architect decides at the gate.
 
 ## Deriving scenarios
 
@@ -62,17 +62,17 @@ contents are defined in [`logs/test_reports/README.md`](../../logs/test_reports/
 - run metadata (date, host, agent)
 - a summary table — one row per scenario (✅ / ❌ / ⬜ skipped) + a one-line note on failures
 - failure detail — for each fail: the step, expected vs actual, a log excerpt
-- a board-state snapshot at end of run
+- a status snapshot (the affected stories' lifecycle state) at end of run
 - next actions — concrete, file-level
 
-## Feature board interaction
+## Status lifecycle interaction
 
-The board ([`docs/product/feature-board.md`](../product/feature-board.md)) is the human's view.
-maestro's columns and the rules that bind the test agent:
+Per-story status lives in each story's `status:` frontmatter and is surfaced on the **workspace board**
+(the UI — not a Markdown file). The rules that bind the test agent:
 
-- `Draft → Accepted` is **human-only** (the architect locks scope) — the test agent never does this.
-- `In Progress → Done` is **CI-only on green merge** — never an agent or human claim.
-- On a failing run, the test agent surfaces the task as **Blocked** and links the report.
+- `draft → accepted` is **human-only** (the architect locks scope) — the test agent never does this.
+- `in-progress → done` is **CI-only on green merge** — never an agent or human claim.
+- On a failing run, the test agent surfaces the task as **blocked** and links the report.
 
 ## When a scenario fails
 

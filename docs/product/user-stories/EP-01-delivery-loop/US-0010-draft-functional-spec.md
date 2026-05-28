@@ -3,7 +3,8 @@ title: "US-0010: Draft a functional spec from intent and post it to the function
 persona: architect
 status: draft
 complexity: L
-last_updated: 2026-05-25
+milestone: M1
+last_updated: 2026-05-27
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 ---
 

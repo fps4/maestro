@@ -11,7 +11,7 @@ related:
   - docs/architecture/decisions/0004-agents-propose-via-pr-humans-merge.md
   - docs/architecture/decisions/0012-artifact-storage-and-sharing.md
   - docs/product/vision.md
-  - docs/product/roadmap.md
+  - docs/roadmap.md
   - docs/product/user-stories/EP-03-reviewer-surface/US-0030-reviewer-webapp-and-wiki.md
 ---
 
@@ -25,7 +25,7 @@ the webapp becomes maestro's **single common workspace** — every role, both sp
 
 This is a **concept + UX design**, not an ADR. It frames the surfaces, the flows, and the decisions
 the move forces; the decisions are ratified in their own ADRs (see [Decisions this forces](#decisions-this-forces))
-and sequenced into [`roadmap.md`](../product/roadmap.md).
+and sequenced into [`roadmap.md`](../roadmap.md).
 
 ## What changes from ADR-0015
 
@@ -197,7 +197,7 @@ These are ratified in ADRs, not here. This concept names them so the roadmap can
 ## Stepwise rollout (implement in steps)
 
 Each step delivers something usable and depends only on what precedes it — the same discipline as the
-adoption ladder in [`roadmap.md`](../product/roadmap.md). Steps map onto the re-baselined milestones in
+adoption ladder in [`roadmap.md`](../roadmap.md). Steps map onto the re-baselined milestones in
 the roadmap-integration phase; this is the surface-track shape.
 
 | Step | Capability | Builds on | Notes |

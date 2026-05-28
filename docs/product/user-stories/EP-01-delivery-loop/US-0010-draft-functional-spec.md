@@ -1,10 +1,12 @@
 ---
 title: "US-0010: Draft a functional spec from intent and post it to the functional gate"
 persona: architect
-status: draft
+status: accepted
 complexity: L
 milestone: M1
 last_updated: 2026-05-28
+accepted_on: 2026-05-28
+accepted_by: "@farid (architect)"
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
   - docs/architecture/decisions/0015-reviewer-surfaces-repo-wiki-and-chat-webapp.md
@@ -22,15 +24,15 @@ so that *what* gets built is explicit and approved before any design or code hap
 
 The entry point of the delivery loop. The spec agent converts free-form intent into a functional spec with EARS acceptance criteria. The spec then waits at the functional gate, whose reviewer is resolved by `config/reviewers.yaml` (US-0012 covers the routing).
 
-**Surface (M1).** The gate is **decided in the workspace** ([ADR-0015](../../../architecture/decisions/0015-reviewer-surfaces-repo-wiki-and-chat-webapp.md) / [webapp-concept](../../../architecture/webapp-concept.md)); Slack/Telegram are demoted to optional notification channels (M3 — see EP-04). The story below is surface-neutral on the **intake** side (workspace "new task" affordance vs `maestro` CLI seeding the event log — see [M1 scoping](../../../roadmap/m1-spec-to-design.md) open question Q2, deferred to this story's acceptance).
+**Surface (M1).** The gate is **decided in the workspace** ([ADR-0015](../../../architecture/decisions/0015-reviewer-surfaces-repo-wiki-and-chat-webapp.md) / [webapp-concept](../../../architecture/webapp-concept.md)); Slack/Telegram are demoted to optional notification channels (M3 — see EP-04). **Intent intake is a minimal "new task" affordance in the workspace** (M1 scoping Q2 resolved at acceptance, 2026-05-28): a single form taking the target product and a free-text description, posting it to the orchestrator's dispatch endpoint as the first event for a new delivery task. This keeps every interaction on one surface from the start; a `maestro` CLI seed remains a valid back-door for ops scripts but is not the M1 critical-path intake.
 
 ## Acceptance criteria (EARS)
 
-- WHEN the architect submits intent describing a unit of work against a named product and target repo, THE SYSTEM SHALL create a delivery task and produce a functional spec with summary, scope, user stories, and EARS acceptance criteria. (Intent intake mechanism — workspace affordance vs `maestro` CLI — is settled at acceptance per the M1 scoping open question.)
+- WHEN the architect submits intent through the workspace **"new task"** form (product + free-text description), THE SYSTEM SHALL create a delivery task and produce a functional spec with summary, scope, user stories, and EARS acceptance criteria.
 - WHEN a functional spec is produced, THE SYSTEM SHALL post it to the functional gate **in the workspace** with approve / request-changes / reject actions.
 - WHEN the reviewer selects request-changes with feedback, THE SYSTEM SHALL revise the spec and re-post it to the same gate.
 - WHEN the reviewer approves, THE SYSTEM SHALL advance the delivery task to the design stage and record the approval (who, when) as an attributed event ([ADR-0008](../../../architecture/decisions/0008-system-of-record-and-persistence.md) / [ADR-0009](../../../architecture/decisions/0009-attribution-of-decisions.md)).
-- IF the intent is too vague to produce testable acceptance criteria, THEN THE SYSTEM SHALL ask one clarifying question **on the same intake surface** (the workspace task view, or the CLI session) rather than inventing requirements.
+- IF the intent is too vague to produce testable acceptance criteria, THEN THE SYSTEM SHALL ask one clarifying question **in the workspace task view** (the same surface intake used) rather than inventing requirements.
 
 ## Out of scope
 

@@ -1,10 +1,12 @@
 ---
 title: "US-0032: Discuss and decide a gate in the workspace (M1 slice of US-0030, S2 + S3)"
 persona: architect
-status: draft
+status: accepted
 complexity: L
 milestone: M1
 last_updated: 2026-05-28
+accepted_on: 2026-05-28
+accepted_by: "@farid (architect)"
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
   - docs/product/user-stories/EP-03-reviewer-surface/US-0030-reviewer-webapp-and-wiki.md

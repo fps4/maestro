@@ -1,10 +1,12 @@
 ---
 title: "US-0012: Route each gate to the right reviewer by product type"
 persona: architect
-status: draft
+status: accepted
 complexity: M
 milestone: M1
 last_updated: 2026-05-28
+accepted_on: 2026-05-28
+accepted_by: "@farid (architect)"
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
   - docs/architecture/decisions/0003-split-review-routing-matrix.md

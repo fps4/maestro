@@ -1,10 +1,12 @@
 ---
 title: "US-0031: UX design for the workspace — architect (technical) and functional reviewer (non-technical)"
 persona: architect
-status: draft
+status: accepted
 complexity: M
 milestone: M1
 last_updated: 2026-05-28
+accepted_on: 2026-05-28
+accepted_by: "@farid (architect)"
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
   - docs/architecture/workspace-ux-design.md

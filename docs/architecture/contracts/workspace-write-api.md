@@ -185,12 +185,8 @@ free-text comment with no anchor is allowed as a fallback.
 | `artefact.kind` | `locator` shape | Notes |
 |---|---|---|
 | `functional_spec` | `{ criterion_id: "AC-N" }` or `{ heading: "<slug>" }` | EARS criterion id preferred; heading slug fallback for non-AC anchors (Notes, Out of scope) |
-| `technical_design` | `{ heading: "<slug>" }` or `{ block_id: "<id>" }` | Markdown heading slug; block ids assigned by the renderer (US-0031 open question — locators evolve when that lands) |
+| `technical_design` | `{ heading: "<slug>" }` | Markdown heading slug — the M1 locator ([`workspace-ux-design.md`](../workspace-ux-design.md) §open-questions, resolved 2026-05-28). Renderer-assigned `{ block_id: "<id>" }` is a deferred refinement; see §known-limitations |
 | `pull_request_diff` | `{ path, side: "old"\|"new", line: <int> }` | M2+ (not used by S2 comments on the spec/design gates) |
-
-When the design-doc anchoring story (US-0031) lands as an ADR, this table tightens; the contract
-already commits to "an `anchor.locator` exists and is artefact-kind-specific" so clients can rely on
-shape stability.
 
 ### `POST /api/products/{product_id}/tasks/{task_id}/gates/{gate_id}/decisions` — decide a gate (S3)
 
@@ -314,6 +310,10 @@ FastAPI remains a drop-in if the surface grows.
 - **Anchor locators are spec-centric in M1.** PR-diff locators (line-anchored review) belong to M2
   (US-0011 / merge gate); the table above already names the M2 shape so the contract is forward-
   compatible.
+- **`technical_design` anchoring is heading-slug-only in M1.** Renaming a heading on a design breaks
+  any anchored comment that targeted it ([`workspace-ux-design.md`](../workspace-ux-design.md)
+  §open-questions, resolved 2026-05-28). Acceptable at dogfood scale; a renderer-assigned `block_id`
+  locator that survives heading renames is the deferred refinement when designs grow more elaborate.
 - **Feedback-bundle payload shape** is pinned in [ADR-0020](../decisions/0020-feedback-bundle-payload-shape.md);
   the **agent's response** in [ADR-0022](../decisions/0022-agent-response-event.md). This contract owns
   the trigger and the id (`feedback_bundle_id` on `gate.decided`); the bundle's contents and the

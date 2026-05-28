@@ -9,6 +9,40 @@ frontmatter:
   required: [title, status, last_updated, owners]
   related: repo-root-relative paths; builds the machine-readable graph
 
+  # The maestro: block — a sub-frontmatter that opts a doc INTO maestro's domain index
+  # (ADR-0018). Required on functional_spec and technical_design artefacts the crew produces;
+  # a doc without it is a plain doc (guide, README, ADR) and is skipped by the SpecIndex.
+  maestro_block:
+    required_when:
+      kind: functional_spec | technical_design   # if the doc is a maestro-tracked artefact
+    fields:
+      feature:                                   # REQUIRED — the Feature this belongs to (ADR-0005)
+        type: slug                               # [a-z0-9-]+
+        required: true
+      kind:                                      # REQUIRED — artefact discriminator
+        enum: [functional_spec, technical_design]
+        required: true
+      task:                                      # OPTIONAL — the DeliveryTask, when one owns it
+        type: us_id                              # US-NNNN
+        required: false
+      summary:                                   # REQUIRED on functional_spec | technical_design — ADR-0021
+        type: text                               # plain text, no markdown, no links, no code fences
+        max_words: 120
+        max_chars: 800
+        audience: non-technical reviewer         # written for someone without coding context
+        required_when: kind in [functional_spec, technical_design]
+        absence_behaviour: soft-warning          # SpecIndex flags `unindexed` with `missing maestro.summary`;
+                                                 # the workspace renders a placeholder; artefact still serves
+    example: |
+      maestro:
+        feature: invoice-export
+        task: US-0042
+        kind: functional_spec
+        summary: |
+          A CSV export endpoint that lets finance pull the last quarter's invoices
+          in one paged, RFC-4180-quoted file, up to 50 000 rows per request.
+    validation_authority: SpecIndex              # orchestrator/specindex.py validates the block at index time
+
 acceptance_criteria:
   format: EARS                                  # WHEN [condition] THE SYSTEM SHALL [behaviour]
   rationale: unambiguous and test-generable

@@ -102,5 +102,9 @@ GitHub token and no authoritative state), and **(b)** how repo `docs/` files map
   — rendering details for the build slice.
 - **Caching** repo content fetched via the adapter (ETag/commit-keyed) to stay inside rate limits — an
   engineering detail; the webhook keeps it fresh, so a commit-keyed cache is safe.
-- **Frontmatter schema location** — co-document with `standards/` (a `docs` frontmatter contract) so the
-  crew emits it consistently.
+- ~~**Frontmatter schema location**~~ — **Resolved 2026-05-28**: the `maestro:` block schema is
+  co-documented in [`standards/documentation.yaml`](../../../standards/documentation.yaml) (the
+  machine-readable version the crew reads on every task) and in
+  [`docs/guides/documentation-standards.md`](../../guides/documentation-standards.md) §the-maestro-block
+  (the human-readable version). The `summary` field added by [ADR-0021](0021-plain-language-summary-on-artefacts.md)
+  is part of the same schema.

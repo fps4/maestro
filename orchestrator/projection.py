@@ -15,6 +15,7 @@ from typing import Optional
 # Forward stage transition on a producing event (data-model.md DeliveryTask.stage).
 _STAGE_ON: dict[str, str] = {
     "task.created": "intake",
+    "task.dispatched": "intake",          # workspace "new task" entry point (US-0010 Q2; workspace-write-api.md)
     "spec.drafted": "functional_gate",
     "design.produced": "technical_gate",
     "pr.opened": "merge_gate",

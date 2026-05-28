@@ -19,7 +19,7 @@ import threading
 from typing import Optional
 from urllib.parse import quote
 
-from orchestrator.projection import TaskState, project
+from orchestrator.projection import GateDecision, TaskState, project, project_task
 from orchestrator.register import Register
 from orchestrator.specindex import (
     KINDS,
@@ -113,6 +113,38 @@ class ReadAPI:
         return {"product": {"id": product.id, "name": product.name},
                 "specs": specs, "unindexed": unindexed}
 
+    def get_task(self, identity: str, product_id: str, task_id: str) -> dict:
+        """``GET /api/products/{product_id}/tasks/{task_id}`` — one task's projected state.
+
+        The status side of the workspace contract (workspace-read-api.md): the same projection the
+        Specs index joins against (``projection.project_task``), now addressable by task. Per-product
+        isolation is enforced twice (ADR-0010/0011): the URL's product must be visible to the caller
+        (404 otherwise), **and** it must match the task's actual product (404 otherwise) — a caller
+        cannot enumerate other-product tasks by guessing ids inside a product they DO participate in.
+        """
+        product = self._authorize_product(identity, product_id)
+        with self._read_lock:                       # same single DB touch as the status join
+            raw = self._events.read(run_id=task_id)
+        if not raw:
+            raise NotFound(f"task {task_id!r} not found")
+        task = project_task(raw, task_id)
+        if task is None:                            # defensive: events exist but projection is empty
+            raise NotFound(f"task {task_id!r} not found")
+        actual_product_id = self._task_product_id(raw, task)
+        if actual_product_id != product.id:
+            # The URL's product doesn't own this task. 404 (not 403) — never reveal existence.
+            raise NotFound(f"task {task_id!r} not found")
+        return {
+            "task_id": task.task_id,
+            "product_id": product.id,
+            "stage": task.stage,
+            "status": task.status,
+            "branch": task.branch,
+            "pr": task.pr,
+            "merged": task.merged,
+            "gates": [_gate_json(g) for g in task.gates],
+        }
+
     def get_spec(self, identity: str, product_id: str, feature: str, kind: str,
                  branch: Optional[str] = None) -> dict:
         """``GET /api/products/{id}/specs/{feature}/{kind}`` — one rendered doc + status."""
@@ -156,6 +188,28 @@ class ReadAPI:
         if product is None or product.participant_for(identity) is None:
             raise NotFound(f"product {product_id!r} not found")
         return product
+
+    def _task_product_id(self, events: list[dict], task: TaskState) -> Optional[str]:
+        """The product that owns this task. ``task.dispatched`` carries it explicitly (write API);
+        for tasks that pre-date dispatch (or tests injecting only branch/pr events), fall back to
+        the repo on the projected PR matched against the register."""
+        for e in events:
+            if e["type"] == "task.dispatched":
+                pid = (e.get("payload") or {}).get("product_id")
+                if pid:
+                    return pid
+        if task.pr and task.pr.get("repo"):
+            owner = self._register.product_for_repo(task.pr["repo"])
+            if owner is not None:
+                return owner.id
+        for e in events:
+            payload = e.get("payload") or {}
+            repo = payload.get("repo")
+            if repo:
+                owner = self._register.product_for_repo(repo)
+                if owner is not None:
+                    return owner.id
+        return None
 
     # --- the spec index (cached) ----------------------------------------------------------------
 
@@ -204,6 +258,11 @@ def _status(task: TaskState, kind: str) -> dict:
     return {"task_id": task.task_id, "stage": task.stage,
             "gate": {"type": gate_type, "decision": decisions[-1].decision if decisions else "pending"},
             "branch": task.branch, "merged": task.merged}
+
+
+def _gate_json(g: GateDecision) -> dict:
+    return {"gate": g.gate, "decision": g.decision, "resolved_by": g.resolved_by,
+            "resolved_at": g.resolved_at, "seq": g.seq}
 
 
 def _ref_json(ref: SpecRef) -> dict:

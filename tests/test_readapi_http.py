@@ -110,3 +110,32 @@ def test_unknown_product_is_404(base_url, monkeypatch):
     _as_arch(monkeypatch)
     status, body, _ = _get(f"{base_url}/api/products/ghost/specs")
     assert status == 404 and body["error"]["code"] == "not_found"
+
+
+def test_get_task_over_http_200(content_reader, monkeypatch):
+    _as_arch(monkeypatch)
+    content_reader.put(REPO, "main", "docs/spec.md", SPEC)
+    register = Register(products={
+        "maestro": Product(id="maestro", name="maestro", product_type="technical", visibility="public",
+                           repos=(REPO,),
+                           participants=(Participant(handle="@arch", role="architect", email=ARCH),)),
+    })
+    events = EventLog(db.connect(":memory:", check_same_thread=False))
+    # Dispatch a task directly to the log (the write API is exercised separately).
+    events.append(run_id="run-http", actor="@arch", type="task.dispatched", target="task:run-http",
+                  payload={"task_id": "run-http", "product_id": "maestro", "repo": REPO,
+                           "intent": "do the thing"})
+    server = make_server(ReadAPI(register, events, content_reader), host="127.0.0.1", port=0)
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    try:
+        url = f"http://127.0.0.1:{server.server_address[1]}/api/products/maestro/tasks/run-http"
+        status, body, _ = _get(url)
+        assert status == 200
+        assert body["task_id"] == "run-http" and body["product_id"] == "maestro"
+        assert body["stage"] == "intake" and body["status"] == "active"
+        assert body["branch"] is None and body["pr"] is None and body["merged"] is False
+        assert body["gates"] == []
+    finally:
+        server.shutdown()
+        server.server_close()

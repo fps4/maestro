@@ -133,7 +133,7 @@ The agent's "what I changed and why" note (US-0031) is the `agent_response.poste
 
 ## Open questions
 
-- **`agent_response.posted` shape.** Named here; pinned in the engine spine's event schema before US-0010/US-0013 ship. Recommendation: one response object per item (`{comment_id, action, note}`) plus `summary_of_changes` at the top — symmetric to the bundle.
+- ~~**`agent_response.posted` shape.**~~ **Resolved by [ADR-0022](0022-agent-response-event.md)** (2026-05-28): one entry per bundle item in `addresses[]` (`{comment_id, action: addressed | deferred | rejected, note, ref_section?}`) plus a top-level `summary_of_changes`, one-shot per bundle. Per-item reply is **required** — no silent skipping; the trichotomy is what makes the loop legible for non-technical reviewers.
 - **Structured `suggested_change`.** A patch-shaped variant (regex, section anchor) is plausible for technical designs; not in M1. Track in [`workspace-ux-design.md`](../workspace-ux-design.md) §open-questions.
 - **Cross-artefact items.** A reviewer comment on the spec that asks the agent to "move this to the design" is M1-shaped as a single item against the spec; the agent decides whether the action is `addressed` (move it) or `deferred` (raise it at the design gate). A cross-artefact `target_artefact` hint can land later if the cross-artefact patterns turn out to be common.
 - **Re-bundling after partial responses.** If an `agent_response.posted` marks some items `addressed` and the reviewer requests changes again, the next bundle excludes addressed items (composition rule 3). The convention "addressed once, never re-bundled" is the M1 default; an explicit reviewer override ("re-open this item") is a later affordance.

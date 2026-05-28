@@ -174,3 +174,78 @@ def test_post_to_unknown_route_is_404(base_url, monkeypatch):
     url, _ = base_url
     status, body, _ = _post(f"{url}/api/nonsense", {})
     assert status == 404 and body["error"]["code"] == "not_found"
+
+
+# --- comment endpoint -----------------------------------------------------------------------------
+
+def test_post_comment_over_http_201(base_url, monkeypatch):
+    """End-to-end: dispatch a task, then POST a comment to it; assert 201 + a single ``comment.posted``
+    event landed."""
+    _as_arch(monkeypatch)
+    url, events = base_url
+    s1, dispatch, _ = _post(f"{url}/api/products/maestro/tasks", {"intent": "real work"})
+    assert s1 == 201
+    task_id = dispatch["task_id"]
+
+    s2, body, _ = _post(f"{url}/api/products/maestro/tasks/{task_id}/comments",
+                        {"body": "First impression"})
+    assert s2 == 201
+    assert body["comment_id"].startswith("cmt-")
+    assert body["attributed_to"]["role"] == "architect"
+    assert body["created_at"].endswith("Z")
+    assert [e["type"] for e in events.read()] == ["task.dispatched", "comment.posted"]
+
+
+def test_post_comment_with_anchor_over_http(base_url, monkeypatch):
+    _as_arch(monkeypatch)
+    url, _ = base_url
+    _, dispatch, _ = _post(f"{url}/api/products/maestro/tasks", {"intent": "x"})
+    task_id = dispatch["task_id"]
+    s, body, _ = _post(
+        f"{url}/api/products/maestro/tasks/{task_id}/comments",
+        {
+            "body": "AC-3 missing the empty case",
+            "anchor": {
+                "artefact": {"kind": "functional_spec",
+                             "ref": {"repo": REPO, "branch": "maestro/us-x",
+                                     "path": "docs/spec.md", "commit": "abc"}},
+                "locator": {"criterion_id": "AC-3"},
+            },
+        },
+    )
+    assert s == 201 and body["comment_id"].startswith("cmt-")
+
+
+def test_post_comment_idempotency_replay_over_http(base_url, monkeypatch):
+    _as_arch(monkeypatch)
+    url, events = base_url
+    _, dispatch, _ = _post(f"{url}/api/products/maestro/tasks", {"intent": "x"})
+    task_id = dispatch["task_id"]
+    s1, b1, _ = _post(f"{url}/api/products/maestro/tasks/{task_id}/comments",
+                      {"body": "same"}, {"Idempotency-Key": "ck-3"})
+    s2, b2, _ = _post(f"{url}/api/products/maestro/tasks/{task_id}/comments",
+                      {"body": "same"}, {"Idempotency-Key": "ck-3"})
+    assert s1 == 201 and s2 == 201 and b1 == b2
+    assert len([e for e in events.read() if e["type"] == "comment.posted"]) == 1
+
+
+def test_post_comment_unknown_task_is_404(base_url, monkeypatch):
+    _as_arch(monkeypatch)
+    url, _ = base_url
+    s, body, _ = _post(f"{url}/api/products/maestro/tasks/run-ghost/comments",
+                       {"body": "echo"})
+    assert s == 404 and body["error"]["code"] == "not_found"
+
+
+def test_post_comment_bad_anchor_is_422(base_url, monkeypatch):
+    _as_arch(monkeypatch)
+    url, _ = base_url
+    _, dispatch, _ = _post(f"{url}/api/products/maestro/tasks", {"intent": "x"})
+    task_id = dispatch["task_id"]
+    s, body, _ = _post(
+        f"{url}/api/products/maestro/tasks/{task_id}/comments",
+        {"body": "x",
+         "anchor": {"artefact": {"kind": "bogus", "ref": {"repo": REPO}},
+                    "locator": {"any": "thing"}}},
+    )
+    assert s == 422 and body["error"]["code"] == "anchor_unresolved"

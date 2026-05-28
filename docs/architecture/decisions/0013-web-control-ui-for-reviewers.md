@@ -30,9 +30,11 @@ while the reviewers were the architect (who reviews in GitHub) plus a chat ping.
 So the single chat surface in [ADR-0011](0011-multi-surface-human-control.md) (still `proposed`) is
 insufficient for the functional reviewer's *read + discuss + approve* need across mixed audiences.
 
-> **Companion decision, deferred.** Whether maestro's runtime is **LangGraph** is being evaluated in
-> [`spikes/langgraph/`](../../../spikes/langgraph/) and is **not decided here.** This ADR's UI decision
-> does not depend on it; the LangGraph option only affects *how* the UI is built (see below).
+> **Companion decision, deferred.** Whether maestro's runtime is **LangGraph** was being evaluated in
+> a runtime spike at the time this ADR was written, and is **not decided here.** This ADR's UI
+> decision does not depend on it; the LangGraph option only affects *how* the UI is built (see
+> below). The runtime question was subsequently settled by
+> [ADR-0014](0014-orchestration-runtime-langgraph.md); the spike has since been retired.
 
 ## Decision (proposed)
 

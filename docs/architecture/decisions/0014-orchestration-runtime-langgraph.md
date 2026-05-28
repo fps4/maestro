@@ -7,7 +7,6 @@ related:
   - 0008-system-of-record-and-persistence.md
   - 0009-audit-logging-and-observability.md
   - ../components/orchestrator.md
-  - ../../../spikes/langgraph/README.md
 ---
 
 ## Context
@@ -20,11 +19,11 @@ prototype. LangGraph became the de-facto durable-agent runtime in 2025/2026 and 
 candidate, but it overlaps with three decisions already made (the `ModelClient` egress, the
 event-sourced system of record, the OTel observability stance), so we spiked it before deciding.
 
-The spike ([`spikes/langgraph/`](../../../spikes/langgraph/)) ran the full loop end to end and
-established: gates map cleanly to `interrupt()` / `Command(resume=...)` (incl. request-changes
-loop-back); state resumes across **separate processes** via the checkpointer; the bounded-role crew
-runs as nodes + subagents with **reviewer ≠ author** preserved; and full task state can be rebuilt
-from the **event log alone**, with no checkpointer.
+A runtime spike (retired 2026-05-28 after the decision was acted on; lived at `spikes/langgraph/`)
+ran the full loop end to end and established: gates map cleanly to `interrupt()` /
+`Command(resume=...)` (incl. request-changes loop-back); state resumes across **separate processes**
+via the checkpointer; the bounded-role crew runs as nodes + subagents with **reviewer ≠ author**
+preserved; and full task state can be rebuilt from the **event log alone**, with no checkpointer.
 
 ## Decision
 
@@ -38,8 +37,8 @@ Adopt **LangGraph** as the orchestration runtime, with three boundaries held fir
 3. **maestro's append-only event log stays the authoritative system of record and audit tier
    (ADR-0008/0009); the LangGraph checkpointer is a rebuildable *execution cache*, not a source of
    truth.** Domain state is projected from the event log (CQRS); the checkpointer only carries
-   resumability of in-flight runs and may be rebuilt or discarded. (Spike-verified: `run.py project`
-   reconstructs state from events alone.)
+   resumability of in-flight runs and may be rebuilt or discarded. (Spike-verified: a `project`
+   command reconstructed state from events alone, with no checkpointer.)
 4. **Observability stays OTel (ADR-0009), not LangSmith as a dependency.** LangSmith may be used in
    dev; the audit/metrics tier remains OTel-GenAI for vendor portability (Datadog, etc.). LangGraph
    does not pull LangSmith onto the critical path.

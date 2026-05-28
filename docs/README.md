@@ -55,7 +55,7 @@ Documentation index. maestro is **spec-driven**: product intent precedes archite
 | [0018](architecture/decisions/0018-workspace-read-api-and-frontmatter-index.md) | Workspace read API + frontmatter spec index — the surface contract (status × content join) |
 | [0019](architecture/decisions/0019-workspace-identity-component-auth-google-sso.md) | Workspace identity — `component-auth` (Google SSO) at the edge, authorization from the register |
 
-> **Decided via spike:** the orchestration runtime is **LangGraph** (ADR-0014), validated in [`spikes/langgraph/`](../spikes/langgraph/). The reviewer-surface direction is now decided too: a **repo-linked docs wiki + a maestro chat webapp** (ADR-0015, after evaluating and rejecting OpenProject/XWiki).
+> **Decided via spike:** the orchestration runtime is **LangGraph** (ADR-0014), validated in a runtime spike (retired 2026-05-28 after the decision was acted on). The reviewer-surface direction is now decided too: a **repo-linked docs wiki + a maestro chat webapp** (ADR-0015, after evaluating and rejecting OpenProject/XWiki).
 
 ## Guides
 

@@ -235,14 +235,18 @@ The merge gate (US-0011, M2) uses this same endpoint with `gate.type = "merge"`.
 When `decision == "request_changes"`:
 
 1. The server **collects the task's open anchored comments** (anchored to the artefact under review,
-   not previously addressed) into a **feedback bundle** identified by `feedback_bundle_id`.
-2. The bundle is delivered to the responsible agent (spec / design) through the orchestrator (the agent
-   contract). The internal shape of the bundle — ordered list, suggested-change support, anchor-format
-   precision — is the [US-0031 open question](../workspace-ux-design.md#open-questions-raised-here-decided-elsewhere)
-   and **will land as its own ADR**; this contract commits only to *bundling at decision time*, not to
-   the bundle payload's internal shape.
-3. The agent re-drafts and publishes a new revision with a "what I changed and why" note; the next
-   reviewer visit defaults to the **diff-of-artefact since their last review** (US-0031, US-0032).
+   not previously addressed) into a **feedback bundle** identified by `feedback_bundle_id`. The bundle's
+   payload shape is pinned in [ADR-0020](../decisions/0020-feedback-bundle-payload-shape.md)
+   (structured anchored list + top-level rationale; unanchored comments roll into rationale with
+   provenance).
+2. The bundle is delivered to the responsible agent (spec / design) through the orchestrator. This
+   contract commits to *bundling at decision time* and the `feedback_bundle_id` in the response; the
+   bundle's payload shape and the agent's response event (`agent_response.posted`,
+   [ADR-0022](../decisions/0022-agent-response-event.md)) live in their own ADRs.
+3. The agent re-drafts and publishes a new revision, then emits `agent_response.posted` with per-anchor
+   replies (`addressed` / `deferred` / `rejected` + a one-sentence note each) and a `summary_of_changes`
+   (ADR-0022). The next reviewer visit defaults to the **diff-of-artefact since their last review**
+   (US-0031, US-0032).
 
 `reject` is final for M1 (moves the task to `blocked`, US-0020); `approve` advances the stage.
 
@@ -310,8 +314,9 @@ FastAPI remains a drop-in if the surface grows.
 - **Anchor locators are spec-centric in M1.** PR-diff locators (line-anchored review) belong to M2
   (US-0011 / merge gate); the table above already names the M2 shape so the contract is forward-
   compatible.
-- **Feedback-bundle payload shape is provisional** — pending the US-0031 ADR. The contract commits to
-  *bundling at decision time* and the `feedback_bundle_id` in the response; the payload the agent reads
-  is the agent contract's concern, not the wire's.
+- **Feedback-bundle payload shape** is pinned in [ADR-0020](../decisions/0020-feedback-bundle-payload-shape.md);
+  the **agent's response** in [ADR-0022](../decisions/0022-agent-response-event.md). This contract owns
+  the trigger and the id (`feedback_bundle_id` on `gate.decided`); the bundle's contents and the
+  response's contents live in those ADRs.
 - **No batch writes.** One event per request; clients SHALL NOT compose multi-event writes. If batching
   becomes needed, it lands as `POST .../batch` rather than overloading these endpoints.

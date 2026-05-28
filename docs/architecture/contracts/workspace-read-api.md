@@ -260,5 +260,8 @@ stance. FastAPI (the "likely" choice) stays a drop-in for that one thin file.
   (ADR-0008).
 - **Rendering specifics deferred** — Mermaid in technical designs and ADR cross-links resolve in the
   webapp render slice, not the wire contract.
-- **Write paths (S2/S3) extend this base, additively** — `POST …/comments`, `POST …/decisions` — and are
-  out of scope here; S1 is strictly `GET`.
+- **Write paths (S2/S3 + M1 dispatch) extend this base, additively** — `POST …/tasks`,
+  `POST …/comments`, `POST …/gates/.../decisions` — pinned in
+  [`workspace-write-api.md`](workspace-write-api.md). Shared concerns (identity, isolation, error
+  envelope, base path) carry over unchanged; the write contract adds idempotency + optimistic
+  concurrency. S1 here is strictly `GET`.

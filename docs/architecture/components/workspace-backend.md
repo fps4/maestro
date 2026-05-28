@@ -42,7 +42,10 @@ authoritative of its own.
 
 **Does not own:**
 - Authoritative state — the **event log** is the source of truth (ADR-0008); this projects + serves it.
-- The merge decision or any write path from the workspace — S1 is read-only; S2/S3 add writes later.
+- The merge decision itself — that stays in the workspace (ADR-0016); the agent executes the merge. S1
+  is read-only; the **write paths (S2/S3 + M1 dispatch) are pinned in
+  [`contracts/workspace-write-api.md`](../contracts/workspace-write-api.md)** and ride the same
+  `ReadAPI` HTTP surface (one binding, two contracts).
 - LLM reasoning — none here (the crew, via the `ModelClient`).
 - Spec *content* — the repo holds it; this renders it one-way.
 

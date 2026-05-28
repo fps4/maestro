@@ -1,10 +1,13 @@
 ---
 title: Documentation standards
 status: current
-last_updated: 2026-05-25
+last_updated: 2026-05-28
 owners: [architect]
 related:
   - docs/guides/sdlc.md
+  - docs/architecture/decisions/0018-workspace-read-api-and-frontmatter-index.md
+  - docs/architecture/decisions/0021-plain-language-summary-on-artefacts.md
+  - standards/documentation.yaml
 ---
 
 # Documentation standards
@@ -79,6 +82,32 @@ related:
 Then a consistent heading order (omit sections that don't apply — never write "N/A"): **Purpose → Behaviour → Interface/API → Dependencies → Configuration → Known limitations**.
 
 Follow the [Diátaxis](https://diataxis.fr) split — a file is *reference*, *explanation*, *how-to*, or *tutorial*; don't mix types.
+
+### The `maestro:` block — for functional specs and technical designs
+
+Functional specs and technical designs the crew produces (or that a human authors against maestro's domain) carry an extra `maestro:` sub-frontmatter that opts them into maestro's domain index ([ADR-0018](../architecture/decisions/0018-workspace-read-api-and-frontmatter-index.md)). Without it, the SpecIndex treats the file as a plain doc (guide / README / ADR) and skips it.
+
+```markdown
+---
+title: "Invoice CSV export"
+status: draft
+last_updated: 2026-05-28
+owners: [architect]
+related:
+  - docs/architecture/data-model.md
+maestro:
+  feature: invoice-export              # REQUIRED — the Feature (ADR-0005). [a-z0-9-]+
+  kind: functional_spec                # REQUIRED — functional_spec | technical_design
+  task: US-0042                        # OPTIONAL — the DeliveryTask, when one owns it
+  summary: |                           # REQUIRED on functional_spec | technical_design — ADR-0021
+    A CSV export endpoint that lets finance pull the last quarter's invoices
+    in one paged, RFC-4180-quoted file, up to 50 000 rows per request.
+---
+```
+
+The `summary` field is the **plain-language summary** ADR-0021 requires — one paragraph, ≤ 120 words / 800 characters, no markdown, no links, no code fences, written for the **non-technical reviewer**. The workspace renders it as the first block of the spec/design view; future surfaces (inbox snippet, Slack notifications) reuse the first sentence. The spec/design agent emits the summary on every revision, so it never drifts.
+
+The machine-readable schema (with validation rules) lives in [`standards/documentation.yaml`](../../standards/documentation.yaml) — that is the version the crew reads on every task.
 
 ## Acceptance criteria use EARS
 

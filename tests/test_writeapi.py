@@ -1,15 +1,21 @@
-"""The workspace write API service core (workspace-write-api.md) — dispatch endpoint slice.
+"""The workspace write API service core (workspace-write-api.md) — dispatch + comments.
 
-Covers the M1 ``POST /api/products/{p}/tasks`` flow: role check (architect-only in M1), validation
-(empty/oversize intent, repo ownership), per-product isolation (404 not 403 for unknown product),
-event emission shape, and the idempotency contract (replay returns the same response; same key with
-a different body → 409).
+Covers the M1 flows:
+
+* ``POST /api/products/{p}/tasks`` — role check (architect-only in M1), validation
+  (empty/oversize intent, repo ownership), per-product isolation (404 not 403 for unknown product),
+  event emission shape, idempotency contract.
+* ``POST /api/products/{p}/tasks/{t}/comments`` — any-participant role; task lookup; per-product
+  isolation by product-id mismatch; anchor shape validation; in_reply_to consistency;
+  ``comment.posted`` event emission and projection.
 """
 import pytest
 
 from orchestrator.readapi import NotFound, Unauthenticated
 from orchestrator.writeapi import (
+    MAX_COMMENT_CHARS,
     MAX_INTENT_CHARS,
+    AnchorUnresolved,
     ForbiddenRole,
     IdempotencyMismatch,
     ValidationFailed,
@@ -149,3 +155,156 @@ def test_idempotency_key_optional(write_api, events):
     write_api.dispatch_task(ARCH, "maestro", intent="a")
     write_api.dispatch_task(ARCH, "maestro", intent="b")
     assert len(events.read()) == 2
+
+
+# --- comment endpoint -----------------------------------------------------------------------------
+
+@pytest.fixture
+def dispatched(write_api):
+    """A dispatched task to anchor comment tests against — yields the task_id ('run-1')."""
+    out = write_api.dispatch_task(ARCH, "maestro", intent="A task to discuss")
+    return out["task_id"]
+
+
+def test_post_comment_appends_event_and_projects(write_api, events, dispatched):
+    """Happy path: an unanchored comment lands as a ``comment.posted`` event and shows in the
+    projection's ``TaskState.comments``."""
+    from orchestrator.projection import project_task
+    out = write_api.post_comment(ARCH, "maestro", dispatched, body="A first remark.")
+
+    assert out["comment_id"] == "cmt-1"
+    assert out["task_id"] == dispatched
+    assert out["attributed_to"] == {"email": ARCH, "role": "architect"}
+    assert out["event_seq"] >= 2   # dispatch is seq=1; this comment is seq>=2
+    # ISO 8601 UTC, ending in 'Z'
+    assert out["created_at"].endswith("Z") and "T" in out["created_at"]
+
+    raw = events.read()
+    [comment_evt] = [e for e in raw if e["type"] == "comment.posted"]
+    assert comment_evt["payload"]["body"] == "A first remark."
+    assert comment_evt["payload"]["anchor"] is None
+
+    state = project_task(raw, dispatched)
+    [c] = state.comments
+    assert c.comment_id == "cmt-1" and c.body == "A first remark."
+
+
+def test_post_comment_works_for_a_functional_reviewer(write_api, dispatched):
+    """Comments aren't gate decisions — any product participant may comment, including @dev."""
+    out = write_api.post_comment(DEV, "maestro", dispatched, body="reviewer chiming in")
+    assert out["attributed_to"]["role"] == "functional_reviewer"
+
+
+def test_post_comment_anchored_to_a_known_artefact_kind(write_api, dispatched):
+    """A well-formed anchor on functional_spec with a criterion_id locator is accepted."""
+    out = write_api.post_comment(ARCH, "maestro", dispatched, body="AC-3 is missing the empty case",
+                                  anchor={
+                                      "artefact": {
+                                          "kind": "functional_spec",
+                                          "ref": {"repo": REPO, "branch": "maestro/us-0042",
+                                                  "path": "docs/spec.md", "commit": "abc1234"},
+                                      },
+                                      "locator": {"criterion_id": "AC-3"},
+                                  })
+    assert out["comment_id"].startswith("cmt-")
+
+
+def test_post_comment_rejects_unknown_artefact_kind(write_api, dispatched):
+    with pytest.raises(AnchorUnresolved):
+        write_api.post_comment(ARCH, "maestro", dispatched, body="x",
+                                anchor={"artefact": {"kind": "bogus",
+                                                     "ref": {"repo": REPO}},
+                                        "locator": {"any": "thing"}})
+
+
+def test_post_comment_rejects_locator_key_not_allowed_for_kind(write_api, dispatched):
+    """``technical_design`` allows only ``heading`` in M1; ``block_id`` is deferred (anchoring open
+    question resolution + write-api known-limitation)."""
+    with pytest.raises(AnchorUnresolved):
+        write_api.post_comment(ARCH, "maestro", dispatched, body="x",
+                                anchor={"artefact": {"kind": "technical_design",
+                                                     "ref": {"repo": REPO}},
+                                        "locator": {"block_id": "b-1"}})
+
+
+def test_post_comment_rejects_anchor_repo_not_owned_by_product(write_api, dispatched):
+    with pytest.raises(AnchorUnresolved):
+        write_api.post_comment(ARCH, "maestro", dispatched, body="x",
+                                anchor={"artefact": {"kind": "functional_spec",
+                                                     "ref": {"repo": "other-org/other-repo"}},
+                                        "locator": {"criterion_id": "AC-1"}})
+
+
+def test_post_comment_in_reply_to_existing(write_api, dispatched):
+    """Threaded reply: the parent's comment_id must reference an existing comment on this task."""
+    parent = write_api.post_comment(ARCH, "maestro", dispatched, body="parent")
+    reply = write_api.post_comment(DEV, "maestro", dispatched, body="reply",
+                                    in_reply_to=parent["comment_id"])
+    assert reply["comment_id"] != parent["comment_id"]
+
+
+def test_post_comment_in_reply_to_unknown_is_422(write_api, dispatched):
+    with pytest.raises(ValidationFailed):
+        write_api.post_comment(ARCH, "maestro", dispatched, body="x", in_reply_to="cmt-nope")
+
+
+def test_post_comment_rejects_empty_body(write_api, dispatched):
+    with pytest.raises(ValidationFailed):
+        write_api.post_comment(ARCH, "maestro", dispatched, body="")
+    with pytest.raises(ValidationFailed):
+        write_api.post_comment(ARCH, "maestro", dispatched, body="   ")
+
+
+def test_post_comment_rejects_oversize_body(write_api, dispatched):
+    with pytest.raises(ValidationFailed):
+        write_api.post_comment(ARCH, "maestro", dispatched, body="x" * (MAX_COMMENT_CHARS + 1))
+
+
+def test_post_comment_unknown_task_is_404(write_api):
+    with pytest.raises(NotFound):
+        write_api.post_comment(ARCH, "maestro", "run-ghost", body="hello")
+
+
+def test_post_comment_task_on_different_product_is_404(write_api):
+    """A guessed URL must not surface a task belonging to a different product (per-product
+    isolation — workspace-write-api.md §isolation)."""
+    out = write_api.dispatch_task(ARCH, "maestro", intent="real task")
+    # Add an "other" product the architect also participates in, and try the URL with that id.
+    from orchestrator.register import Participant, Product, Register
+    from orchestrator.writeapi import WriteAPI
+    other = Product(id="other", name="other", product_type="technical", visibility="public",
+                    repos=("acme/other",),
+                    participants=(Participant(handle="@arch", role="architect", slack_user_id="U_ARCH"),))
+    register = Register(products={
+        # keep the same maestro definition so the dispatched event still resolves
+        **write_api._register.products,
+        "other": other,
+    })
+    api = WriteAPI(register, write_api._events, write_api._routing, write_api._idempotency,
+                   id_factory=lambda: "run-X", comment_id_factory=lambda: "cmt-X")
+    with pytest.raises(NotFound):
+        api.post_comment(ARCH, "other", out["task_id"], body="x")
+
+
+def test_post_comment_outsider_is_404(write_api, dispatched):
+    with pytest.raises(NotFound):
+        write_api.post_comment(OUTSIDER, "maestro", dispatched, body="x")
+
+
+def test_post_comment_idempotency_replay(write_api, events, dispatched):
+    """Same key + same body → cached response; no second event."""
+    before = len(events.read())
+    first = write_api.post_comment(ARCH, "maestro", dispatched, body="same",
+                                    idempotency_key="ck-1")
+    second = write_api.post_comment(ARCH, "maestro", dispatched, body="same",
+                                     idempotency_key="ck-1")
+    assert first == second
+    assert len([e for e in events.read() if e["type"] == "comment.posted"]) == 1
+    # Only one new event since `before` (the comment), not two.
+    assert len(events.read()) == before + 1
+
+
+def test_post_comment_idempotency_mismatch_is_409(write_api, dispatched):
+    write_api.post_comment(ARCH, "maestro", dispatched, body="one", idempotency_key="ck-2")
+    with pytest.raises(IdempotencyMismatch):
+        write_api.post_comment(ARCH, "maestro", dispatched, body="two", idempotency_key="ck-2")

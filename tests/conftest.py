@@ -59,12 +59,18 @@ def idempotency(conn):
 
 @pytest.fixture
 def write_api(register, events, routing, idempotency):
-    """The workspace write API — deterministic run ids (run-1, run-2, ...) for replay-correct tests."""
-    counter = {"n": 0}
-    def make_id():
-        counter["n"] += 1
-        return f"run-{counter['n']}"
-    return WriteAPI(register, events, routing, idempotency, id_factory=make_id)
+    """The workspace write API — deterministic run/comment ids (run-1, run-2, …; cmt-1, cmt-2, …)
+    for replay-correct tests."""
+    run_counter = {"n": 0}
+    cmt_counter = {"n": 0}
+    def run_id():
+        run_counter["n"] += 1
+        return f"run-{run_counter['n']}"
+    def cmt_id():
+        cmt_counter["n"] += 1
+        return f"cmt-{cmt_counter['n']}"
+    return WriteAPI(register, events, routing, idempotency,
+                    id_factory=run_id, comment_id_factory=cmt_id)
 
 
 # --- fake GitHub client ------------------------------------------------------------------------

@@ -125,6 +125,17 @@ def make_handler(read: ReadAPI, write: Optional[WriteAPI] = None):
                     idempotency_key=idempotency_key,
                 )
                 self._send(201, result)
+            # POST /api/products/{p}/tasks/{t}/comments — anchored comment (S2).
+            elif (len(parts) == 6 and parts[:2] == ["api", "products"]
+                  and parts[3] == "tasks" and parts[5] == "comments"):
+                result = write.post_comment(
+                    identity, parts[2], parts[4],
+                    body=body.get("body", ""),
+                    anchor=body.get("anchor"),
+                    in_reply_to=body.get("in_reply_to"),
+                    idempotency_key=idempotency_key,
+                )
+                self._send(201, result)
             else:
                 raise NotFoundRoute()
 

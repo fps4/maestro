@@ -40,6 +40,22 @@ class GateDecision:
 
 
 @dataclass
+class Comment:
+    """An anchored human remark on a task (data-model.md). Projected from ``comment.posted`` events.
+
+    Append-only: every event is immutable; supersession is by a new comment, not an edit. Anchored
+    where possible (workspace-ux-design.md P4); ``anchor`` is None for free-floating fallback.
+    """
+    comment_id: str
+    author: Optional[str]
+    body: str
+    anchor: Optional[dict]
+    in_reply_to: Optional[str]
+    created_at: float
+    seq: int
+
+
+@dataclass
 class TaskState:
     task_id: str             # == run_id
     stage: str = "intake"
@@ -48,6 +64,7 @@ class TaskState:
     pr: Optional[dict] = None              # {repo, number, url}
     merged: bool = False
     gates: list[GateDecision] = field(default_factory=list)
+    comments: list[Comment] = field(default_factory=list)
     # merge-approval events, by their seq, and which have been consumed by a merge.executed (anti-replay).
     merge_approvals: dict[int, dict] = field(default_factory=dict)
     consumed_approvals: set[int] = field(default_factory=set)
@@ -107,3 +124,14 @@ def _apply(t: TaskState, e: dict) -> None:
             t.status = "active"
     elif etype == "task.blocked":
         t.status = "blocked"
+    elif etype == "comment.posted":
+        # Comments don't advance state — they're a parallel narrative on the task.
+        t.comments.append(Comment(
+            comment_id=payload.get("comment_id"),
+            author=payload.get("attributed_to", {}).get("email") or e.get("actor"),
+            body=payload.get("body", ""),
+            anchor=payload.get("anchor"),
+            in_reply_to=payload.get("in_reply_to"),
+            created_at=e["ts"],
+            seq=seq,
+        ))

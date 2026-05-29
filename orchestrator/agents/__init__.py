@@ -12,6 +12,7 @@ errors. The concrete spec / design agents land in follow-up slices, each ~30 lin
 harness owns everything reusable.
 """
 from orchestrator.agents.base import Agent, AgentRun, ArtefactRejected, InputRejected
+from orchestrator.agents.design import DesignAgent, run_design_for_run
 from orchestrator.agents.loader import Prompt, PromptIO, load_prompt
 from orchestrator.agents.spec import SpecAgent, run_spec_for_run
 
@@ -19,4 +20,5 @@ __all__ = [
     "Agent", "AgentRun", "ArtefactRejected", "InputRejected",
     "Prompt", "PromptIO", "load_prompt",
     "SpecAgent", "run_spec_for_run",
+    "DesignAgent", "run_design_for_run",
 ]

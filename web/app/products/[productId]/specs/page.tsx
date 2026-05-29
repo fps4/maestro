@@ -1,10 +1,11 @@
 import Link from 'next/link';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ApiErrorNotice } from '@/components/api-error-notice';
 import { SpecStatusBadges } from '@/components/spec-status';
 import { listSpecs } from '@/lib/api';
-import { specPath } from '@/lib/links';
+import { newTaskPath, specPath, taskPath } from '@/lib/links';
 import type { SpecKind } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
@@ -44,21 +45,31 @@ export default async function SpecsPage({ params }: { params: Promise<{ productI
         <ul className="grid gap-3">
           {specs.map((s) => (
             <li key={`${s.ref.repo}:${s.ref.branch}:${s.kind}:${s.feature}`}>
-              <Link href={specPath(productId, s.feature, s.kind, s.ref.branch)} className="block rounded-xl">
-                <Card className="transition-colors hover:bg-accent">
-                  <CardHeader className="space-y-2">
-                    <div className="flex items-center justify-between gap-3">
-                      <CardTitle className="text-base">{s.title}</CardTitle>
-                      <Badge variant="outline">{KIND_LABEL[s.kind]}</Badge>
-                    </div>
-                    <CardDescription className="font-mono text-xs">
-                      {s.ref.repo} · {s.ref.branch}
-                      {s.task ? ` · ${s.task}` : ''}
-                    </CardDescription>
+              <Card className="transition-colors hover:bg-accent">
+                <CardHeader className="space-y-2">
+                  <div className="flex items-center justify-between gap-3">
+                    <Link href={specPath(productId, s.feature, s.kind, s.ref.branch)}>
+                      <CardTitle className="text-base hover:underline">{s.title}</CardTitle>
+                    </Link>
+                    <Badge variant="outline">{KIND_LABEL[s.kind]}</Badge>
+                  </div>
+                  <CardDescription className="font-mono text-xs">
+                    {s.ref.repo} · {s.ref.branch}
+                    {s.task ? ` · ${s.task}` : ''}
+                  </CardDescription>
+                  <div className="flex items-center justify-between gap-2">
                     <SpecStatusBadges status={s.status} />
-                  </CardHeader>
-                </Card>
-              </Link>
+                    {s.status?.task_id && (
+                      <Link
+                        href={taskPath(productId, s.status.task_id)}
+                        className="text-xs text-muted-foreground hover:underline"
+                      >
+                        view task →
+                      </Link>
+                    )}
+                  </div>
+                </CardHeader>
+              </Card>
             </li>
           ))}
         </ul>
@@ -105,7 +116,12 @@ function Shell({
         </Link>{' '}
         / {productName}
       </p>
-      <h1 className="mt-1 text-2xl font-semibold tracking-tight">Specs &amp; designs</h1>
+      <div className="mt-1 flex items-center justify-between gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">Specs &amp; designs</h1>
+        <Button asChild size="sm">
+          <Link href={newTaskPath(productId)}>New task</Link>
+        </Button>
+      </div>
       <p className="mt-2 text-sm text-muted-foreground">
         Read-only, rendered from <span className="font-mono">{productId}</span>&apos;s repo and annotated
         with live status.

@@ -9,3 +9,11 @@ export function specPath(productId: string, feature: string, kind: string, branc
   const base = `${specsPath(productId)}/${encodeURIComponent(feature)}/${encodeURIComponent(kind)}`;
   return branch ? `${base}?branch=${encodeURIComponent(branch)}` : base;
 }
+
+export function newTaskPath(productId: string): string {
+  return `/products/${encodeURIComponent(productId)}/new-task`;
+}
+
+export function taskPath(productId: string, taskId: string): string {
+  return `/products/${encodeURIComponent(productId)}/tasks/${encodeURIComponent(taskId)}`;
+}

@@ -148,11 +148,21 @@ class WriteAPI:
 
     def __init__(self, register: Register, events: EventLog, routing: RoutingResolver,
                  idempotency: IdempotencyStore, *,
-                 id_factory=None, comment_id_factory=None, bundle_id_factory=None):
+                 id_factory=None, comment_id_factory=None, bundle_id_factory=None,
+                 dispatcher=None, resumer=None):
         """``id_factory`` mints task ids; ``comment_id_factory`` mints comment ids;
         ``bundle_id_factory`` mints feedback-bundle ids. All three are injectable for deterministic
         tests; production uses :func:`_default_run_id` / :func:`_default_comment_id` /
-        :func:`_default_bundle_id`."""
+        :func:`_default_bundle_id`.
+
+        ``dispatcher`` and ``resumer`` are the **engine-stream hooks** (ADR-0014). After a
+        ``task.dispatched`` event lands, ``dispatcher(task_id)`` kicks off the LangGraph run for
+        that task; after a ``gate.decided`` event lands, ``resumer(task_id, gate_type, decision)``
+        resumes the suspended graph. Both are **optional** so this write API stays usable in
+        contract tests with no engine attached (the existing 153-test suite); production wires
+        them at boot to async wrappers around :class:`orchestrator.runtime.LangGraphRuntime` so
+        the HTTP request returns immediately while the graph runs in the background.
+        """
         self._register = register
         self._events = events
         self._routing = routing
@@ -160,6 +170,8 @@ class WriteAPI:
         self._id_factory = id_factory or _default_run_id
         self._comment_id_factory = comment_id_factory or _default_comment_id
         self._bundle_id_factory = bundle_id_factory or _default_bundle_id
+        self._dispatcher = dispatcher
+        self._resumer = resumer
         # One writer lock across request threads — the read API has its own read lock, and SQLite's
         # single-writer model gives us serialization for free; this just keeps the idempotency
         # check-then-insert sequence atomic.
@@ -241,7 +253,14 @@ class WriteAPI:
                     response=response,
                     event_seq=event["seq"],
                 )
-            return response
+
+        # Kick the engine stream — strictly after the event lands and outside the write lock so a
+        # synchronous (test) dispatcher cannot deadlock with us. Replays don't reach here (the
+        # ``return cached["response"]`` short-circuit above means the original call already ran
+        # this once). A failure here is logged but does not invalidate the response — the
+        # ``task.dispatched`` event is the authority; a missed kick is recoverable from the log.
+        self._kick(self._dispatcher, task_id)
+        return response
 
     def post_comment(self, identity: str, product_id: str, task_id: str, body: str, *,
                      anchor: Optional[dict] = None,
@@ -474,7 +493,26 @@ class WriteAPI:
                     response=response,
                     event_seq=event["seq"],
                 )
-            return response
+
+        # Resume the LangGraph stage outside the write lock. Replays don't reach here (cache
+        # short-circuit above). On ``reject`` the graph still resumes — the routing rule sends
+        # the run to END so the checkpointer marks the thread done; the projection independently
+        # sets ``status=cancelled``. Both happen exactly once per fresh decision.
+        self._kick(self._resumer, task_id, gate_type, decision)
+        return response
+
+    # --- engine-stream kick (LangGraph runtime hook; ADR-0014) ---------------------------------
+
+    @staticmethod
+    def _kick(hook, *args) -> None:
+        """Fire one engine-stream hook (``dispatcher`` or ``resumer``) defensively. ``None`` is the
+        contract-tests path (no engine attached); a hook that raises does **not** roll back the
+        write — the event is already authoritative (ADR-0008). The error is re-raised so the
+        boot path's executor logs it; production wires hooks through a thread-pool wrapper that
+        swallows + logs, so the HTTP request still returns its success."""
+        if hook is None:
+            return
+        hook(*args)
 
     # --- isolation + identity ---------------------------------------------------------------------
 

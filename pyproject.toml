@@ -7,12 +7,13 @@ name = "maestro"
 version = "0.1.0"
 description = "maestro — architect-directed agentic delivery platform (engine)"
 requires-python = ">=3.11"
-# Runtime deps for the M0 engine spine. The LangGraph runtime (ADR-0014) is added in the
-# slice that wires the delivery-loop stages; the event log below is authoritative under it,
-# so it layers on without changing this core.
+# Runtime deps. The LangGraph runtime (ADR-0014) lands in the M1 stage-wiring slice; the event
+# log below remains authoritative under it (ADR-0008), so it layers on without changing the core.
 dependencies = [
-    "anthropic>=0.40",   # the only provider SDK — reached ONLY through model.ModelClient (ADR-0002)
-    "PyYAML>=6",         # read the product register / routing matrix (ADR-0008)
+    "anthropic>=0.40",                       # the only provider SDK — reached ONLY through model.ModelClient (ADR-0002)
+    "PyYAML>=6",                             # read the product register / routing matrix (ADR-0008)
+    "langgraph>=0.3",                        # the orchestration runtime (ADR-0014) — gates as interrupt() / Command(resume=...)
+    "langgraph-checkpoint-sqlite>=2.0",      # durable resume across restarts; SQLite to start (ADR-0008), Postgres later
 ]
 
 [project.optional-dependencies]

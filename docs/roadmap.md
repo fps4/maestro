@@ -38,7 +38,7 @@ Per-story build/review status is **not** tracked in a markdown board — it live
 |---|---|---|---|
 | M0 | Foundation + surface backbone | — (predates this convention) | **✅ closed 2026-05-27** — spine + S1 read API shipped on ds1; GitHub + Claude verified live |
 | M1 | Spec → design, in the workspace | [`roadmap/m1-spec-to-design.md`](roadmap/m1-spec-to-design.md) | **drafted; open for engineering** |
-| M2 | Build → merge (the MVP) | not yet written | open when M1 exits |
+| M2 | Build → merge (the MVP) | [`roadmap/m2-build-to-merge.md`](roadmap/m2-build-to-merge.md) | **drafted; open for engineering** |
 | M3 | Hardening, quality & the inbox | not yet written | open when M2 exits |
 | M4 | Commercial onboarding | not yet written | open when M3 exits |
 

@@ -149,6 +149,29 @@ def test_get_spec_unknown_kind_is_404(api):
         api.get_spec(ARCH, "maestro", "invoice-export", "bogus_kind")
 
 
+def test_get_spec_with_commit_reads_that_ref(api, content_reader):
+    """``?commit=`` reads the file's content at the named commit instead of the branch tip — the
+    workspace's diff-of-artefact view uses this to fetch the previous artefact's contents through
+    the read API (no GitHub token in the browser; ADR-0015 invariant preserved)."""
+    # The same path on a separate ref carries different content; ``?commit=`` selects which.
+    # The "Previous version" title is what the API echoes back.
+    older = _spec("invoice-export", "functional_spec", title="Previous version")
+    content_reader.put(REPO, "abc1234", "docs/spec.md", older)
+    doc = api.get_spec(ARCH, "maestro", "invoice-export", "functional_spec",
+                       branch="main", commit="abc1234")
+    assert doc["title"] == "Previous version"
+    # Body line came from the older spec we just put on the abc1234 ref.
+    assert "body of invoice-export" in doc["content"]
+    # The response ref echoes the branch the caller asked for, with the commit pinned.
+    assert doc["ref"]["branch"] == "main"
+
+
+def test_get_spec_without_commit_reads_branch_tip(api):
+    """The default behaviour is unchanged when ``?commit=`` is omitted — read the branch tip."""
+    doc = api.get_spec(ARCH, "maestro", "invoice-export", "functional_spec", branch="main")
+    assert "body of invoice-export" in doc["content"]
+
+
 def test_get_spec_content_fetch_failure_is_degraded(register, events):
     """Indexed at scan time, but the dedicated content re-fetch fails → 503 degraded (retryable)."""
     class FlakyReader:
@@ -182,7 +205,8 @@ def test_get_task_returns_projected_state(api, events):
     out = api.get_task(ARCH, "maestro", "run-9c2e3f")
     assert out == {"task_id": "run-9c2e3f", "product_id": "maestro", "stage": "intake",
                    "status": "active", "branch": None, "pr": None, "merged": False,
-                   "gates": [], "open_gates": [], "comments": [], "agent_responses": []}
+                   "gates": [], "open_gates": [], "comments": [],
+                   "agent_responses": [], "artefacts": []}
 
 
 def test_get_task_unknown_is_404(api):

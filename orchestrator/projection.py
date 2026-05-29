@@ -92,6 +92,24 @@ class AgentResponse:
 
 
 @dataclass
+class ArtefactPublished:
+    """Every artefact commit on a task — projected from producer events (``spec.drafted`` /
+    ``design.produced``) and refinement responses (``agent_response.posted``).
+
+    Two `ArtefactPublished` entries for the same `(kind, path)` are adjacent commits the
+    workspace's **diff-of-artefact view** renders side-by-side: the previous (the architect's
+    last review) vs. the current (the redrafted version). The chain across cycles is the natural
+    timeline the reviewer reads."""
+    agent: str                          # spec | design
+    kind: str                           # functional_spec | technical_design
+    feature: Optional[str]
+    ref: dict                           # {repo, branch, path, commit}
+    via: str                            # "producer" (spec.drafted/design.produced) | "response" (agent_response.posted)
+    published_at: float
+    seq: int
+
+
+@dataclass
 class TaskState:
     task_id: str             # == run_id
     stage: str = "intake"
@@ -103,6 +121,9 @@ class TaskState:
     comments: list[Comment] = field(default_factory=list)
     # One AgentResponse per refinement cycle the crew closed (ADR-0022). Chronological by ``seq``.
     agent_responses: list[AgentResponse] = field(default_factory=list)
+    # Every artefact commit on this task — producer events + agent responses — so the workspace
+    # can chain adjacent (kind, path) refs into a diff-of-artefact view without re-walking the log.
+    artefacts: list[ArtefactPublished] = field(default_factory=list)
     # Currently-pending gates by type: ``{type: {gate_id, seq, opened_at}}``. An entry appears when a
     # producing event lands (``spec.drafted`` / ``design.produced`` / ``pr.opened``) and is popped on
     # the first ``gate.decided`` for that type — so a request-changes that re-opens the producing
@@ -145,6 +166,21 @@ def _apply(t: TaskState, e: dict) -> None:
             "seq": seq,
             "opened_at": e["ts"],
         }
+        # Record the producer-event's artefact ref into the chronological artefacts list so the
+        # diff-of-artefact view can chain it with the next agent_response.posted (a re-draft after
+        # request_changes). Only producer events that carry a ref participate; pr.opened does not
+        # produce a spec/design artefact, so it is excluded.
+        if etype in ("spec.drafted", "design.produced"):
+            t.artefacts.append(ArtefactPublished(
+                agent=payload.get("agent") or ("spec" if etype == "spec.drafted" else "design"),
+                kind=payload.get("kind")
+                     or ("functional_spec" if etype == "spec.drafted" else "technical_design"),
+                feature=payload.get("feature"),
+                ref=dict(payload.get("ref") or {}),
+                via="producer",
+                published_at=e["ts"],
+                seq=seq,
+            ))
 
     if etype == "pr.opened":
         t.pr = {"repo": payload.get("repo"), "number": payload.get("pr_number"),
@@ -202,10 +238,13 @@ def _apply(t: TaskState, e: dict) -> None:
             seq=seq,
         ))
     elif etype == "agent_response.posted":
-        # ADR-0022 closure of one refinement cycle. Two effects:
+        # ADR-0022 closure of one refinement cycle. Three effects:
         # 1. record the response so the workspace can render the diff-of-artefact view + per-
         #    anchor replies inline (US-0031 / US-0032 §refinement-loop step 4);
-        # 2. re-open the gate (functional for spec, technical_design for design) so the architect
+        # 2. add the new artefact ref to ``artefacts`` so the diff view can chain it with the
+        #    immediately-prior ArtefactPublished for the same (kind, path) — without re-walking
+        #    the log;
+        # 3. re-open the gate (functional for spec, technical_design for design) so the architect
         #    sees a fresh pending state on the new artefact. The opener's seq is this event's seq
         #    — the monotonic counter the workspace round-trips as ``If-Match`` on the next
         #    decision (workspace-write-api.md §optimistic-concurrency).
@@ -218,6 +257,15 @@ def _apply(t: TaskState, e: dict) -> None:
             addresses=list(payload.get("addresses") or []),
             ref=dict(payload.get("ref") or {}),
             emitted_at=e["ts"],
+            seq=seq,
+        ))
+        t.artefacts.append(ArtefactPublished(
+            agent=payload.get("agent"),
+            kind=payload.get("kind"),
+            feature=payload.get("feature"),
+            ref=dict(payload.get("ref") or {}),
+            via="response",
+            published_at=e["ts"],
             seq=seq,
         ))
         gate_type = _GATE_REOPENER_BY_AGENT.get(payload.get("agent"))

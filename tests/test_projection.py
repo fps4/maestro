@@ -151,6 +151,40 @@ def test_agent_response_posted_re_opens_the_matching_gate(events):
     assert recorded.summary_of_changes == "redrafted"
 
 
+def test_artefacts_chain_records_producer_then_response(events):
+    """``TaskState.artefacts`` chains every artefact commit in event order — producer events
+    (spec.drafted / design.produced) and refinement responses (agent_response.posted) — so the
+    workspace's diff-of-artefact view can walk adjacent (kind, path) pairs without re-scanning
+    the log (US-0032 §refinement-loop)."""
+    events.append(run_id="t", actor="o", type="task.dispatched",
+                  payload={"task_id": "t", "product_id": "p", "repo": "r"})
+    events.append(run_id="t", actor="spec-1", type="spec.drafted",
+                  payload={"agent": "spec", "kind": "functional_spec", "feature": "x",
+                           "ref": {"repo": "r", "branch": "b",
+                                   "path": "docs/x.md", "commit": "c0"}})
+    events.append(run_id="t", actor="@arch", type="gate.decided",
+                  payload={"type": "functional", "decision": "request_changes",
+                           "rationale": "fix", "feedback_bundle_id": "fb-1",
+                           "attributed_to": {"email": "a", "role": "architect"}})
+    events.append(run_id="t", actor="spec-1", type="agent_response.posted",
+                  payload={"task_id": "t", "agent": "spec", "kind": "functional_spec",
+                           "feature": "x", "bundle_id": "fb-1",
+                           "summary_of_changes": "redrafted",
+                           "addresses": [{"comment_id": "cmt-1", "action": "addressed",
+                                          "note": "ok", "ref_section": None}],
+                           "ref": {"repo": "r", "branch": "b",
+                                   "path": "docs/x.md", "commit": "c1"}})
+
+    state = project_task(events.read(), "t")
+    assert len(state.artefacts) == 2
+    first, second = state.artefacts
+    assert first.via == "producer" and first.ref["commit"] == "c0"
+    assert second.via == "response" and second.ref["commit"] == "c1"
+    # Adjacent (kind, path) pairs ⇒ the workspace renders a diff between c0 and c1.
+    assert first.kind == second.kind == "functional_spec"
+    assert first.ref["path"] == second.ref["path"]
+
+
 def test_agent_response_from_design_re_opens_technical_design_gate(events):
     """Symmetric for the design agent — ``agent: design`` re-opens the ``technical_design`` gate."""
     events.append(run_id="t", actor="o", type="task.dispatched",

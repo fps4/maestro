@@ -69,10 +69,14 @@ export function getSpec(
   feature: string,
   kind: string,
   branch?: string,
+  commit?: string,
 ): Promise<SpecDetail> {
-  const qs = branch ? `?branch=${encodeURIComponent(branch)}` : '';
+  const qs = new URLSearchParams();
+  if (branch) qs.set('branch', branch);
+  if (commit) qs.set('commit', commit);
+  const q = qs.toString();
   return get<SpecDetail>(
-    `/api/products/${encodeURIComponent(productId)}/specs/${encodeURIComponent(feature)}/${encodeURIComponent(kind)}${qs}`,
+    `/api/products/${encodeURIComponent(productId)}/specs/${encodeURIComponent(feature)}/${encodeURIComponent(kind)}${q ? `?${q}` : ''}`,
   );
 }
 

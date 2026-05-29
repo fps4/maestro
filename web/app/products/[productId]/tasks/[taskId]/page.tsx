@@ -10,7 +10,7 @@ import { MarkLastSeen } from '@/components/since-last-review-separator';
 import { RefinementCycleSummary } from '@/components/refinement-cycle-summary';
 import { getSpec, getTask, listProducts } from '@/lib/api';
 import { specsPath } from '@/lib/links';
-import type { SpecDetail, SpecKind, SpecRef, TaskDetail } from '@/lib/types';
+import type { ArtefactPublished, SpecDetail, SpecKind, SpecRef, TaskDetail } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -162,9 +162,15 @@ export default async function TaskPage({
 
           {task.agent_responses.length > 0 && (
             <div className="space-y-3">
-              {task.agent_responses.map((r) => (
-                <RefinementCycleSummary key={r.seq} response={r} />
-              ))}
+              {await Promise.all(
+                task.agent_responses.map(async (r) => (
+                  <RefinementCycleSummary
+                    key={r.seq}
+                    response={r}
+                    diff={await fetchDiff(productId, r, task.artefacts)}
+                  />
+                )),
+              )}
             </div>
           )}
         </div>
@@ -237,6 +243,51 @@ function Shell({
       <div className="mt-4">{children}</div>
     </main>
   );
+}
+
+// For a given refinement-cycle closure, find the IMMEDIATELY PRECEDING artefact for the same
+// (kind, path) in the task's chronological artefacts list, then fetch both refs through the read
+// API (the current via the response's commit, the previous via ?commit=). Returns the diff data
+// the RefinementCycleSummary card renders, or undefined if there is no preceding artefact.
+async function fetchDiff(
+  productId: string,
+  response: { ref: SpecRef; kind: SpecKind; seq: number },
+  artefacts: ArtefactPublished[],
+): Promise<
+  | { previousLabel: string; currentLabel: string; previousContent: string; currentContent: string }
+  | undefined
+> {
+  const previous = [...artefacts]
+    .filter((a) => a.kind === response.kind && a.ref.path === response.ref.path && a.seq < response.seq)
+    .sort((a, b) => b.seq - a.seq)[0];
+  if (!previous) return undefined;
+  const { feature } = pathToFeature(response.ref.path, response.kind);
+  if (!feature) return undefined;
+  try {
+    const [prev, curr] = await Promise.all([
+      getSpec(productId, feature, response.kind, previous.ref.branch, previous.ref.commit),
+      getSpec(productId, feature, response.kind, response.ref.branch, response.ref.commit),
+    ]);
+    return {
+      previousLabel: `before · commit ${previous.ref.commit?.slice(0, 7) ?? '(unknown)'}`,
+      currentLabel: `after · commit ${response.ref.commit?.slice(0, 7) ?? '(unknown)'}`,
+      previousContent: prev.content,
+      currentContent: curr.content,
+    };
+  } catch {
+    // A degraded content fetch on either ref is not the page's failure — the summary still
+    // renders, just without the diff. The reviewer reads `summary_of_changes` + the per-anchor
+    // notes inline with the comment list as the fallback.
+    return undefined;
+  }
+}
+
+function pathToFeature(path: string, kind: SpecKind): { feature: string | null } {
+  // Mirror of guessFeature below for a single ref — kind-aware: a technical_design path ends in
+  // `<feature>-design.md`, a functional_spec ends in `<feature>.md`.
+  const suffix = kind === 'technical_design' ? /\/([^/]+?)-design\.md$/ : /\/([^/]+?)\.md$/;
+  const match = suffix.exec(path);
+  return { feature: match ? match[1] : null };
 }
 
 // Compute the largest seq across everything the task carries — used by the catch-up marker

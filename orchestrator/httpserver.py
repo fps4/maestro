@@ -106,7 +106,8 @@ def make_handler(read: ReadAPI, write: Optional[WriteAPI] = None):
                 self._send(200, read.list_specs(identity, parts[2], branch=one("branch"),
                                                 kind=one("kind"), feature=one("feature")))
             elif len(parts) == 6 and parts[:2] == ["api", "products"] and parts[3] == "specs":
-                doc = read.get_spec(identity, parts[2], parts[4], parts[5], branch=one("branch"))
+                doc = read.get_spec(identity, parts[2], parts[4], parts[5],
+                                     branch=one("branch"), commit=one("commit"))
                 etag = f'"{doc["ref"]["commit"]}:{doc["ref"]["path"]}"'
                 if self.headers.get("If-None-Match") == etag:
                     self._send(304, None)

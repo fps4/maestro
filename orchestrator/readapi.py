@@ -19,7 +19,15 @@ import threading
 from typing import Optional
 from urllib.parse import quote
 
-from orchestrator.projection import AgentResponse, Comment, GateDecision, TaskState, project, project_task
+from orchestrator.projection import (
+    AgentResponse,
+    ArtefactPublished,
+    Comment,
+    GateDecision,
+    TaskState,
+    project,
+    project_task,
+)
 from orchestrator.register import Register
 from orchestrator.specindex import (
     KINDS,
@@ -155,11 +163,23 @@ class ReadAPI:
             # per-anchor replies inline with each comment; the summary leads the page. Empty
             # until the first request_changes cycle.
             "agent_responses": [_agent_response_json(r) for r in task.agent_responses],
+            # Every artefact commit on this task — producer events + agent responses, in
+            # chronological order. The workspace chains adjacent (kind, path) refs to render the
+            # diff-of-artefact view (workspace-ux-design.md §refinement-loop step 4).
+            "artefacts": [_artefact_json(a) for a in task.artefacts],
         }
 
     def get_spec(self, identity: str, product_id: str, feature: str, kind: str,
-                 branch: Optional[str] = None) -> dict:
-        """``GET /api/products/{id}/specs/{feature}/{kind}`` — one rendered doc + status."""
+                 branch: Optional[str] = None, commit: Optional[str] = None) -> dict:
+        """``GET /api/products/{id}/specs/{feature}/{kind}`` — one rendered doc + status.
+
+        ``branch`` selects the branch whose index resolves ``feature/kind`` to a path; ``commit``
+        (optional) reads the file's content **at that specific commit** instead of the branch tip.
+        The diff-of-artefact view in the workspace needs this — to show the **previous**
+        committed artefact alongside the current one through one read API, with no GitHub token in
+        the browser (ADR-0015 invariant preserved). Without ``commit`` the behaviour is identical
+        to the M0 / S1 contract: read the branch tip.
+        """
         product = self._authorize_product(identity, product_id)
         if kind not in KINDS:
             raise NotFound(f"unknown kind {kind!r}")
@@ -172,15 +192,25 @@ class ReadAPI:
             spec = next((s for s in idx.specs if s.feature == feature and s.kind == kind), None)
             if spec is None:
                 continue
+            # When commit is given, read content at that ref directly; the spec's path is the
+            # same since the branch index resolved it. The path is stable across the cycle (an
+            # in-place edit, not a rename — workspace-write-api.md / ADR-0021 invariant).
+            content_ref = commit or target
             try:
-                obj = self._content.get_contents(repo, spec.ref.path, target)
+                obj = self._content.get_contents(repo, spec.ref.path, content_ref)
             except Exception:
                 raise Degraded(f"content fetch failed for {spec.ref.path}", ref=_ref_json(spec.ref))
             meta, _ = parse_frontmatter(obj.get("content", ""))
             task = self._status_map().get((repo, target))
-            ref = SpecRef(repo, target, spec.ref.path, obj.get("sha", spec.ref.commit))
+            # The response's ref echoes what the caller fetched — the branch they asked for, with
+            # the commit pinned to whichever ref actually resolved (the GitHub adapter's sha).
+            ref = SpecRef(repo, target, spec.ref.path,
+                          obj.get("sha") or commit or spec.ref.commit)
+            # Title prefers the fetched commit's frontmatter title — so a ?commit= read of an
+            # older artefact reflects what the architect saw then, not the index's tip title.
+            title = (meta or {}).get("title") or spec.title
             return {"feature": spec.feature, "task": spec.task, "kind": spec.kind,
-                    "title": spec.title, "ref": _ref_json(ref), "frontmatter": meta or {},
+                    "title": title, "ref": _ref_json(ref), "frontmatter": meta or {},
                     "content": obj.get("content", ""),
                     "status": _status(task, spec.kind) if task else None}
         raise NotFound(f"no {kind} for feature {feature!r} on branch {target!r}")
@@ -294,6 +324,11 @@ def _agent_response_json(r: AgentResponse) -> dict:
     return {"bundle_id": r.bundle_id, "agent": r.agent, "kind": r.artefact_kind,
             "summary_of_changes": r.summary_of_changes, "addresses": r.addresses,
             "ref": r.ref, "emitted_at": r.emitted_at, "seq": r.seq}
+
+
+def _artefact_json(a: ArtefactPublished) -> dict:
+    return {"agent": a.agent, "kind": a.kind, "feature": a.feature, "ref": a.ref,
+            "via": a.via, "published_at": a.published_at, "seq": a.seq}
 
 
 def _ref_json(ref: SpecRef) -> dict:

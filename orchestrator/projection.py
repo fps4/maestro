@@ -29,6 +29,15 @@ _REVISE_STAGE: dict[str, str] = {
     "technical_merge": "build",
 }
 
+# Which event opens which gate (data-model.md GateType). The opener's seq becomes the gate's
+# ``open_gates[type].seq`` — the monotonic counter the workspace sends back as ``If-Match`` when it
+# decides the gate (workspace-write-api.md §optimistic-concurrency).
+_GATE_OPENER: dict[str, str] = {
+    "spec.drafted": "functional",
+    "design.produced": "technical_design",
+    "pr.opened": "technical_merge",
+}
+
 
 @dataclass
 class GateDecision:
@@ -65,6 +74,11 @@ class TaskState:
     merged: bool = False
     gates: list[GateDecision] = field(default_factory=list)
     comments: list[Comment] = field(default_factory=list)
+    # Currently-pending gates by type: ``{type: {gate_id, seq, opened_at}}``. An entry appears when a
+    # producing event lands (``spec.drafted`` / ``design.produced`` / ``pr.opened``) and is popped on
+    # the first ``gate.decided`` for that type — so a request-changes that re-opens the producing
+    # stage will repopulate the entry when the next opener event lands (workspace-write-api.md).
+    open_gates: dict[str, dict] = field(default_factory=dict)
     # merge-approval events, by their seq, and which have been consumed by a merge.executed (anti-replay).
     merge_approvals: dict[int, dict] = field(default_factory=dict)
     consumed_approvals: set[int] = field(default_factory=set)
@@ -91,6 +105,18 @@ def _apply(t: TaskState, e: dict) -> None:
     if etype in _STAGE_ON:
         t.stage = _STAGE_ON[etype]
 
+    if etype in _GATE_OPENER:
+        gate_type = _GATE_OPENER[etype]
+        # Gate id: opaque from the opener's seq so it's deterministic and content-addressed. The
+        # workspace round-trips this as ``{gate_id}`` in decision URLs; for M1 the gate type slug is
+        # accepted too (workspace-write-api.md §gate-id-shape) — same gate either way.
+        t.open_gates[gate_type] = {
+            "gate_id": f"gate-{seq:04x}",
+            "type": gate_type,
+            "seq": seq,
+            "opened_at": e["ts"],
+        }
+
     if etype == "pr.opened":
         t.pr = {"repo": payload.get("repo"), "number": payload.get("pr_number"),
                 "url": payload.get("pr_url")}
@@ -106,17 +132,28 @@ def _apply(t: TaskState, e: dict) -> None:
         consumed = payload.get("approval_seq")
         if consumed is not None:
             t.consumed_approvals.add(consumed)
-    elif etype == "gate.resolved":
-        decision = payload.get("decision", {})
-        verdict = decision.get("decision") if isinstance(decision, dict) else payload.get("verdict")
-        gate = payload.get("gate")
+    elif etype in ("gate.resolved", "gate.decided"):
+        # Two event shapes flow through the same projection. ``gate.resolved`` was M0's legacy form
+        # (decision nested under ``payload.decision`` with ``by``); ``gate.decided`` is the M1
+        # workspace-write-api form (decision is a flat string, attribution is ``attributed_to``).
+        decision_field = payload.get("decision")
+        if isinstance(decision_field, dict):
+            verdict = decision_field.get("decision")
+            resolver = decision_field.get("by")
+        else:
+            verdict = decision_field or payload.get("verdict")
+            resolver = (payload.get("attributed_to") or {}).get("email") or payload.get("by")
+        gate = payload.get("gate") or payload.get("type")
         t.gates.append(GateDecision(
             gate=gate,
             decision=verdict,
-            resolved_by=(decision.get("by") if isinstance(decision, dict) else payload.get("by")),
+            resolved_by=resolver,
             resolved_at=e["ts"],
             seq=seq,
         ))
+        # Close the open gate of this type — the next opener (after a request-changes redraft) will
+        # repopulate ``open_gates`` from scratch with a fresh ``seq``.
+        t.open_gates.pop(gate, None)
         if verdict == "reject":
             t.status = "cancelled"
         elif verdict == "request_changes" and gate in _REVISE_STAGE:

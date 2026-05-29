@@ -182,7 +182,7 @@ def test_get_task_returns_projected_state(api, events):
     out = api.get_task(ARCH, "maestro", "run-9c2e3f")
     assert out == {"task_id": "run-9c2e3f", "product_id": "maestro", "stage": "intake",
                    "status": "active", "branch": None, "pr": None, "merged": False,
-                   "gates": [], "comments": []}
+                   "gates": [], "open_gates": [], "comments": []}
 
 
 def test_get_task_unknown_is_404(api):
@@ -260,3 +260,19 @@ def test_get_task_comments_default_empty(api, events):
     _dispatch(events, "run-noc")
     out = api.get_task(ARCH, "maestro", "run-noc")
     assert out["comments"] == []
+
+
+def test_get_task_surfaces_open_gate_with_seq(api, events):
+    """An opener event populates ``open_gates`` so the workspace can read the gate's monotonic
+    ``seq`` and round-trip it as ``If-Match`` on the decision write (workspace-write-api.md
+    §optimistic-concurrency)."""
+    _dispatch(events, "run-og")
+    opener = events.append(run_id="run-og", actor="spec-agent", type="spec.drafted",
+                           target="task:run-og",
+                           payload={"task_id": "run-og", "product_id": "maestro"})
+    out = api.get_task(ARCH, "maestro", "run-og")
+    [og] = out["open_gates"]
+    assert og["type"] == "functional"
+    assert og["seq"] == opener["seq"]
+    assert og["gate_id"] == f"gate-{opener['seq']:04x}"
+    assert isinstance(og["opened_at"], float)

@@ -249,3 +249,111 @@ def test_post_comment_bad_anchor_is_422(base_url, monkeypatch):
                     "locator": {"any": "thing"}}},
     )
     assert s == 422 and body["error"]["code"] == "anchor_unresolved"
+
+
+# --- gate-decision endpoint -----------------------------------------------------------------------
+
+def _seed_pending_functional_gate(base_url, monkeypatch):
+    """Dispatch a task and append a ``spec.drafted`` event to open the functional gate.
+
+    Returns ``(url, task_id, opener_seq, events)`` so each test can decide against a real opener seq
+    and assert events at the end."""
+    _as_arch(monkeypatch)
+    url, events = base_url
+    _, dispatch, _ = _post(f"{url}/api/products/maestro/tasks", {"intent": "do thing"})
+    task_id = dispatch["task_id"]
+    opener = events.append(run_id=task_id, actor="spec-agent", type="spec.drafted",
+                           target=f"task:{task_id}",
+                           payload={"task_id": task_id, "product_id": "maestro",
+                                    "ref": {"repo": REPO, "branch": f"maestro/{task_id}",
+                                            "path": "docs/spec.md", "commit": "abc"}})
+    return url, task_id, opener["seq"], events
+
+
+def test_decide_via_http_200_emits_gate_decided(base_url, monkeypatch):
+    """End-to-end: open a gate via seed event, POST a decision, assert 200 + the recorded event."""
+    url, task_id, opener_seq, events = _seed_pending_functional_gate(base_url, monkeypatch)
+    s, body, _ = _post(
+        f"{url}/api/products/maestro/tasks/{task_id}/gates/functional/decisions",
+        {"decision": "approve", "rationale": "EARS criteria cover the gaps."},
+        {"Idempotency-Key": "dk-http-1", "If-Match": str(opener_seq)},
+    )
+    assert s == 200
+    assert body["gate"]["type"] == "functional"
+    assert body["gate"]["decision"] == "approve"
+    assert body["gate_id"] == f"gate-{opener_seq:04x}"
+    assert body["feedback_bundle_id"] is None
+    assert [e["type"] for e in events.read()][-1] == "gate.decided"
+
+
+def test_decide_via_http_request_changes_emits_bundle(base_url, monkeypatch):
+    url, task_id, opener_seq, events = _seed_pending_functional_gate(base_url, monkeypatch)
+    s, body, _ = _post(
+        f"{url}/api/products/maestro/tasks/{task_id}/gates/functional/decisions",
+        {"decision": "request_changes", "rationale": "Address AC-3."},
+        {"Idempotency-Key": "dk-http-rc", "If-Match": str(opener_seq)},
+    )
+    assert s == 200 and body["feedback_bundle_id"].startswith("fb-")
+    assert "feedback_bundle.created" in [e["type"] for e in events.read()]
+
+
+def test_decide_via_http_stale_if_match_is_409_gate_state_moved(base_url, monkeypatch):
+    url, task_id, opener_seq, _ = _seed_pending_functional_gate(base_url, monkeypatch)
+    s, body, _ = _post(
+        f"{url}/api/products/maestro/tasks/{task_id}/gates/functional/decisions",
+        {"decision": "approve", "rationale": "ok"},
+        {"Idempotency-Key": "dk-http-stale", "If-Match": str(opener_seq - 1)},
+    )
+    assert s == 409 and body["error"]["code"] == "gate_state_moved"
+
+
+def test_decide_via_http_missing_idempotency_is_422(base_url, monkeypatch):
+    url, task_id, opener_seq, _ = _seed_pending_functional_gate(base_url, monkeypatch)
+    s, body, _ = _post(
+        f"{url}/api/products/maestro/tasks/{task_id}/gates/functional/decisions",
+        {"decision": "approve", "rationale": "ok"},
+        {"If-Match": str(opener_seq)},
+    )
+    assert s == 422 and body["error"]["code"] == "validation_failed"
+
+
+def test_decide_via_http_missing_if_match_is_422(base_url, monkeypatch):
+    url, task_id, _, _ = _seed_pending_functional_gate(base_url, monkeypatch)
+    s, body, _ = _post(
+        f"{url}/api/products/maestro/tasks/{task_id}/gates/functional/decisions",
+        {"decision": "approve", "rationale": "ok"},
+        {"Idempotency-Key": "dk-http-no-im"},
+    )
+    assert s == 422 and body["error"]["code"] == "validation_failed"
+
+
+def test_decide_via_http_already_resolved_is_409(base_url, monkeypatch):
+    url, task_id, opener_seq, _ = _seed_pending_functional_gate(base_url, monkeypatch)
+    first, _, _ = _post(
+        f"{url}/api/products/maestro/tasks/{task_id}/gates/functional/decisions",
+        {"decision": "approve", "rationale": "ok"},
+        {"Idempotency-Key": "dk-http-2a", "If-Match": str(opener_seq)},
+    )
+    assert first == 200
+    s, body, _ = _post(
+        f"{url}/api/products/maestro/tasks/{task_id}/gates/functional/decisions",
+        {"decision": "approve", "rationale": "ok-again"},
+        {"Idempotency-Key": "dk-http-2b", "If-Match": str(opener_seq)},
+    )
+    assert s == 409 and body["error"]["code"] == "gate_already_resolved"
+
+
+def test_decide_via_http_idempotency_replay_byte_identical(base_url, monkeypatch):
+    """Same Idempotency-Key + same body → byte-identical 200; only one ``gate.decided`` event."""
+    url, task_id, opener_seq, events = _seed_pending_functional_gate(base_url, monkeypatch)
+    headers = {"Idempotency-Key": "dk-http-rep", "If-Match": str(opener_seq)}
+    s1, b1, _ = _post(
+        f"{url}/api/products/maestro/tasks/{task_id}/gates/functional/decisions",
+        {"decision": "approve", "rationale": "ok"}, headers,
+    )
+    s2, b2, _ = _post(
+        f"{url}/api/products/maestro/tasks/{task_id}/gates/functional/decisions",
+        {"decision": "approve", "rationale": "ok"}, headers,
+    )
+    assert s1 == 200 and s2 == 200 and b1 == b2
+    assert len([e for e in events.read() if e["type"] == "gate.decided"]) == 1

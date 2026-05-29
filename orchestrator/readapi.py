@@ -143,6 +143,10 @@ class ReadAPI:
             "pr": task.pr,
             "merged": task.merged,
             "gates": [_gate_json(g) for g in task.gates],
+            # Currently-pending gates by type, each carrying the monotonic ``seq`` the workspace
+            # round-trips as ``If-Match`` on a decision write (workspace-write-api.md
+            # §optimistic-concurrency). Empty when no gate is open on this task.
+            "open_gates": [_open_gate_json(og) for og in task.open_gates.values()],
             # Anchored comments in chronological order (data-model.md Comment; projected from
             # comment.posted events). The discuss/decide UI renders these inline with the
             # artefact; the per-task fetch returns them eagerly so a gate page is one round-trip.
@@ -267,6 +271,13 @@ def _status(task: TaskState, kind: str) -> dict:
 def _gate_json(g: GateDecision) -> dict:
     return {"gate": g.gate, "decision": g.decision, "resolved_by": g.resolved_by,
             "resolved_at": g.resolved_at, "seq": g.seq}
+
+
+def _open_gate_json(og: dict) -> dict:
+    """Shape the projection's open-gate entry for the wire — keys named to match the contract's
+    ``status.gate.{type, seq}`` triad (workspace-read-api.md §status-projection-mapping)."""
+    return {"gate_id": og["gate_id"], "type": og["type"],
+            "seq": og["seq"], "opened_at": og["opened_at"]}
 
 
 def _comment_json(c: Comment) -> dict:

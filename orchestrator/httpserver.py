@@ -26,6 +26,7 @@ from orchestrator.writeapi import WriteAPI
 
 IDENTITY_HEADER = "X-Maestro-Identity"
 IDEMPOTENCY_HEADER = "Idempotency-Key"
+IF_MATCH_HEADER = "If-Match"
 MAX_REQUEST_BODY_BYTES = 64 * 1024            # writes are tiny JSON; reject anything mistaken
 
 
@@ -87,7 +88,8 @@ def make_handler(read: ReadAPI, write: Optional[WriteAPI] = None):
                 if identity is None:
                     raise Unauthenticated("no caller identity")
                 idempotency_key = self.headers.get(IDEMPOTENCY_HEADER)
-                self._route_post(parts, body, identity, idempotency_key)
+                if_match = self._parse_if_match(self.headers.get(IF_MATCH_HEADER))
+                self._route_post(parts, body, identity, idempotency_key, if_match)
             except APIError as err:
                 self._error(err)
             except BrokenPipeError:
@@ -115,7 +117,7 @@ def make_handler(read: ReadAPI, write: Optional[WriteAPI] = None):
             else:
                 raise NotFoundRoute()
 
-        def _route_post(self, parts, body, identity, idempotency_key):
+        def _route_post(self, parts, body, identity, idempotency_key, if_match):
             # POST /api/products/{p}/tasks — dispatch a new delivery task (US-0010 Q2).
             if (len(parts) == 4 and parts[:2] == ["api", "products"] and parts[3] == "tasks"):
                 result = write.dispatch_task(
@@ -136,8 +138,36 @@ def make_handler(read: ReadAPI, write: Optional[WriteAPI] = None):
                     idempotency_key=idempotency_key,
                 )
                 self._send(201, result)
+            # POST /api/products/{p}/tasks/{t}/gates/{g}/decisions — decide a gate (S3).
+            elif (len(parts) == 8 and parts[:2] == ["api", "products"]
+                  and parts[3] == "tasks" and parts[5] == "gates" and parts[7] == "decisions"):
+                result = write.decide_gate(
+                    identity, parts[2], parts[4], parts[6],
+                    decision=body.get("decision", ""),
+                    rationale=body.get("rationale"),
+                    if_match=if_match,
+                    idempotency_key=idempotency_key,
+                )
+                self._send(200, result)
             else:
                 raise NotFoundRoute()
+
+        # --- header parsers -------------------------------------------------------------------------
+
+        @staticmethod
+        def _parse_if_match(raw):
+            """``If-Match`` carries the gate.seq (an integer) for decision writes. Strip optional
+            surrounding quotes; ``None`` if absent. A non-integer value defers the 422 to the write
+            API so the contract's error envelope handles it (vs. an opaque 400 here)."""
+            if raw is None or raw == "":
+                return None
+            raw = raw.strip()
+            if len(raw) >= 2 and raw[0] == raw[-1] == '"':
+                raw = raw[1:-1]
+            try:
+                return int(raw)
+            except (TypeError, ValueError):
+                return raw
 
         # --- body parsing ---------------------------------------------------------------------------
 

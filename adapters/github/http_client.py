@@ -52,6 +52,33 @@ class HttpGitHubClient:
                           {"merge_method": method})
         return {"merged": res.get("merged", False), "sha": res.get("sha")}
 
+    def put_file(self, repo: str, path: str, content: str, branch: str, message: str,
+                 sha: Optional[str] = None) -> dict:
+        """Create or update one file on a branch — ``PUT /repos/{repo}/contents/{path}``.
+
+        Required when ``path`` already exists on ``branch``: pass ``sha`` (the file's blob SHA, from
+        :meth:`get_contents`). GitHub rejects the call otherwise — a deliberate optimistic-concurrency
+        check we surface as :class:`GitHubError` 409/422 rather than papering over.
+
+        Returns ``{commit_sha, file_sha, path}``. The **branch policy** (``maestro/*`` only) is
+        enforced *one layer up*, in :meth:`adapters.github.adapter.GitHubAdapter.commit_artefact`;
+        this client is pure I/O (same shape as ``merge_pull_request``).
+        """
+        q = urllib.parse.quote(path)
+        body = {
+            "message": message,
+            "content": base64.b64encode(content.encode("utf-8")).decode("ascii"),
+            "branch": branch,
+        }
+        if sha is not None:
+            body["sha"] = sha
+        res = self._request("PUT", f"/repos/{repo}/contents/{q}", body)
+        commit = res.get("commit") or {}
+        content_meta = res.get("content") or {}
+        return {"commit_sha": commit.get("sha", ""),
+                "file_sha": content_meta.get("sha", ""),
+                "path": path}
+
     # --- RepoContentReader (read-only; the workspace read API, ADR-0017/0018) --------------------
     # Read of repo content as-committed. The merge boundary above is unchanged: there is still no
     # write path into a default branch here — these are GET-only.

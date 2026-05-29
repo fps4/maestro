@@ -125,6 +125,7 @@ def cmd_serve(a) -> int:
             return 1
         from langgraph.checkpoint.sqlite import SqliteSaver
 
+        from orchestrator.agents.design import run_design_for_run
         from orchestrator.agents.spec import run_spec_for_run
         from orchestrator.runtime import (
             LangGraphRuntime,
@@ -141,12 +142,17 @@ def cmd_serve(a) -> int:
             run_spec_for_run(run_id, events=events, register=register,
                               model=model, github=github_adapter)
 
+        def _design(run_id: str) -> None:
+            run_design_for_run(run_id, events=events, register=register,
+                                model=model, github=github_adapter)
+
         # The checkpointer lives in the same SQLite file as the event log (ADR-0008 / ADR-0014):
         # one DB to back up, langgraph's tables sit alongside ours by name. A future Postgres
         # cutover (concurrency-driven, ADR-0008) moves both at once.
         checkpoint_path = db_path or ":memory:"
         checkpoint_conn = SqliteSaver.from_conn_string(checkpoint_path).__enter__()
-        runtime = LangGraphRuntime(run_spec=_spec, checkpointer=checkpoint_conn)
+        runtime = LangGraphRuntime(run_spec=_spec, run_design=_design,
+                                    checkpointer=checkpoint_conn)
 
         # Background pool so dispatch/resume don't block the HTTP request. Workers > 1 so a slow
         # spec call doesn't wedge subsequent decisions on other tasks; each task's own lock inside
@@ -154,7 +160,8 @@ def cmd_serve(a) -> int:
         engine_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="maestro-engine")
         dispatcher = make_async_dispatcher(runtime, engine_pool)
         resumer = make_async_resumer(runtime, engine_pool)
-        print(f"✓ engine: LangGraph runtime + spec agent wired (checkpointer={checkpoint_path})")
+        print(f"✓ engine: LangGraph runtime + spec/design agents wired "
+              f"(checkpointer={checkpoint_path})")
 
     write = WriteAPI(register, events, routing, IdempotencyStore(conn),
                      dispatcher=dispatcher, resumer=resumer)

@@ -13,8 +13,10 @@ harness owns everything reusable.
 """
 from orchestrator.agents.base import Agent, AgentRun, ArtefactRejected, InputRejected
 from orchestrator.agents.loader import Prompt, PromptIO, load_prompt
+from orchestrator.agents.spec import SpecAgent, run_spec_for_run
 
 __all__ = [
     "Agent", "AgentRun", "ArtefactRejected", "InputRejected",
     "Prompt", "PromptIO", "load_prompt",
+    "SpecAgent", "run_spec_for_run",
 ]

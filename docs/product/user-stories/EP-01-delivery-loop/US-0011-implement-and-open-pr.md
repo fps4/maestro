@@ -3,7 +3,8 @@ title: "US-0011: Implement an approved design on a branch and open a pull reques
 persona: architect
 status: draft
 complexity: L
-last_updated: 2026-05-25
+milestone: M2
+last_updated: 2026-05-29
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 ---
 

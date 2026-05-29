@@ -1,7 +1,7 @@
 ---
 title: "Contract: the workspace write API (S2 — discuss, S3 — decide, plus M1 dispatch)"
-status: draft
-last_updated: 2026-05-28
+status: current
+last_updated: 2026-05-29
 owners: [architect]
 maestro:
   feature: workspace-write-api

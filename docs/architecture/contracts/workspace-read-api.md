@@ -1,7 +1,7 @@
 ---
 title: "Contract: the workspace read API (S1 — read-only specs)"
-status: draft
-last_updated: 2026-05-27
+status: current
+last_updated: 2026-05-29
 owners: [architect]
 maestro:
   feature: workspace-read-api

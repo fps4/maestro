@@ -1,7 +1,7 @@
 ---
 title: "0020: The feedback-bundle payload shape — what the agent receives when the reviewer requests changes"
-status: proposed
-date: 2026-05-28
+status: accepted
+date: 2026-05-29
 related:
   - 0008-system-of-record-and-persistence.md
   - 0009-audit-logging-and-observability.md

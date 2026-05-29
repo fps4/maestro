@@ -38,8 +38,8 @@ Then the prompt body — instructions, examples, constraints — in markdown. Ke
 
 | File | Status | Backs |
 |---|---|---|
-| `spec-agent.md` | _to be written_ | US-0010 |
-| `design-agent.md` | _to be written_ | US-0013 |
+| [`spec-agent.md`](spec-agent.md)     | drafted 2026-05-29 | US-0010 |
+| [`design-agent.md`](design-agent.md) | drafted 2026-05-29 | US-0013 |
 
 ## M3 agents
 

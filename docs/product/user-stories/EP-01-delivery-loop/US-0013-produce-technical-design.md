@@ -1,12 +1,14 @@
 ---
 title: "US-0013: Produce a technical design from an approved spec and post it to the design gate"
 persona: architect
-status: accepted
+status: done
 complexity: L
 milestone: M1
 last_updated: 2026-05-29
 accepted_on: 2026-05-29
 accepted_by: "@farid (architect)"
+done_on: 2026-05-29
+done_by: CI on a green merge (M1 #7 + #8 + #9 + #10; multi-file ADR proposals deferred)
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
   - docs/architecture/decisions/0006-spec-driven-sdlc.md

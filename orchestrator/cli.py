@@ -65,11 +65,27 @@ def cmd_verify_chain(a) -> int:
 
 
 def cmd_serve(a) -> int:
-    """Serve the workspace API — read (S1) + write (S2/S3 + M1 dispatch). Booted lean: no LLM egress,
-    no merge adapter; the API does no inference (workspace-backend.md), so it needs only the register,
-    the event log, the routing matrix, the idempotency store, and a GitHub content reader. That also
-    means serve does not require an ANTHROPIC_API_KEY."""
+    """Serve the workspace API — read (S1) + write (S2/S3 + M1 dispatch).
+
+    Two modes:
+
+    * **contract-only (default)** — no LLM, no merge adapter; the API serves reads and accepts
+      writes that land in the event log only. The engine stream (LangGraph) is not attached, so a
+      ``task.dispatched`` event does not produce a spec, and a ``gate.decided`` does not resume
+      anything. This is the M0 serve shape, still useful for the workspace UI slice (#10) which
+      can develop against the contract surface alone.
+    * **--engine** — additionally constructs the LangGraph runtime (ADR-0014), the
+      :class:`ModelClient` (ADR-0002), the GitHub adapter (ADR-0016), and wires the
+      ``dispatcher`` / ``resumer`` hooks into the write API. A dispatched task triggers the spec
+      agent, a gate decision resumes the suspended graph. Requires ``ANTHROPIC_API_KEY`` and
+      ``GITHUB_TOKEN``.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from adapters.github.adapter import GitHubAdapter
     from adapters.github.http_client import HttpGitHubClient
+    from model.audit import LLMAudit
+    from model.client import ModelClient
     from orchestrator.httpserver import serve
     from orchestrator.idempotency import IdempotencyStore
     from orchestrator.readapi import ReadAPI
@@ -92,11 +108,58 @@ def cmd_serve(a) -> int:
     # A dedicated, cross-thread-tolerant connection: the API serves from request threads
     # (ThreadingHTTPServer), so it cannot share a single-threaded write connection (ADR-0008).
     # The read API uses its own read lock; the write API has its own write lock. One conn, two locks.
-    conn = db.connect(check_same_thread=False)
+    db_path = a.db
+    conn = db.connect(db_path, check_same_thread=False)
     events = EventLog(conn)
     read = ReadAPI(register, events, HttpGitHubClient(token), default_branch=default_branch)
-    write = WriteAPI(register, events, routing, IdempotencyStore(conn))
-    print(f"✓ workspace API (read+write) — {len(register.products)} product(s); "
+
+    dispatcher = resumer = None
+    if a.engine:
+        if not token:
+            print("✗ --engine requires GITHUB_TOKEN (the spec agent commits artefacts).",
+                  file=sys.stderr)
+            return 1
+        if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("MAESTRO_MODEL_BASE_URL")):
+            print("✗ --engine requires ANTHROPIC_API_KEY (the spec agent calls the ModelClient).",
+                  file=sys.stderr)
+            return 1
+        from langgraph.checkpoint.sqlite import SqliteSaver
+
+        from orchestrator.agents.spec import run_spec_for_run
+        from orchestrator.runtime import (
+            LangGraphRuntime,
+            make_async_dispatcher,
+            make_async_resumer,
+        )
+
+        audit = LLMAudit(conn)
+        model = ModelClient(audit)
+        github_client = HttpGitHubClient(token)
+        github_adapter = GitHubAdapter(events, register, routing, github_client)
+
+        def _spec(run_id: str) -> None:
+            run_spec_for_run(run_id, events=events, register=register,
+                              model=model, github=github_adapter)
+
+        # The checkpointer lives in the same SQLite file as the event log (ADR-0008 / ADR-0014):
+        # one DB to back up, langgraph's tables sit alongside ours by name. A future Postgres
+        # cutover (concurrency-driven, ADR-0008) moves both at once.
+        checkpoint_path = db_path or ":memory:"
+        checkpoint_conn = SqliteSaver.from_conn_string(checkpoint_path).__enter__()
+        runtime = LangGraphRuntime(run_spec=_spec, checkpointer=checkpoint_conn)
+
+        # Background pool so dispatch/resume don't block the HTTP request. Workers > 1 so a slow
+        # spec call doesn't wedge subsequent decisions on other tasks; each task's own lock inside
+        # the runtime serialises per thread_id, so concurrent runs on different tasks are safe.
+        engine_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="maestro-engine")
+        dispatcher = make_async_dispatcher(runtime, engine_pool)
+        resumer = make_async_resumer(runtime, engine_pool)
+        print(f"✓ engine: LangGraph runtime + spec agent wired (checkpointer={checkpoint_path})")
+
+    write = WriteAPI(register, events, routing, IdempotencyStore(conn),
+                     dispatcher=dispatcher, resumer=resumer)
+    surface = "read+write+engine" if a.engine else "read+write"
+    print(f"✓ workspace API ({surface}) — {len(register.products)} product(s); "
           f"default branch {default_branch!r}")
     serve(read, write, host=a.host, port=a.port)
     return 0
@@ -119,6 +182,11 @@ def main(argv=None) -> int:
     sv = sub.add_parser("serve")
     sv.add_argument("--host", default="127.0.0.1")
     sv.add_argument("--port", type=int, default=8800)
+    sv.add_argument("--db", default=None,
+                    help="path to the SQLite event log + LLM audit + langgraph checkpoint DB")
+    sv.add_argument("--engine", action="store_true",
+                    help="wire the LangGraph runtime + spec agent — requires GITHUB_TOKEN and "
+                         "ANTHROPIC_API_KEY (ADR-0014)")
     sv.set_defaults(fn=cmd_serve)
 
     args = p.parse_args(argv)

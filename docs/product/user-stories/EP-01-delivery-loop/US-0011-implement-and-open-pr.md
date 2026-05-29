@@ -1,11 +1,16 @@
 ---
 title: "US-0011: Implement an approved design on a branch and open a pull request"
 persona: architect
-status: draft
+status: accepted
 complexity: L
 milestone: M2
 last_updated: 2026-05-29
+accepted_on: 2026-05-29
+accepted_by: "@farid (architect)"
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
+related:
+  - docs/architecture/decisions/0016-merge-after-workspace-approval.md
+  - docs/roadmap/m2-build-to-merge.md
 ---
 
 ## Story
@@ -36,3 +41,5 @@ The builder's execution stage. After the technical (design) gate approves (US-00
 ## Notes
 
 "Done" is driven by the observed merge event, never by an agent claiming completion.
+
+**M2 scoping resolution (Q3, 2026-05-29).** The builder agent commits **one commit per task-list entry**, message format `task-{n}: <task title>`, ordered by dependency. Iteration noise is squashed so the final commit set is the task list, not its drafts. Supports `git bisect` on later DoD failures. See [`m2-build-to-merge.md`](../../../roadmap/m2-build-to-merge.md#open-questions-specific-to-m2).

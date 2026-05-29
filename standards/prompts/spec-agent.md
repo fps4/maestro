@@ -124,16 +124,44 @@ For each item, in order:
 2. **Address it in the artefact.** Update the EARS criterion at that anchor, or add / mark-removed as the comment asks. **Stable id rule still holds** — append, do not renumber.
 3. **Re-emit `maestro.summary`** if the change is material.
 4. **Commit the new artefact** to the same path on the same branch.
-5. **Emit `agent_response.posted`** ([ADR-0022](../../docs/architecture/decisions/0022-agent-response-event.md)) with:
-   - `bundle_id` of the feedback bundle.
-   - `artefact.ref` of the **new** commit (the commit SHA must differ from the bundle's).
-   - `summary_of_changes` — one paragraph (≤ 120 words / 800 chars), plain language, audience-aware. The reviewer who clicked *request_changes* reads this first.
-   - `addresses[]` — **one entry per `items[]` entry, in bundle order**. Each entry:
-     - `action`: `addressed` (the change was made), `deferred` (relevant but belongs at a later artefact — e.g. "move to the design"), or `rejected` (you disagree; explain; the reviewer can escalate).
-     - `note`: **one sentence, ≤ 240 chars, required for every entry.**
-     - `ref_section.locator`: where the change landed (e.g. `{ criterion_id: "AC-3" }`); `null` for `deferred` / `rejected`.
+5. **Emit `agent_response.posted`** ([ADR-0022](../../docs/architecture/decisions/0022-agent-response-event.md)) — the harness emits it for you from a structured block you append to the artefact response (see *Format on a re-draft* below).
 
-   **No silent skipping.** Every bundle item gets an entry; every entry has a note. A bundle is closed by exactly one response; if the reviewer requests changes again on the new artefact, that produces a **new** bundle and a new response cycle.
+### Format on a re-draft
+
+The same response text the harness reads carries **two pieces**:
+
+1. The artefact markdown — frontmatter + body — exactly as in a first draft.
+2. **One trailing fenced block** named `json maestro-response`:
+
+````
+```json maestro-response
+{
+  "bundle_id": "fb-...",
+  "summary_of_changes": "One paragraph (≤ 120 words / 800 chars), plain language, audience-aware.",
+  "addresses": [
+    {
+      "comment_id": "cmt-...",
+      "action": "addressed",
+      "note": "One sentence ≤ 240 chars.",
+      "ref_section": { "locator": { "criterion_id": "AC-3" } }
+    }
+  ]
+}
+```
+````
+
+Rules the harness enforces:
+
+- The block is **the last thing** in the response, after the artefact markdown.
+- `bundle_id` must match the input bundle's id.
+- `addresses[]` must contain **one entry per `items[]` entry in the bundle, in bundle order**, each with a `comment_id` matching the bundle's. No silent skipping.
+- `action` is `addressed` | `deferred` | `rejected`. `note` is required for every entry, ≤ 240 chars.
+- `summary_of_changes` is ≤ 120 words / 800 chars, plain language (same envelope as `maestro.summary`).
+- `ref_section.locator` is the locator shape for the artefact kind (e.g. `{ criterion_id: "AC-3" }`); use `null` for `deferred` / `rejected`.
+
+The harness fills `artefact.ref`, `attributed_to`, and `emitted_at`; you do not include those. The harness **strips the trailing block from the committed file**, so the artefact in the repo stays clean — only frontmatter + body.
+
+A bundle is closed by exactly one response; if the reviewer requests changes again on the new artefact, that produces a **new** bundle and a new response cycle.
 
 ## What never to do
 

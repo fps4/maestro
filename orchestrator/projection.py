@@ -38,6 +38,14 @@ _GATE_OPENER: dict[str, str] = {
     "pr.opened": "technical_merge",
 }
 
+# Which **agent** re-opens which gate via ``agent_response.posted`` (ADR-0022). The agent kind is in
+# the event's payload (``payload.agent``), not the type, so this is a separate dispatch from
+# ``_GATE_OPENER``: the projection looks up the gate type by the agent's name.
+_GATE_REOPENER_BY_AGENT: dict[str, str] = {
+    "spec": "functional",
+    "design": "technical_design",
+}
+
 
 @dataclass
 class GateDecision:
@@ -65,6 +73,25 @@ class Comment:
 
 
 @dataclass
+class AgentResponse:
+    """One refinement cycle's closure — projected from ``agent_response.posted`` (ADR-0022).
+
+    The reviewer's next visit on this task defaults to the **diff-of-artefact since their last
+    review**, with per-anchor replies inline (workspace-ux-design.md §refinement-loop). This
+    record carries everything that view needs: the bundle this responds to, the new artefact ref,
+    the summary the reviewer reads first, and the per-anchor address list."""
+    bundle_id: str
+    task_id: str
+    agent: str                          # spec | design
+    artefact_kind: str                  # functional_spec | technical_design
+    summary_of_changes: str
+    addresses: list[dict]               # one per bundle item, in bundle order
+    ref: dict                           # {repo, branch, path, commit} of the new commit
+    emitted_at: float
+    seq: int
+
+
+@dataclass
 class TaskState:
     task_id: str             # == run_id
     stage: str = "intake"
@@ -74,6 +101,8 @@ class TaskState:
     merged: bool = False
     gates: list[GateDecision] = field(default_factory=list)
     comments: list[Comment] = field(default_factory=list)
+    # One AgentResponse per refinement cycle the crew closed (ADR-0022). Chronological by ``seq``.
+    agent_responses: list[AgentResponse] = field(default_factory=list)
     # Currently-pending gates by type: ``{type: {gate_id, seq, opened_at}}``. An entry appears when a
     # producing event lands (``spec.drafted`` / ``design.produced`` / ``pr.opened``) and is popped on
     # the first ``gate.decided`` for that type — so a request-changes that re-opens the producing
@@ -172,3 +201,36 @@ def _apply(t: TaskState, e: dict) -> None:
             created_at=e["ts"],
             seq=seq,
         ))
+    elif etype == "agent_response.posted":
+        # ADR-0022 closure of one refinement cycle. Two effects:
+        # 1. record the response so the workspace can render the diff-of-artefact view + per-
+        #    anchor replies inline (US-0031 / US-0032 §refinement-loop step 4);
+        # 2. re-open the gate (functional for spec, technical_design for design) so the architect
+        #    sees a fresh pending state on the new artefact. The opener's seq is this event's seq
+        #    — the monotonic counter the workspace round-trips as ``If-Match`` on the next
+        #    decision (workspace-write-api.md §optimistic-concurrency).
+        t.agent_responses.append(AgentResponse(
+            bundle_id=payload.get("bundle_id"),
+            task_id=payload.get("task_id") or e["run_id"],
+            agent=payload.get("agent"),
+            artefact_kind=payload.get("kind"),
+            summary_of_changes=payload.get("summary_of_changes", ""),
+            addresses=list(payload.get("addresses") or []),
+            ref=dict(payload.get("ref") or {}),
+            emitted_at=e["ts"],
+            seq=seq,
+        ))
+        gate_type = _GATE_REOPENER_BY_AGENT.get(payload.get("agent"))
+        if gate_type is not None:
+            t.open_gates[gate_type] = {
+                "gate_id": f"gate-{seq:04x}",
+                "type": gate_type,
+                "seq": seq,
+                "opened_at": e["ts"],
+            }
+            # The producing stage closes; we're back at the gate for the matching stage.
+            stage_by_gate = {
+                "functional": "functional_gate",
+                "technical_design": "technical_gate",
+            }
+            t.stage = stage_by_gate.get(gate_type, t.stage)

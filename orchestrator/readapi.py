@@ -19,7 +19,7 @@ import threading
 from typing import Optional
 from urllib.parse import quote
 
-from orchestrator.projection import Comment, GateDecision, TaskState, project, project_task
+from orchestrator.projection import AgentResponse, Comment, GateDecision, TaskState, project, project_task
 from orchestrator.register import Register
 from orchestrator.specindex import (
     KINDS,
@@ -151,6 +151,10 @@ class ReadAPI:
             # comment.posted events). The discuss/decide UI renders these inline with the
             # artefact; the per-task fetch returns them eagerly so a gate page is one round-trip.
             "comments": [_comment_json(c) for c in task.comments],
+            # Refinement-cycle closures (ADR-0022). The workspace's diff-of-artefact view renders
+            # per-anchor replies inline with each comment; the summary leads the page. Empty
+            # until the first request_changes cycle.
+            "agent_responses": [_agent_response_json(r) for r in task.agent_responses],
         }
 
     def get_spec(self, identity: str, product_id: str, feature: str, kind: str,
@@ -284,6 +288,12 @@ def _comment_json(c: Comment) -> dict:
     return {"comment_id": c.comment_id, "author": c.author, "body": c.body,
             "anchor": c.anchor, "in_reply_to": c.in_reply_to,
             "created_at": c.created_at, "seq": c.seq}
+
+
+def _agent_response_json(r: AgentResponse) -> dict:
+    return {"bundle_id": r.bundle_id, "agent": r.agent, "kind": r.artefact_kind,
+            "summary_of_changes": r.summary_of_changes, "addresses": r.addresses,
+            "ref": r.ref, "emitted_at": r.emitted_at, "seq": r.seq}
 
 
 def _ref_json(ref: SpecRef) -> dict:

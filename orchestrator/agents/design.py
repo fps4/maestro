@@ -99,7 +99,16 @@ def run_design_for_run(run_id: str, *, events: EventLog, register: Register,
 
     prompt = _load_prompt(prompt_path)
     agent = DesignAgent(prompt, model, events, github)
-    inputs = {
+
+    # Re-draft detection — symmetric with the spec helper. On the design gate's request_changes
+    # the workspace emits ``feedback_bundle.created`` (gate.type = "technical_design"); the next
+    # design_node invocation reads it and the harness takes the re-draft path.
+    feedback_bundle = _active_feedback_bundle(events, run_id, gate_type="technical_design")
+    target_path = TARGET_PATH_FMT.format(feature=feature_slug)
+    file_sha = (_existing_file_sha(events, run_id, repo, branch, target_path)
+                if feedback_bundle is not None else None)
+
+    inputs: dict = {
         "task": {"task_id": run_id, "product_id": product_id, "repo": repo,
                  "stage": "design"},
         "product": {"id": product.id, "name": product.name,
@@ -108,11 +117,48 @@ def run_design_for_run(run_id: str, *, events: EventLog, register: Register,
                      "path": spec_ref["path"], "commit": spec_ref.get("commit"),
                      "feature": feature_slug, "intent": intent},
     }
+    if feedback_bundle is not None:
+        inputs["feedback_bundle"] = feedback_bundle
+
     return agent.run(run_id=run_id, repo=repo, branch=branch, inputs=inputs,
-                     feature_slug=feature_slug)
+                     feature_slug=feature_slug, target_path=target_path, file_sha=file_sha)
 
 
 # --- helpers ---------------------------------------------------------------------------------------
+
+
+def _active_feedback_bundle(events: EventLog, run_id: str, *,
+                            gate_type: str) -> Optional[dict]:
+    """Symmetric with ``orchestrator.agents.spec._active_feedback_bundle`` — latest unclosed
+    ``feedback_bundle.created`` for this gate type. Duplicated rather than imported because the
+    spec helper's symbol is private; one-line copy is cheaper than a cross-agent import."""
+    raw = events.read(run_id)
+    closed_ids = {e["payload"].get("bundle_id") for e in raw
+                  if e["type"] == "agent_response.posted"}
+    for e in reversed(raw):
+        if e["type"] != "feedback_bundle.created":
+            continue
+        p = e["payload"]
+        gate = (p.get("gate") or {}).get("type")
+        if gate != gate_type:
+            continue
+        if p.get("bundle_id") in closed_ids:
+            continue
+        return p
+    return None
+
+
+def _existing_file_sha(events: EventLog, run_id: str, repo: str, branch: str,
+                       path: str) -> Optional[str]:
+    """The file_sha of the most recent ``artefact.committed`` event for ``(repo, branch, path)``
+    — for the re-draft's PUT-with-sha (GitHub's optimistic-concurrency rule)."""
+    for e in reversed(events.read(run_id)):
+        if e["type"] != "artefact.committed":
+            continue
+        p = e["payload"]
+        if (p.get("repo") == repo and p.get("branch") == branch and p.get("path") == path):
+            return p.get("file_sha")
+    return None
 
 
 def _latest_spec_drafted(events: EventLog, run_id: str) -> dict:

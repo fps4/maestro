@@ -40,6 +40,10 @@ MAX_SUMMARY_CHARS = 800
 MAX_SUMMARY_WORDS = 120
 _DISALLOWED_IN_SUMMARY = ("```", "](http", "AC-", "WHEN", "SHALL")
 
+# ADR-0022 per-anchor-reply envelope.
+MAX_NOTE_CHARS = 240
+_ACTIONS = {"addressed", "deferred", "rejected"}
+
 
 class InputRejected(ValueError):
     """The caller did not honour the prompt's ``inputs:`` contract — missing required or extras."""
@@ -115,6 +119,19 @@ class Agent:
             commit_message: Optional[str] = None) -> AgentRun:
         """Drive one agent invocation end-to-end.
 
+        Two paths, discriminated by the presence of ``feedback_bundle`` in ``inputs``:
+
+        * **first draft** (no bundle) — the LLM emits the markdown artefact; the harness commits
+          it and emits the producer event (``spec.drafted`` / ``design.produced``) that opens the
+          gate.
+        * **re-draft** (bundle present) — the LLM emits the artefact **plus a trailing fenced
+          block** named ``json maestro-response`` carrying ``{bundle_id, summary_of_changes,
+          addresses[]}`` (the spec / design prompts pin the format). The harness parses + strips
+          that block from the committed file, validates the response against the bundle
+          (no silent skipping, addresses order matches items order, action enum, note ≤240 chars,
+          summary envelope), commits the cleaned artefact, and emits ``agent_response.posted``
+          (ADR-0022) — which the projection treats as a gate re-opener for the matching gate.
+
         ``feature_slug`` and ``target_path`` are passed in by the concrete agent (it knows its
         naming pattern); making the harness compute them would re-encode each agent's path policy
         here. ``file_sha`` is the existing file's blob SHA on a re-draft (None on a first draft) —
@@ -124,21 +141,36 @@ class Agent:
         self._validate_inputs(inputs)
 
         result = self._call_model(run_id, inputs)
-        meta, body = parse_frontmatter(result.text)
+
+        feedback_bundle = inputs.get("feedback_bundle")
+        if feedback_bundle is not None:
+            artefact_text, response_payload = _extract_response_block(result.text)
+            self._validate_response_against_bundle(response_payload, feedback_bundle)
+        else:
+            artefact_text = result.text
+            response_payload = None
+
+        meta, body = parse_frontmatter(artefact_text)
         self._validate_artefact(meta, body, feature_slug=feature_slug)
 
         path = target_path or self._default_target_path(feature_slug=meta["maestro"]["feature"])
         commit = self._github.commit_artefact(
             run_id=run_id, repo=repo, branch=branch, path=path,
-            content=result.text,
-            message=commit_message or self._default_commit_message(meta),
+            content=artefact_text,
+            message=commit_message or self._default_commit_message(meta, response_payload),
             sha=file_sha,
         )
-        event = self._emit_producer_event(run_id, repo, branch, path, meta, commit, result)
+
+        if response_payload is not None:
+            event = self._emit_agent_response(
+                run_id, repo, branch, path, meta, commit, result, response_payload,
+            )
+        else:
+            event = self._emit_producer_event(run_id, repo, branch, path, meta, commit, result)
 
         return AgentRun(
             run_id=run_id, agent=self._prompt.agent, artefact_kind=self.artefact_kind,
-            artefact_path=path, artefact_content=result.text, frontmatter=meta,
+            artefact_path=path, artefact_content=artefact_text, frontmatter=meta,
             commit={**commit, "repo": repo, "branch": branch, "path": path},
             event_seq=event["seq"], model_call=result.call,
         )
@@ -153,10 +185,12 @@ class Agent:
             f"{type(self).__name__}: pass target_path= or override _default_target_path"
         )
 
-    def _default_commit_message(self, meta: dict) -> str:
+    def _default_commit_message(self, meta: dict, response_payload: Optional[dict] = None) -> str:
         feature = meta.get("maestro", {}).get("feature", "?")
         task = meta.get("maestro", {}).get("task")
         prefix = f"{task}: " if task else ""
+        if response_payload is not None:
+            return f"{prefix}{self._prompt.agent}: re-draft {self.artefact_kind} for {feature}"
         return f"{prefix}{self._prompt.agent}: {self.artefact_kind} for {feature}"
 
     # --- inputs ----------------------------------------------------------------------------------
@@ -256,6 +290,90 @@ class Agent:
                     f"maestro.summary must be plain language; remove {marker!r} (ADR-0021)",
                 )
 
+    # --- response validation (ADR-0022 §required-shape-rules) -----------------------------------
+
+    def _validate_response_against_bundle(self, response: dict, bundle: dict) -> None:
+        """Pin the agent's ``addresses[]`` against the bundle's ``items[]``: one entry per item, in
+        bundle order, comment_ids matched, action enum, note ≤240 chars, summary envelope.
+
+        Every ``ArtefactRejected`` reason here is stable and named (``response_bundle_mismatch``,
+        ``incomplete_addresses``, ``invalid_action``, ``oversize_note``, ``oversize_summary_of_changes``,
+        ``missing_response_field``) so a regression dashboard can group by mode of failure."""
+        if not isinstance(response, dict):
+            raise ArtefactRejected("missing_response_field",
+                                   "maestro-response block did not parse as a JSON object")
+
+        bundle_id_expected = bundle.get("id") or bundle.get("bundle_id")
+        bundle_id_emitted = response.get("bundle_id")
+        if not bundle_id_emitted:
+            raise ArtefactRejected("missing_response_field",
+                                   "agent_response is missing `bundle_id`")
+        if bundle_id_emitted != bundle_id_expected:
+            raise ArtefactRejected(
+                "response_bundle_mismatch",
+                f"bundle_id {bundle_id_emitted!r} in response does not match the input "
+                f"bundle's {bundle_id_expected!r}",
+            )
+
+        summary = response.get("summary_of_changes")
+        if not isinstance(summary, str) or not summary.strip():
+            raise ArtefactRejected("missing_response_field",
+                                   "agent_response is missing `summary_of_changes`")
+        s = summary.strip()
+        if len(s) > MAX_SUMMARY_CHARS:
+            raise ArtefactRejected(
+                "oversize_summary_of_changes",
+                f"summary_of_changes must be ≤ {MAX_SUMMARY_CHARS} chars (ADR-0022); got {len(s)}",
+            )
+        if len(s.split()) > MAX_SUMMARY_WORDS:
+            raise ArtefactRejected(
+                "oversize_summary_of_changes",
+                f"summary_of_changes must be ≤ {MAX_SUMMARY_WORDS} words (ADR-0022)",
+            )
+
+        items = bundle.get("items") or []
+        addresses = response.get("addresses")
+        if not isinstance(addresses, list):
+            raise ArtefactRejected("missing_response_field",
+                                   "agent_response.addresses must be a list")
+        if len(addresses) != len(items):
+            raise ArtefactRejected(
+                "incomplete_addresses",
+                f"addresses[] must have one entry per bundle item (ADR-0022): bundle has "
+                f"{len(items)} items, response has {len(addresses)} addresses",
+            )
+
+        for i, (item, entry) in enumerate(zip(items, addresses)):
+            if not isinstance(entry, dict):
+                raise ArtefactRejected("incomplete_addresses",
+                                       f"addresses[{i}] is not an object")
+            comment_id_expected = _bundle_item_comment_id(item)
+            comment_id_emitted = entry.get("comment_id")
+            if comment_id_emitted != comment_id_expected:
+                raise ArtefactRejected(
+                    "incomplete_addresses",
+                    f"addresses[{i}].comment_id {comment_id_emitted!r} does not match the "
+                    f"bundle item's {comment_id_expected!r} (must be in bundle order)",
+                )
+            action = entry.get("action")
+            if action not in _ACTIONS:
+                raise ArtefactRejected(
+                    "invalid_action",
+                    f"addresses[{i}].action must be one of {sorted(_ACTIONS)!r}; got {action!r}",
+                )
+            note = entry.get("note")
+            if not isinstance(note, str) or not note.strip():
+                raise ArtefactRejected(
+                    "missing_response_field",
+                    f"addresses[{i}].note is required for every entry (ADR-0022)",
+                )
+            if len(note) > MAX_NOTE_CHARS:
+                raise ArtefactRejected(
+                    "oversize_note",
+                    f"addresses[{i}].note must be ≤ {MAX_NOTE_CHARS} chars (ADR-0022); "
+                    f"got {len(note)}",
+                )
+
     # --- producer event -------------------------------------------------------------------------
 
     def _emit_producer_event(self, run_id: str, repo: str, branch: str, path: str,
@@ -278,8 +396,88 @@ class Agent:
             },
         )
 
+    def _emit_agent_response(self, run_id: str, repo: str, branch: str, path: str,
+                             meta: dict, commit: dict, result: ModelResult,
+                             response: dict) -> dict:
+        """Emit ``agent_response.posted`` (ADR-0022) on a re-draft. The harness fills the
+        ``artefact.ref``, ``attributed_to``, and ``emitted_at`` fields; the LLM supplied
+        ``bundle_id``, ``summary_of_changes``, and ``addresses[]``. The projection treats this
+        event as a **gate re-opener** for the agent's gate type so the workspace sees a fresh
+        pending state on the new artefact."""
+        m = meta.get("maestro", {})
+        return self._events.append(
+            run_id=run_id, actor=self._actor, type="agent_response.posted",
+            target=f"{repo}:{branch}:{path}",
+            payload={
+                "task_id": run_id,
+                "agent": self._prompt.agent,
+                "kind": self.artefact_kind,
+                "feature": m.get("feature"),
+                "bundle_id": response["bundle_id"],
+                "summary_of_changes": response["summary_of_changes"].strip(),
+                "addresses": response["addresses"],
+                "ref": {"repo": repo, "branch": branch, "path": path,
+                        "commit": commit.get("commit_sha")},
+                "attributed_to": {"agent": self._prompt.agent, "run_id": run_id,
+                                   "model": result.call.model},
+            },
+        )
+
 
 # --- helpers ---------------------------------------------------------------------------------------
+
+
+# Trailing ```json maestro-response ... ``` block — required on a re-draft, must be the last
+# fenced block in the response. The regex is anchored at the end so the artefact's own body can
+# contain code fences (a technical_design with a YAML or python example is fine) without confusing
+# us — we only ever match the trailing one.
+import json as _json
+import re as _re
+
+_RESPONSE_BLOCK_RE = _re.compile(
+    r"\n*```json\s+maestro-response\s*\n(?P<body>.+?)\n```\s*$",
+    _re.DOTALL,
+)
+
+
+def _extract_response_block(text: str) -> tuple[str, dict]:
+    """Strip the trailing maestro-response block off ``text``; return ``(artefact_text, payload)``.
+
+    Raises :class:`ArtefactRejected` (``missing_response_block`` / ``malformed_response_block``)
+    when the agent did not honour the format the spec/design prompts pinned. The returned
+    ``artefact_text`` is what gets committed — the response metadata never lands in the repo.
+    """
+    match = _RESPONSE_BLOCK_RE.search(text)
+    if match is None:
+        raise ArtefactRejected(
+            "missing_response_block",
+            "the response did not end with a ```json maestro-response``` fenced block "
+            "(ADR-0022; see standards/prompts/<agent>-agent.md §format-on-a-re-draft)",
+        )
+    try:
+        payload = _json.loads(match.group("body"))
+    except _json.JSONDecodeError as exc:
+        raise ArtefactRejected(
+            "malformed_response_block",
+            f"the maestro-response JSON did not parse: {exc.msg} (line {exc.lineno})",
+        ) from None
+    artefact = text[: match.start()].rstrip() + "\n"
+    return artefact, payload
+
+
+def _bundle_item_comment_id(item: dict) -> Optional[str]:
+    """Pull a stable comment_id out of one bundle item. ADR-0020's payload puts the comment under
+    ``items[].comments[0].id``; tolerate either shape (``item.comment_id`` or first-comment id) so
+    a future bundle-shape refinement doesn't ripple through this validator."""
+    if not isinstance(item, dict):
+        return None
+    direct = item.get("comment_id")
+    if direct:
+        return direct
+    comments = item.get("comments")
+    if isinstance(comments, list) and comments and isinstance(comments[0], dict):
+        return comments[0].get("id") or comments[0].get("comment_id")
+    return None
 
 
 def _format_user_message(prompt: Prompt, inputs: dict[str, Any]) -> str:

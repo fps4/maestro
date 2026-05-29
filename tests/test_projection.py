@@ -119,3 +119,60 @@ def test_legacy_gate_resolved_still_folds(events):
     assert state.open_gates == {}
     [g] = state.gates
     assert g.decision == "approve" and g.resolved_by == "@arch"
+
+
+# --- M1 agent_response.posted (ADR-0022 — re-opens the gate after a refinement cycle) -----------
+
+def test_agent_response_posted_re_opens_the_matching_gate(events):
+    """A spec agent's ``agent_response.posted`` re-opens the **functional** gate with the
+    response's seq — the workspace can round-trip that seq as ``If-Match`` on the next decision."""
+    events.append(run_id="t", actor="o", type="task.dispatched",
+                  payload={"task_id": "t", "product_id": "p", "repo": "r"})
+    events.append(run_id="t", actor="spec-1", type="spec.drafted",
+                  payload={"feature": "x"})
+    events.append(run_id="t", actor="@arch", type="gate.decided",
+                  payload={"type": "functional", "decision": "request_changes",
+                           "rationale": "fix", "feedback_bundle_id": "fb-1",
+                           "attributed_to": {"email": "a", "role": "architect"}})
+    resp = events.append(run_id="t", actor="spec-agent", type="agent_response.posted",
+                          payload={"task_id": "t", "agent": "spec", "kind": "functional_spec",
+                                   "feature": "x", "bundle_id": "fb-1",
+                                   "summary_of_changes": "redrafted",
+                                   "addresses": [{"comment_id": "cmt-1", "action": "addressed",
+                                                  "note": "ok", "ref_section": None}],
+                                   "ref": {"repo": "r", "branch": "b",
+                                           "path": "p", "commit": "redraft-sha"}})
+    state = project_task(events.read(), "t")
+    assert state.stage == "functional_gate"
+    assert "functional" in state.open_gates
+    assert state.open_gates["functional"]["seq"] == resp["seq"]
+    [recorded] = state.agent_responses
+    assert recorded.bundle_id == "fb-1"
+    assert recorded.summary_of_changes == "redrafted"
+
+
+def test_agent_response_from_design_re_opens_technical_design_gate(events):
+    """Symmetric for the design agent — ``agent: design`` re-opens the ``technical_design`` gate."""
+    events.append(run_id="t", actor="o", type="task.dispatched",
+                  payload={"task_id": "t", "product_id": "p", "repo": "r"})
+    events.append(run_id="t", actor="spec-1", type="spec.drafted", payload={"feature": "x"})
+    events.append(run_id="t", actor="design-1", type="design.produced",
+                  payload={"feature": "x"})
+    events.append(run_id="t", actor="@arch", type="gate.decided",
+                  payload={"type": "technical_design", "decision": "request_changes",
+                           "rationale": "x", "feedback_bundle_id": "fb-d-1",
+                           "attributed_to": {"email": "a", "role": "architect"}})
+    resp = events.append(run_id="t", actor="design-agent", type="agent_response.posted",
+                          payload={"task_id": "t", "agent": "design",
+                                   "kind": "technical_design", "feature": "x",
+                                   "bundle_id": "fb-d-1",
+                                   "summary_of_changes": "redrafted design",
+                                   "addresses": [{"comment_id": "cmt-d-1",
+                                                  "action": "addressed",
+                                                  "note": "ok", "ref_section": None}],
+                                   "ref": {"repo": "r", "branch": "b",
+                                           "path": "p", "commit": "rd"}})
+    state = project_task(events.read(), "t")
+    assert state.stage == "technical_gate"
+    assert "technical_design" in state.open_gates
+    assert state.open_gates["technical_design"]["seq"] == resp["seq"]

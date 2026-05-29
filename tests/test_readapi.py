@@ -182,7 +182,7 @@ def test_get_task_returns_projected_state(api, events):
     out = api.get_task(ARCH, "maestro", "run-9c2e3f")
     assert out == {"task_id": "run-9c2e3f", "product_id": "maestro", "stage": "intake",
                    "status": "active", "branch": None, "pr": None, "merged": False,
-                   "gates": [], "open_gates": [], "comments": []}
+                   "gates": [], "open_gates": [], "comments": [], "agent_responses": []}
 
 
 def test_get_task_unknown_is_404(api):

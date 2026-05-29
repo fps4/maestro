@@ -154,13 +154,44 @@ Same protocol as the spec agent, with these design-specific notes:
 3. **Re-emit `maestro.summary`** if the change is material.
 4. **Ripple to the task list.** A removed AC drops its tasks; an added AC adds at least one. Renumber task ids only if no in-flight implementation references them; otherwise append.
 5. **Commit on the same branch, same path.**
-6. **Emit `agent_response.posted`** ([ADR-0022](../../docs/architecture/decisions/0022-agent-response-event.md)) with one entry per bundle item, **in bundle order**, each:
-   - `action`: `addressed` | `deferred` | `rejected`. `deferred` is genuinely an escape hatch (e.g. "this implementation detail belongs at the merge gate, not the design gate"); use it honestly.
-   - `note`: one sentence, ≤ 240 chars, required for every entry.
-   - `ref_section.locator`: where the change landed (e.g. `{ heading: "data-model" }`); `null` for `deferred` / `rejected`.
-   - `summary_of_changes` at the top — one paragraph, audience-aware.
+6. **Emit `agent_response.posted`** ([ADR-0022](../../docs/architecture/decisions/0022-agent-response-event.md)) — the harness emits it for you from a structured block you append to the artefact response (see *Format on a re-draft* below).
 
-   **No silent skipping.** Every bundle item gets an entry. A bundle is closed by exactly one response.
+### Format on a re-draft
+
+The same response text the harness reads carries **two pieces**:
+
+1. The design markdown — frontmatter + body — exactly as in a first draft.
+2. **One trailing fenced block** named `json maestro-response`:
+
+````
+```json maestro-response
+{
+  "bundle_id": "fb-...",
+  "summary_of_changes": "One paragraph (≤ 120 words / 800 chars), plain language, audience-aware.",
+  "addresses": [
+    {
+      "comment_id": "cmt-...",
+      "action": "addressed",
+      "note": "One sentence ≤ 240 chars.",
+      "ref_section": { "locator": { "heading": "data-model" } }
+    }
+  ]
+}
+```
+````
+
+Rules the harness enforces:
+
+- The block is **the last thing** in the response, after the design markdown.
+- `bundle_id` matches the input bundle's id.
+- `addresses[]` contains **one entry per `items[]` entry in the bundle, in bundle order**, each with a `comment_id` matching the bundle's. No silent skipping.
+- `action` is `addressed` | `deferred` | `rejected`. `deferred` is genuinely an escape hatch (e.g. "this implementation detail belongs at the merge gate, not the design gate"); use it honestly. `note` is required for every entry, ≤ 240 chars.
+- `summary_of_changes` is ≤ 120 words / 800 chars, plain language (same envelope as `maestro.summary`).
+- `ref_section.locator` uses heading slugs for `technical_design` (e.g. `{ heading: "data-model" }`); `null` for `deferred` / `rejected`.
+
+The harness fills `artefact.ref`, `attributed_to`, and `emitted_at`. The harness **strips the trailing block from the committed file**, so the design in the repo stays clean — only frontmatter + body.
+
+A bundle is closed by exactly one response.
 
 ## What never to do
 

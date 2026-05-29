@@ -80,17 +80,83 @@ def run_spec_for_run(run_id: str, *, events: EventLog, register: Register,
 
     prompt = _load_prompt(prompt_path)
     agent = SpecAgent(prompt, model, events, github)
-    inputs = {
+
+    # Re-draft detection: when LangGraph routes ``request_changes`` back to spec_node, this helper
+    # runs a second time. The discriminator is **an unconsumed ``feedback_bundle.created`` event**
+    # — the one the workspace write API emitted on the most recent ``request_changes`` decision,
+    # not yet closed by an ``agent_response.posted``. If present, the harness takes the re-draft
+    # path (parse trailing fenced block, emit ``agent_response.posted``, re-open the gate).
+    feedback_bundle = _active_feedback_bundle(events, run_id, gate_type="functional")
+    target_path = None
+    file_sha = None
+    if feedback_bundle is not None:
+        feature_slug = _feature_slug_for_run(events, run_id)
+        if feature_slug:
+            target_path = TARGET_PATH_FMT.format(feature=feature_slug)
+            file_sha = _existing_file_sha(events, run_id, repo, branch, target_path)
+
+    inputs: dict = {
         "task": {"task_id": run_id, "product_id": product_id, "repo": repo,
                  "stage": "intake"},
         "product": {"id": product.id, "name": product.name,
                     "product_type": product.product_type, "repos": list(product.repos)},
         "intent": intent,
     }
-    return agent.run(run_id=run_id, repo=repo, branch=branch, inputs=inputs)
+    if feedback_bundle is not None:
+        inputs["feedback_bundle"] = feedback_bundle
+
+    return agent.run(run_id=run_id, repo=repo, branch=branch, inputs=inputs,
+                     target_path=target_path, file_sha=file_sha)
 
 
 # --- helpers ---------------------------------------------------------------------------------------
+
+
+def _active_feedback_bundle(events: EventLog, run_id: str, *,
+                            gate_type: str) -> Optional[dict]:
+    """Return the most recent ``feedback_bundle.created`` event payload for this gate type that
+    has **not** yet been closed by a matching ``agent_response.posted`` — that's the bundle the
+    re-drafting agent must address now.
+
+    For M1 dogfood the active set is usually 0 or 1; the lookup is linear over the task's events
+    (one task fits comfortably in memory), no separate index needed."""
+    raw = events.read(run_id)
+    closed_ids = {e["payload"].get("bundle_id") for e in raw
+                  if e["type"] == "agent_response.posted"}
+    for e in reversed(raw):
+        if e["type"] != "feedback_bundle.created":
+            continue
+        p = e["payload"]
+        gate = (p.get("gate") or {}).get("type")
+        if gate != gate_type:
+            continue
+        if p.get("bundle_id") in closed_ids:
+            continue
+        return p
+    return None
+
+
+def _existing_file_sha(events: EventLog, run_id: str, repo: str, branch: str,
+                       path: str) -> Optional[str]:
+    """Find the file_sha of the most recent ``artefact.committed`` event for ``(repo, branch,
+    path)`` — what we pass to GitHub on a re-draft so the PUT is an update (sha-required) rather
+    than a create (sha-forbidden)."""
+    for e in reversed(events.read(run_id)):
+        if e["type"] != "artefact.committed":
+            continue
+        p = e["payload"]
+        if (p.get("repo") == repo and p.get("branch") == branch and p.get("path") == path):
+            return p.get("file_sha")
+    return None
+
+
+def _feature_slug_for_run(events: EventLog, run_id: str) -> Optional[str]:
+    """The feature slug from the most recent ``spec.drafted`` event for this run — on a re-draft
+    we already committed at least one spec, and the slug stays stable across the cycle."""
+    for e in reversed(events.read(run_id)):
+        if e["type"] == "spec.drafted":
+            return (e.get("payload") or {}).get("feature")
+    return None
 
 
 def _find_dispatched(events: EventLog, run_id: str) -> dict:

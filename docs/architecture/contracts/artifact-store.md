@@ -1,7 +1,7 @@
 ---
 title: "Contract: the ArtifactStore egress"
 status: current
-last_updated: 2026-05-29
+last_updated: 2026-05-30
 owners: [architect]
 maestro:
   feature: artifact-store
@@ -34,13 +34,15 @@ egress (ADR-0002).
 
 ## Scope
 
-| In (M2 #1 — store, this doc as it lands)                                | Out (later slices, extend additively)                                       |
+| In (M2 #1 + M2 #2 — store half complete, this doc as it lands)           | Out (later slices, extend additively)                                       |
 |---|---|
-| The `ArtifactStore` Python Protocol (`put`, `head`, `exists`, `delete_product`) | Presigned-URL share path (`presigned_get`) — **M2 #2** with the MinIO backend |
-| The `ArtifactRef` value type and its canonical `storage_uri` shape       | HTTP read endpoint (`GET /api/products/{p}/artifacts/{key}` → 302 to presigned URL) — **M2 #2/#3** |
-| The in-memory backend (test fixture + smoke runs)                        | The MinIO backend on ds1 — **M2 #2**; AWS S3 backend — **M4 commercial onboarding** |
-| Per-product isolation (key namespacing + `delete_product` confinement)   | The `artifact.stored` event wiring — **M2 #2**, where the spec/design agent first emits an artefact |
-| Key/URI validation and overwrite semantics                               | Backup / replication / retention tooling (operational, ADR-0012)            |
+| The `ArtifactStore` Python Protocol (`put`, `head`, `exists`, `delete_product`) | Presigned-URL share path (`presigned_get`) — **M2 #3** with the share half |
+| The `ArtifactRef` value type and its canonical `storage_uri` shape       | HTTP read endpoint (`GET /api/products/{p}/artifacts/{key}` → 302 to presigned URL) — **M2 #3** |
+| The **in-memory** backend (test fixture + smoke runs) — **M2 #1**        | AWS S3 backend — **M4 commercial onboarding** (same code path, different `endpoint_url`) |
+| The **MinIO** backend (the M2 dogfood per Q4) — **M2 #2**                | The `artifact.stored` event wiring — **M2 #3+**, where the spec/design agent first emits an artefact |
+| `ArtifactStoreConfig` loader + `make_store` factory — **M2 #2**          | Per-product backend override — **M4** (the first commercial product opting into S3) |
+| Per-product isolation (key namespacing + `delete_product` confinement)   | Backup / replication / retention tooling (operational, ADR-0012)            |
+| Key/URI validation and overwrite semantics                               |                                                                              |
 
 Per-call cost is computed by the backend; the contract carries `size` and `sha256` only — no cost
 model.
@@ -144,13 +146,13 @@ Per ADR-0012:
 
 | Backend       | When                                                        | Notes                                                                 |
 |---|---|---|
-| **in-memory** | tests, and any code path that needs an ephemeral store      | M2 #1 ships this; not durable, not shared, no presigned URLs           |
-| **MinIO**     | the instance default — maestro itself runs on this (Q4)     | M2 #2 lands; storage_uri prefix `minio://<endpoint>/<bucket>/...`     |
-| **AWS S3**    | a product's per-product opt-in (commercial products at M4)  | shares the same Protocol — backend is configuration, not code         |
+| **in-memory** | tests, and any code path that needs an ephemeral store      | M2 #1; not durable, not shared, no presigned URLs. URI: `memory://<product_id>/<key>` |
+| **MinIO**     | the instance default — maestro itself runs on this (Q4)     | M2 #2 (shipped via `boto3` against `endpoint_url`); URI: `minio://<bucket>/<product_id>/<key>` — **endpoint is *not* in the URI** so moving the MinIO host doesn't invalidate event-log references |
+| **AWS S3**    | a product's per-product opt-in (commercial products at M4)  | shares the same Protocol — backend is configuration, not code; URI: `s3://<bucket>/<product_id>/<key>` |
 
 Backend selection is a **per-instance default + per-product override**, the same shape `deploy_target` uses (ADR-0007). The resolver lives next to the store and is exercised by config tests; the egress is backend-agnostic.
 
-For M2 #1, only the in-memory backend ships. Backend selection is the entire content of M2 #2.
+`storage.make_store(config)` is the factory; `storage.load_artifact_store_config(d)` parses an `artifact_store:` block. Per-product override lands at M4 with the first commercial product.
 
 ## Configuration
 

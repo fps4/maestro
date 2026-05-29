@@ -47,6 +47,8 @@ class GitHubClient(Protocol):
     def create_branch(self, repo: str, branch: str, from_ref: str) -> dict: ...
     def open_pull_request(self, repo: str, head: str, base: str, title: str, body: str) -> dict: ...
     def merge_pull_request(self, repo: str, number: int, method: str) -> dict: ...
+    def put_file(self, repo: str, path: str, content: str, branch: str, message: str,
+                 sha: Optional[str] = None) -> dict: ...
 
 
 def append_merge_approval(events: EventLog, run_id: str, repo: str, pr_number: int,
@@ -87,6 +89,36 @@ class GitHubAdapter:
                             payload={"repo": repo, "branch": head, "pr_number": pr["number"],
                                      "pr_url": pr.get("url")})
         return pr
+
+    def commit_artefact(self, run_id: str, repo: str, branch: str, path: str, content: str,
+                        message: str, sha: Optional[str] = None) -> dict:
+        """Commit an agent-produced artefact (a spec or design markdown) to a ``maestro/*`` branch.
+
+        This is the agent's write path: the agent reasons through the :class:`ModelClient`, hands
+        the artefact text to this adapter, and the adapter does the I/O + emits the
+        ``artefact.committed`` event (one event per commit, so the audit replays exactly which
+        commits the crew produced — ADR-0008/0009).
+
+        The same ``maestro/*``-only check :meth:`open_branch` enforces is applied here — the
+        adapter is the **only** code path into a non-default GitHub write, so the policy lives in
+        one place. The default-branch refusal is structural: there is no overload that targets a
+        default branch, so a misuse fails fast at this guard and is logged.
+        """
+        if not branch.startswith("maestro/"):
+            raise ValueError(
+                f"agents commit only to maestro/* branches, got {branch!r} (standards/git.yaml)"
+            )
+        result = self._client.put_file(repo, path, content, branch, message, sha=sha)
+        self._events.append(
+            run_id=run_id, actor=self._actor, type="artefact.committed",
+            target=f"{repo}:{branch}:{path}",
+            payload={"repo": repo, "branch": branch, "path": path,
+                     "commit_sha": result.get("commit_sha"),
+                     "file_sha": result.get("file_sha"),
+                     "message": message,
+                     "updated": sha is not None},
+        )
+        return result
 
     # --- the safety boundary --------------------------------------------------------------------
 

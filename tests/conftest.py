@@ -80,6 +80,10 @@ class FakeGitHubClient:
         self.branches = []
         self.prs = []
         self.merges = []
+        # files: ``{(repo, branch, path) -> {content, file_sha}}`` so commit_artefact tests can
+        # assert "the file landed" without faking the whole GitHub API surface.
+        self.files: dict[tuple[str, str, str], dict] = {}
+        self.put_file_calls: list[dict] = []
 
     def create_branch(self, repo, branch, from_ref):
         self.branches.append((repo, branch, from_ref))
@@ -93,6 +97,22 @@ class FakeGitHubClient:
     def merge_pull_request(self, repo, number, method):
         self.merges.append((repo, number, method))
         return {"merged": True, "sha": f"deadbeef{number}"}
+
+    def put_file(self, repo, path, content, branch, message, sha=None):
+        """Mimic GitHub's PUT /contents — sha REQUIRED on update, MUST be absent on create."""
+        existing = self.files.get((repo, branch, path))
+        if existing and sha is None:
+            raise RuntimeError(f"PUT /contents on existing file {path!r} without sha (GitHub 422)")
+        if existing and existing["file_sha"] != sha:
+            raise RuntimeError(f"sha mismatch on {path!r} (GitHub 409)")
+        if not existing and sha is not None:
+            raise RuntimeError(f"sha given for new file {path!r} (GitHub 422)")
+        file_sha = f"blob-{len(self.put_file_calls) + 1:08x}"
+        commit_sha = f"commit-{len(self.put_file_calls) + 1:08x}"
+        self.files[(repo, branch, path)] = {"content": content, "file_sha": file_sha}
+        self.put_file_calls.append({"repo": repo, "branch": branch, "path": path,
+                                    "message": message, "sha": sha})
+        return {"commit_sha": commit_sha, "file_sha": file_sha, "path": path}
 
 
 @pytest.fixture

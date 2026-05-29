@@ -24,7 +24,7 @@ maestro = "orchestrator.cli:main"
 
 # The engine packages match the directory map in CODEBASE.md (top-level components).
 [tool.setuptools]
-packages = ["model", "orchestrator", "adapters", "adapters.github"]
+packages = ["model", "orchestrator", "adapters", "adapters.github", "storage"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

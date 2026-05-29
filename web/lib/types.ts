@@ -131,6 +131,19 @@ export interface AgentResponse {
   seq: number;
 }
 
+// Every artefact commit on a task — producer events (spec.drafted / design.produced) and
+// refinement responses (agent_response.posted) — in chronological order. The diff-of-artefact
+// view chains adjacent entries for the same (kind, path) into the side-by-side view.
+export interface ArtefactPublished {
+  agent: 'spec' | 'design';
+  kind: SpecKind;
+  feature: string | null;
+  ref: SpecRef;
+  via: 'producer' | 'response';
+  published_at: number;
+  seq: number;
+}
+
 export interface TaskDetail {
   task_id: string;
   product_id: string;
@@ -143,6 +156,7 @@ export interface TaskDetail {
   open_gates: OpenGate[];
   comments: Comment[];
   agent_responses: AgentResponse[];
+  artefacts: ArtefactPublished[];
 }
 
 // --- write-API response shapes (workspace-write-api.md) ----------------------------------------

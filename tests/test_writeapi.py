@@ -1,4 +1,4 @@
-"""The workspace write API service core (workspace-write-api.md) — dispatch + comments.
+"""The workspace write API service core (workspace-write-api.md) — dispatch + comments + decisions.
 
 Covers the M1 flows:
 
@@ -8,6 +8,10 @@ Covers the M1 flows:
 * ``POST /api/products/{p}/tasks/{t}/comments`` — any-participant role; task lookup; per-product
   isolation by product-id mismatch; anchor shape validation; in_reply_to consistency;
   ``comment.posted`` event emission and projection.
+* ``POST /api/products/{p}/tasks/{t}/gates/{gate_id}/decisions`` — role authorization via
+  :class:`RoutingResolver` (US-0012), required ``Idempotency-Key`` + ``If-Match``, ``gate.decided``
+  event shape, ``request_changes`` → ``feedback_bundle.created`` snapshot, terminal effects
+  (approve advances stage; reject cancels; request_changes returns to producer).
 """
 import pytest
 
@@ -15,8 +19,11 @@ from orchestrator.readapi import NotFound, Unauthenticated
 from orchestrator.writeapi import (
     MAX_COMMENT_CHARS,
     MAX_INTENT_CHARS,
+    MAX_RATIONALE_CHARS,
     AnchorUnresolved,
     ForbiddenRole,
+    GateAlreadyResolved,
+    GateStateMoved,
     IdempotencyMismatch,
     ValidationFailed,
 )
@@ -308,3 +315,254 @@ def test_post_comment_idempotency_mismatch_is_409(write_api, dispatched):
     write_api.post_comment(ARCH, "maestro", dispatched, body="one", idempotency_key="ck-2")
     with pytest.raises(IdempotencyMismatch):
         write_api.post_comment(ARCH, "maestro", dispatched, body="two", idempotency_key="ck-2")
+
+
+# --- gate-decision endpoint ----------------------------------------------------------------------
+
+@pytest.fixture
+def gated(write_api, events):
+    """A dispatched task with a pending **functional** gate.
+
+    Seeds the opener event the spec agent will emit when US-0010 lands. Tests can decide the gate
+    immediately, against the seq of the opener (the projected ``open_gates[type].seq``)."""
+    out = write_api.dispatch_task(ARCH, "maestro", intent="Add export to /reports")
+    opener = events.append(run_id=out["task_id"], actor="spec-agent",
+                           type="spec.drafted", target=f"task:{out['task_id']}",
+                           payload={"task_id": out["task_id"], "product_id": "maestro",
+                                    "ref": {"repo": REPO, "branch": "maestro/run-1",
+                                            "path": "docs/spec.md", "commit": "abc"}})
+    return {"task_id": out["task_id"], "opener_seq": opener["seq"],
+            "gate_type": "functional", "gate_id": f"gate-{opener['seq']:04x}"}
+
+
+def test_decide_approve_emits_gate_decided_and_advances_stage(write_api, events, gated):
+    """Happy path: architect approves the functional gate on a technical product (US-0012 routing)."""
+    from orchestrator.projection import project_task
+    out = write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                                decision="approve",
+                                rationale="EARS criteria cover the empty-result case.",
+                                if_match=gated["opener_seq"],
+                                idempotency_key="dk-1")
+    assert out["task_id"] == gated["task_id"]
+    # M1 simplification: the URL-form gate_id (the slug) is normalised to the deterministic opaque
+    # id (gate-<opener_seq:04x>) on the response so a workspace UI sees a stable handle either way.
+    assert out["gate_id"] == gated["gate_id"]
+    assert out["gate"] == {"type": "functional", "decision": "approve", "seq": out["event_seq"]}
+    assert out["attributed_to"] == {"email": ARCH, "role": "architect"}
+    assert out["decided_at"].endswith("Z") and "T" in out["decided_at"]
+    assert out["feedback_bundle_id"] is None
+
+    [evt] = [e for e in events.read() if e["type"] == "gate.decided"]
+    assert evt["payload"]["decision"] == "approve"
+    assert evt["payload"]["type"] == "functional"
+    assert evt["payload"]["gate_id"] == gated["gate_id"]
+    assert evt["payload"]["if_match_seq"] == gated["opener_seq"]
+    assert evt["payload"]["attributed_to"] == {
+        "email": ARCH, "role": "architect", "product_id": "maestro",
+    }
+
+    state = project_task(events.read(), gated["task_id"])
+    # The gate closed; the next stage is *not* advanced by this slice (the spec/design pipeline
+    # carries that). What the projection asserts: the gate decision is recorded, open_gates is empty.
+    assert state.open_gates == {}
+    assert [g.gate for g in state.gates] == ["functional"]
+    assert state.gates[0].decision == "approve"
+
+
+def test_decide_accepts_opaque_gate_id_form(write_api, events, gated):
+    """The URL may also carry the opaque ``gate-<seq:04x>`` form the projection mints."""
+    out = write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_id"],
+                                decision="approve", rationale="ok",
+                                if_match=gated["opener_seq"],
+                                idempotency_key="dk-1b")
+    assert out["gate_id"] == gated["gate_id"]
+
+
+def test_decide_reject_cancels_the_task(write_api, events, gated):
+    from orchestrator.projection import project_task
+    out = write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                                decision="reject",
+                                rationale="Scope is out of bounds for this milestone.",
+                                if_match=gated["opener_seq"],
+                                idempotency_key="dk-2")
+    assert out["gate"]["decision"] == "reject"
+    state = project_task(events.read(), gated["task_id"])
+    assert state.status == "cancelled"
+
+
+def test_decide_request_changes_returns_stage_and_emits_bundle(write_api, events, gated):
+    """``request_changes`` returns the stage to the producer (``intake`` for functional) and emits
+    a ``feedback_bundle.created`` event snapshotting the open anchored comments (ADR-0020)."""
+    from orchestrator.projection import project_task
+    # An anchored architect comment on the gated functional spec (the bundle should include it).
+    write_api.post_comment(ARCH, "maestro", gated["task_id"],
+                           body="AC-3 is missing the empty-result case.",
+                           anchor={"artefact": {"kind": "functional_spec",
+                                                "ref": {"repo": REPO, "branch": "maestro/run-1",
+                                                        "path": "docs/spec.md", "commit": "abc"}},
+                                   "locator": {"criterion_id": "AC-3"}},
+                           idempotency_key="ck-rc-1")
+    # An unanchored comment (per ADR-0020 §composition-rule, excluded from items[] — rolled into
+    # rationale by the agent boundary, not here).
+    write_api.post_comment(ARCH, "maestro", gated["task_id"], body="Loose remark.",
+                           idempotency_key="ck-rc-2")
+    # A comment anchored to a DIFFERENT artefact kind (technical_design) — must be excluded.
+    write_api.post_comment(ARCH, "maestro", gated["task_id"], body="design note",
+                           anchor={"artefact": {"kind": "technical_design",
+                                                "ref": {"repo": REPO, "branch": "maestro/run-1",
+                                                        "path": "docs/design.md", "commit": "abc"}},
+                                   "locator": {"heading": "overview"}},
+                           idempotency_key="ck-rc-3")
+
+    out = write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                                decision="request_changes",
+                                rationale="Address AC-3 and re-publish.",
+                                if_match=gated["opener_seq"],
+                                idempotency_key="dk-rc")
+    assert out["feedback_bundle_id"] is not None and out["feedback_bundle_id"].startswith("fb-")
+
+    raw = events.read()
+    [decided] = [e for e in raw if e["type"] == "gate.decided"]
+    [bundle] = [e for e in raw if e["type"] == "feedback_bundle.created"]
+    assert decided["payload"]["feedback_bundle_id"] == out["feedback_bundle_id"]
+    assert bundle["payload"]["bundle_id"] == out["feedback_bundle_id"]
+    assert bundle["payload"]["gate"] == {"id": gated["gate_id"], "type": "functional"}
+    assert bundle["payload"]["rationale"] == "Address AC-3 and re-publish."
+    # Only the functional_spec-anchored comment is in items[] — unanchored is excluded; the
+    # technical_design-anchored comment is wrong-kind for a functional gate.
+    [item] = bundle["payload"]["items"]
+    assert item["anchor"]["locator"] == {"criterion_id": "AC-3"}
+    assert item["suggested_change"] is None
+
+    state = project_task(raw, gated["task_id"])
+    assert state.stage == "intake"            # request_changes returns to the spec producer
+    assert state.open_gates == {}              # the open gate closed; next spec.drafted re-opens
+
+
+def test_decide_unknown_decision_is_422(write_api, gated):
+    with pytest.raises(ValidationFailed):
+        write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                              decision="defer", if_match=gated["opener_seq"],
+                              idempotency_key="dk-bad")
+
+
+def test_decide_request_changes_requires_rationale(write_api, gated):
+    with pytest.raises(ValidationFailed):
+        write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                              decision="request_changes",
+                              if_match=gated["opener_seq"], idempotency_key="dk-r1")
+    with pytest.raises(ValidationFailed):
+        write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                              decision="reject", rationale="   ",
+                              if_match=gated["opener_seq"], idempotency_key="dk-r2")
+
+
+def test_decide_oversize_rationale_is_422(write_api, gated):
+    with pytest.raises(ValidationFailed):
+        write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                              decision="approve",
+                              rationale="x" * (MAX_RATIONALE_CHARS + 1),
+                              if_match=gated["opener_seq"], idempotency_key="dk-ros")
+
+
+def test_decide_requires_idempotency_key(write_api, gated):
+    with pytest.raises(ValidationFailed):
+        write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                              decision="approve", if_match=gated["opener_seq"])
+
+
+def test_decide_requires_if_match(write_api, gated):
+    with pytest.raises(ValidationFailed):
+        write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                              decision="approve", idempotency_key="dk-no-im")
+
+
+def test_decide_stale_if_match_is_409_gate_state_moved(write_api, gated):
+    with pytest.raises(GateStateMoved):
+        write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                              decision="approve",
+                              if_match=gated["opener_seq"] - 1, idempotency_key="dk-stale")
+
+
+def test_decide_already_resolved_is_409(write_api, gated):
+    """After a terminal decision, a second decision attempt on the same opening gets 409 —
+    distinguishing 'gate gone' from 'gate never existed' (workspace-write-api.md §POST-decisions)."""
+    write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                          decision="approve",
+                          if_match=gated["opener_seq"], idempotency_key="dk-first")
+    with pytest.raises(GateAlreadyResolved):
+        write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                              decision="approve",
+                              if_match=gated["opener_seq"], idempotency_key="dk-second")
+
+
+def test_decide_no_pending_gate_is_404(write_api, dispatched):
+    """A dispatched task with no opener has no pending gate of any type — 404, not 409."""
+    with pytest.raises(NotFound):
+        write_api.decide_gate(ARCH, "maestro", dispatched, "functional",
+                              decision="approve", if_match=99, idempotency_key="dk-none")
+
+
+def test_decide_wrong_role_is_403(write_api, gated):
+    """@dev is functional_reviewer, not architect; reviewers.yaml routes a TECHNICAL product's
+    functional gate to architect, so @dev's attempt is 403 (the resource is visible — they're a
+    participant — but the decision authority is not theirs)."""
+    with pytest.raises(ForbiddenRole):
+        write_api.decide_gate(DEV, "maestro", gated["task_id"], gated["gate_type"],
+                              decision="approve",
+                              if_match=gated["opener_seq"], idempotency_key="dk-dev")
+
+
+def test_decide_unknown_product_is_404(write_api, gated):
+    with pytest.raises(NotFound):
+        write_api.decide_gate(ARCH, "ghost", gated["task_id"], gated["gate_type"],
+                              decision="approve",
+                              if_match=gated["opener_seq"], idempotency_key="dk-ghost")
+
+
+def test_decide_unknown_task_is_404(write_api):
+    with pytest.raises(NotFound):
+        write_api.decide_gate(ARCH, "maestro", "run-no-such", "functional",
+                              decision="approve", if_match=1, idempotency_key="dk-ut")
+
+
+def test_decide_outsider_is_404(write_api, gated):
+    with pytest.raises(NotFound):
+        write_api.decide_gate(OUTSIDER, "maestro", gated["task_id"], gated["gate_type"],
+                              decision="approve",
+                              if_match=gated["opener_seq"], idempotency_key="dk-out")
+
+
+def test_decide_idempotency_replay_returns_cached(write_api, events, gated):
+    """Same (participant, endpoint, key) + same body → same response; only one gate.decided event."""
+    first = write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                                  decision="approve", rationale="green",
+                                  if_match=gated["opener_seq"], idempotency_key="dk-rep")
+    second = write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                                   decision="approve", rationale="green",
+                                   if_match=gated["opener_seq"], idempotency_key="dk-rep")
+    assert first == second
+    assert len([e for e in events.read() if e["type"] == "gate.decided"]) == 1
+
+
+def test_decide_idempotency_mismatch_is_409(write_api, gated):
+    write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                          decision="approve", rationale="green",
+                          if_match=gated["opener_seq"], idempotency_key="dk-mm")
+    with pytest.raises(IdempotencyMismatch):
+        write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                              decision="reject", rationale="actually no",
+                              if_match=gated["opener_seq"], idempotency_key="dk-mm")
+
+
+def test_decide_request_changes_with_no_anchored_comments_emits_empty_items(write_api, events,
+                                                                            gated):
+    """A request-changes with no anchored comments produces a bundle with ``items: []``. The
+    rationale alone is the hand-off; no item is fabricated."""
+    out = write_api.decide_gate(ARCH, "maestro", gated["task_id"], gated["gate_type"],
+                                decision="request_changes",
+                                rationale="Re-do AC-3 wording.",
+                                if_match=gated["opener_seq"], idempotency_key="dk-rc-empty")
+    [bundle] = [e for e in events.read() if e["type"] == "feedback_bundle.created"]
+    assert bundle["payload"]["items"] == []
+    assert out["feedback_bundle_id"] is not None

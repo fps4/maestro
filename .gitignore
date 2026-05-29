@@ -19,10 +19,11 @@ config/*.private.yaml
 logs/test_reports/*
 !logs/test_reports/README.md
 
-# OS / editor
+# OS / editor / coding-agent harness
 .DS_Store
 .obsidian/
 *.swp
+.claude/
 
 # Python runtime
 __pycache__/

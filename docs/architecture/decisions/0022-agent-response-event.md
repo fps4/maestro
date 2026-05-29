@@ -1,7 +1,7 @@
 ---
 title: "0022: The agent response event — what the spec/design agent emits to close a refinement cycle"
-status: proposed
-date: 2026-05-28
+status: accepted
+date: 2026-05-29
 related:
   - 0008-system-of-record-and-persistence.md
   - 0009-audit-logging-and-observability.md

@@ -1,7 +1,7 @@
 ---
 title: maestro workspace — UX design (use-cases, journey, layout)
-status: draft
-last_updated: 2026-05-28
+status: current
+last_updated: 2026-05-29
 owners: [architect]
 related:
   - docs/architecture/webapp-concept.md

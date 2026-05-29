@@ -1,60 +1,31 @@
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-// Non-functional stub: lays out the three things US-0030 says a reviewer does on a gate —
-// read the repo-sourced spec, discuss in a thread, decide. Wired to the orchestrator in a later story.
+// The old /gates stub has been superseded — gate decisions live on the per-task page
+// (/products/{p}/tasks/{t}), so a reviewer reaches the gate by clicking into a task from the
+// specs index. This page now just points the curious there.
 export default function GatesPage() {
   return (
-    <main className="container mx-auto max-w-5xl px-6 py-12">
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-sm text-muted-foreground">
-            <Link href="/" className="hover:underline">
-              maestro
-            </Link>{' '}
-            / functional gate
-          </p>
-          <h1 className="mt-1 text-2xl font-semibold tracking-tight">Acme Billing — Invoice Export</h1>
-        </div>
-        <span className="rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">stub · no backend</span>
-      </div>
-
-      <div className="mt-8 grid gap-6 md:grid-cols-3">
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <CardTitle>Spec</CardTitle>
-            <CardDescription>Rendered one-way from the product repo — read-only (ADR-0008).</CardDescription>
-          </CardHeader>
-          <CardContent className="text-sm text-muted-foreground">
-            <p>The functional spec (EARS criteria) would render here from the repo&apos;s markdown.</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Decision</CardTitle>
-            <CardDescription>Role-authorized + attributed (ADR-0011/0009).</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            <Button disabled>Approve</Button>
-            <Button variant="outline" disabled>
-              Request changes
-            </Button>
-            <Button variant="destructive" disabled>
-              Reject
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
-
+    <main className="container mx-auto max-w-3xl px-6 py-12">
+      <p className="text-sm text-muted-foreground">
+        <Link href="/" className="hover:underline">
+          maestro
+        </Link>{' '}
+        / gates
+      </p>
+      <h1 className="mt-1 text-2xl font-semibold tracking-tight">Gates live on tasks</h1>
       <Card className="mt-6">
         <CardHeader>
-          <CardTitle>Discussion</CardTitle>
-          <CardDescription>Per-gate thread; each message becomes an event via the orchestrator.</CardDescription>
+          <CardTitle>Open a task to decide its gate</CardTitle>
+          <CardDescription>
+            From a product page (the home → product list), open a spec or design to see its task —
+            or click <em>view task</em> in the specs index. M3 adds the per-participant inbox that
+            replaces this page (US-0030 §S6).
+          </CardDescription>
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
-          <p>spec-agent: 2 open questions flagged in the spec. Awaiting your decision on this gate.</p>
+          For M1 dogfood the architect navigates by product → task; a cross-product inbox is
+          deliberately out of scope until M3.
         </CardContent>
       </Card>
     </main>

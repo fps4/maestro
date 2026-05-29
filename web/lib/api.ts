@@ -4,10 +4,11 @@
 // API URL or the caller identity — the webapp is a thin renderer that calls this API and nothing else
 // (ADR-0015). Do not import this from a 'use client' module.
 
-import type { Product, SpecDetail, SpecsIndex } from '@/lib/types';
+import { callerIdentity } from '@/lib/identity';
+import type { Product, SpecDetail, SpecsIndex, TaskDetail } from '@/lib/types';
 
 // `||` (not `??`): treat an empty env value — common in Docker/compose — as unset, not as a base URL.
-const API_BASE = process.env.MAESTRO_API_URL || 'http://127.0.0.1:8800';
+export const API_BASE = process.env.MAESTRO_API_URL || 'http://127.0.0.1:8800';
 
 export class ApiError extends Error {
   constructor(
@@ -20,16 +21,9 @@ export class ApiError extends Error {
   }
 }
 
-// S1 identity: a dev/stub forwarded as X-Maestro-Identity (ADR-0019). In production the Cloudflare
-// Access + component-auth edge establishes the user; this is the seam where the webapp forwards that
-// identity to the API. Until the auth slice, the local stub stands in.
-function identity(): string | undefined {
-  return process.env.MAESTRO_DEV_IDENTITY || undefined;
-}
-
 async function get<T>(path: string): Promise<T> {
   const headers: Record<string, string> = { Accept: 'application/json' };
-  const id = identity();
+  const id = await callerIdentity();
   if (id) headers['X-Maestro-Identity'] = id;
 
   let res: Response;
@@ -79,5 +73,11 @@ export function getSpec(
   const qs = branch ? `?branch=${encodeURIComponent(branch)}` : '';
   return get<SpecDetail>(
     `/api/products/${encodeURIComponent(productId)}/specs/${encodeURIComponent(feature)}/${encodeURIComponent(kind)}${qs}`,
+  );
+}
+
+export function getTask(productId: string, taskId: string): Promise<TaskDetail> {
+  return get<TaskDetail>(
+    `/api/products/${encodeURIComponent(productId)}/tasks/${encodeURIComponent(taskId)}`,
   );
 }

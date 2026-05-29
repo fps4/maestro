@@ -1,7 +1,8 @@
 ---
 title: "M1 — Spec → design, in the workspace"
-status: draft
-last_updated: 2026-05-28
+status: current
+last_updated: 2026-05-29
+closed_on: 2026-05-29
 owners: [architect]
 related:
   - docs/roadmap.md
@@ -14,6 +15,10 @@ related:
   - docs/architecture/decisions/0016-merge-after-workspace-approval.md
   - docs/architecture/decisions/0018-workspace-read-api-and-frontmatter-index.md
 ---
+
+> **✅ M1 closed 2026-05-29.** All four "Definition of M1 complete" criteria pass against the maestro product itself (the dogfood technical product). Stories US-0010 / US-0012 / US-0013 / US-0032 are `done`. The engine stream (LangGraph + spec agent + design agent + refinement loop) and the workspace surface (S2 Discuss + S3 Decide + the new-task affordance) shipped across **10 engineering slices** (PRs #31–#42); see *What M1 actually shipped* below. **M2** opens next — [`m2-build-to-merge.md`](m2-build-to-merge.md).
+>
+> This doc remains as the scoping record for what M1 set out to ship and the open questions it resolved during engineering. New conventions surfaced and ratified mid-build are noted in *What M1 actually shipped*.
 
 ## How to read this
 
@@ -100,3 +105,39 @@ M1 completion is **not** the MVP. The MVP (adoption rung 2) requires M2 — buil
 | **Intent intake mechanism.** With Telegram/Slack off the M1 critical path, how does the architect submit intent — a workspace "new task" affordance, or a CLI/`maestro` command seeding the event log? | @architect | **Resolved 2026-05-28** (at US-0010 acceptance). A **minimal workspace "new task" affordance** — single form (product + free-text description) posting to the orchestrator's dispatch endpoint. Keeps every interaction on one surface from the start; a `maestro` CLI seed remains a valid ops back-door but is not the M1 critical-path intake. |
 | **Write-path contract shape.** Does the comment/decision write path extend the existing read API contract ([`workspace-read-api.md`](../architecture/contracts/workspace-read-api.md)) or get its own contract doc? | @architect | **Resolved 2026-05-28.** Extend the existing contract additively (the contract doc already names S2/S3 as "extend the same base, additively"). One workspace ↔ orchestrator surface. |
 | **US-0030 split.** The roadmap says US-0030 will split into per-step stories (S1…S6). Split out the S2/S3 slice as its own story (e.g. US-0031) for M1, or carry US-0030 with a `milestone` span? | @architect | **Resolved 2026-05-28.** Split landed as [US-0032](../product/user-stories/EP-03-reviewer-surface/US-0032-workspace-discuss-and-decide-m1.md) (US-0031 was used for the UX-design story); US-0030 stays as the multi-milestone umbrella. S4/S6 will split out as their milestones open. |
+
+## What M1 actually shipped
+
+Ten engineering slices, PRs #31–#42:
+
+| # | Slice | Lands |
+|---|---|---|
+| #1 | Workspace write API — dispatch endpoint | `POST /tasks` (US-0010 Q2 intake) |
+| #2 | Comment endpoint + per-task GET | `POST /comments` (S2); read API gains the per-task projection |
+| #3 | Comments in per-task GET | one round-trip for the gate page |
+| #4 | Gate-decision endpoint | `POST /gates/{g}/decisions` with role auth, `Idempotency-Key`, `If-Match`, 4 error codes |
+| #5 | Agent harness + GitHub commit-file | `Agent` base class; `GitHubAdapter.commit_artefact` (refuses non-`maestro/*` branches) |
+| #6 | Spec agent + dispatch → spec wiring | `SpecAgent` + `run_spec_for_run`; idempotent branch open |
+| #7 | LangGraph stage-wiring + `interrupt()` resumer | full M1 topology (spec → functional → design → technical_design); SQLite checkpointer; `WriteAPI` dispatcher + resumer hooks |
+| #8 | Design agent + dispatch → design wiring | `DesignAgent` + `run_design_for_run`; same-branch as spec |
+| #9 | Refinement loop — bundle in, `agent_response.posted` out | trailing `\`\`\`json maestro-response` block convention; projection re-opens the gate at the response's seq |
+| #10 | Workspace UI — discuss + decide + new-task | Next.js / shadcn surface; identity switcher; catch-up marker; the M1 surface for every gate decision |
+
+**240 backend tests** passing; **next build** green; six pages live (4 dynamic, 2 static).
+
+### Conventions ratified during engineering
+
+These were architect-approved in the batch design pass that opened the engine-stream slices:
+
+- **Trailing fenced block** for `agent_response.posted` emission — the LLM emits the artefact plus a single ```` ```json maestro-response ```` block; the harness strips it before commit, validates against ADR-0022's required-shape rules, emits the event.
+- **Gate re-opening via `agent_response.posted`** — projection adds the agent's gate type to `open_gates` with the response event's seq; one event closes the cycle AND opens the next pending state.
+- **Write-API engine-stream hooks** — `WriteAPI` accepts optional `dispatcher` / `resumer` callables, fired only on fresh writes (idempotency replays do not re-fire). Production wraps them in a thread pool for non-blocking HTTP returns; tests pass `None` to stay offline.
+- **Catch-up marker — workspace-local localStorage** (ADR-0023), scoped to `(identity, product, task)`. The marker advances on view.
+
+### Deliberately deferred (small follow-ups)
+
+- **Literal diff-of-artefact** via `react-diff-viewer-continued` — needs a `?commit=` extension to the read-API spec endpoint. Per-anchor agent replies + `summary_of_changes` already render inline.
+- **Multi-file ADR proposal commits** — the design agent's `proposed_adrs?` output stays in the design body for now.
+- **Cross-product inbox (S6)** — M3 per the roadmap.
+
+These are tracked as follow-ups, not M1 debt; the M1 exit criteria are met without them.

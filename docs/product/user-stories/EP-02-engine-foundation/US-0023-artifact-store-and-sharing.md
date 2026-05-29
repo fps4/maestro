@@ -1,15 +1,18 @@
 ---
 title: "US-0023: Store and share artefacts via an S3-compatible ArtifactStore"
 persona: architect
-status: draft
+status: accepted
 complexity: L
 milestone: M2
 last_updated: 2026-05-29
+accepted_on: 2026-05-29
+accepted_by: "@farid (architect)"
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
   - docs/architecture/decisions/0012-artifact-storage-and-sharing.md
   - docs/architecture/decisions/0011-multi-surface-human-control.md
   - docs/architecture/decisions/0010-public-engine-private-instance-data.md
+  - docs/roadmap/m2-build-to-merge.md
 ---
 
 ## Story
@@ -39,3 +42,5 @@ Implements [ADR-0012](../../../architecture/decisions/0012-artifact-storage-and-
 ## Notes
 
 Per-product bucket/prefix mirrors the per-product Telegram bot (ADR-0011) — a product's artefacts, bot, and group are all product-scoped. ds1/MinIO is the default per ADR-0007; AWS S3 is the per-product opt-in.
+
+**M2 scoping resolution (Q4, 2026-05-29).** **Maestro itself (the M2 dogfood) runs on MinIO on ds1** — dogfood the default. S3 path is exercised when the first commercial product opts in (M4). **Operational follow-up before real artefacts land:** MinIO durability story (erasure coding + offsite backup) per [`roadmap.md` risks](../../../roadmap.md#risks-and-constraints). See [`m2-build-to-merge.md`](../../../roadmap/m2-build-to-merge.md#open-questions-specific-to-m2).

@@ -3,8 +3,8 @@ title: "US-0030: Read, discuss, and decide a gate in the maestro reviewer webapp
 persona: functional reviewer
 status: draft
 complexity: L
-milestone: M0–M3   # spans the webapp steps S1–S6. S1 shipped in M0; S2–S3 split out as US-0032 for M1 (2026-05-28). S4/S6 to be split when M2/M3 open
-last_updated: 2026-05-28
+milestone: M0–M3   # spans the webapp steps S1–S6. S1 shipped in M0; S2–S3 split out as US-0032 for M1 (2026-05-28); S4 split out as US-0033 for M2 (2026-05-29). S6 to be split when M3 opens
+last_updated: 2026-05-29
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
   - docs/architecture/decisions/0015-reviewer-surfaces-repo-wiki-and-chat-webapp.md

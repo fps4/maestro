@@ -1,13 +1,16 @@
 ---
 title: "US-0014: Generate and run spec-derived tests as a Definition-of-Done gate"
 persona: architect
-status: draft
+status: accepted
 complexity: L
 milestone: M2
 last_updated: 2026-05-29
+accepted_on: 2026-05-29
+accepted_by: "@farid (architect)"
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
   - docs/architecture/decisions/0006-spec-driven-sdlc.md
+  - docs/roadmap/m2-build-to-merge.md
   - standards/testing.yaml
 ---
 
@@ -37,3 +40,5 @@ A Definition-of-Done gate ([ADR-0006](../../../architecture/decisions/0006-spec-
 ## Notes
 
 The test agent does not refactor production code (`testing.yaml`). Spec-adherence is the first DoD gate in order; the security floors are never disabled.
+
+**M2 scoping resolution (Q2, 2026-05-29).** The test agent **commits test files into the same `maestro/*` PR**; the product's CI runs them. Tests are first-class artefacts of the spec — durable in the repo, code-reviewable as part of the PR. The spec-adherence gate is "the test job is green" (Q1's CI poll reads it). For maestro itself, tests land in `tests/` under the existing pytest config. See [`m2-build-to-merge.md`](../../../roadmap/m2-build-to-merge.md#open-questions-specific-to-m2).

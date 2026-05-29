@@ -1,7 +1,7 @@
 ---
 title: maestro roadmap — build it up, adopt it stepwise
-status: draft
-last_updated: 2026-05-27
+status: current
+last_updated: 2026-05-29
 owners: [architect]
 related:
   - docs/product/prd/0001-architect-directed-delivery-loop.md
@@ -37,8 +37,8 @@ Per-story build/review status is **not** tracked in a markdown board — it live
 | Milestone | Goal | Scoping doc | Status |
 |---|---|---|---|
 | M0 | Foundation + surface backbone | — (predates this convention) | **✅ closed 2026-05-27** — spine + S1 read API shipped on ds1; GitHub + Claude verified live |
-| M1 | Spec → design, in the workspace | [`roadmap/m1-spec-to-design.md`](roadmap/m1-spec-to-design.md) | **drafted; open for engineering** |
-| M2 | Build → merge (the MVP) | [`roadmap/m2-build-to-merge.md`](roadmap/m2-build-to-merge.md) | **drafted; open for engineering** |
+| M1 | Spec → design, in the workspace | [`roadmap/m1-spec-to-design.md`](roadmap/m1-spec-to-design.md) | **✅ closed 2026-05-29** — spec & design agents on LangGraph; gates decided in the workspace with `If-Match`; refinement loop closes via `agent_response.posted` (ADR-0020/0022); US-0010/0012/0013/0032 done |
+| M2 | Build → merge (the MVP) | not yet written | open when M1 exits |
 | M3 | Hardening, quality & the inbox | not yet written | open when M2 exits |
 | M4 | Commercial onboarding | not yet written | open when M3 exits |
 

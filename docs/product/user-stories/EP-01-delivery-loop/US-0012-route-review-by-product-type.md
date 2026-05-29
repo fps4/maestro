@@ -1,12 +1,14 @@
 ---
 title: "US-0012: Route each gate to the right reviewer by product type"
 persona: architect
-status: accepted
+status: done
 complexity: M
 milestone: M1
-last_updated: 2026-05-28
+last_updated: 2026-05-29
 accepted_on: 2026-05-28
 accepted_by: "@farid (architect)"
+done_on: 2026-05-29
+done_by: CI on a green merge (M1 #4 + #7 + #10; Slack/Telegram deep-link is M3)
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
   - docs/architecture/decisions/0003-split-review-routing-matrix.md

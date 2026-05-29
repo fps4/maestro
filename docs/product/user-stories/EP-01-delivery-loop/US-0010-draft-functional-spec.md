@@ -1,12 +1,14 @@
 ---
 title: "US-0010: Draft a functional spec from intent and post it to the functional gate"
 persona: architect
-status: accepted
+status: done
 complexity: L
 milestone: M1
-last_updated: 2026-05-28
+last_updated: 2026-05-29
 accepted_on: 2026-05-28
 accepted_by: "@farid (architect)"
+done_on: 2026-05-29
+done_by: CI on a green merge (M1 #6 + #7 + #9 + #10)
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
   - docs/architecture/decisions/0015-reviewer-surfaces-repo-wiki-and-chat-webapp.md

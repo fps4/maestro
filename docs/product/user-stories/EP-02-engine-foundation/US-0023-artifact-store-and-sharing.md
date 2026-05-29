@@ -3,7 +3,8 @@ title: "US-0023: Store and share artefacts via an S3-compatible ArtifactStore"
 persona: architect
 status: draft
 complexity: L
-last_updated: 2026-05-25
+milestone: M2
+last_updated: 2026-05-29
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
   - docs/architecture/decisions/0012-artifact-storage-and-sharing.md

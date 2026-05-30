@@ -21,7 +21,7 @@ _TIERS = {"fast", "standard", "strong"}
 
 # Allowed agent names (standards/prompts/README.md). Adding one is adding the agent's prompt file
 # and a row in the README — the loader's set is the gate that flags an unknown agent at load time.
-_AGENTS = {"spec", "design", "reviewer", "docs", "impl"}
+_AGENTS = {"spec", "design", "reviewer", "docs", "impl", "testgen"}
 
 
 class PromptInvalid(Exception):

@@ -65,6 +65,7 @@ def build_graph(
     run_spec:    Callable[[str], Any],
     run_design:  Optional[Callable[[str], Any]] = None,
     run_build:   Optional[Callable[[str], Any]] = None,
+    run_tests:   Optional[Callable[[str], Any]] = None,
     run_merge:   Optional[Callable[[str], Any]] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
 ) -> Any:
@@ -78,7 +79,9 @@ def build_graph(
 
     * ``run_spec``   = :func:`orchestrator.agents.spec.run_spec_for_run`
     * ``run_design`` = :func:`orchestrator.agents.design.run_design_for_run`
-    * ``run_build``  = the builder-agent dispatcher (M2 #4)
+    * ``run_build``  = the builder-agent dispatcher (US-0011)
+    * ``run_tests``  = the test-agent dispatcher (US-0014) — runs right after the builder so the
+      spec-derived tests land in the same PR before the DoD wait (M2 Q2)
     * ``run_merge``  = the GitHub-adapter merge call (ADR-0016 boundary)
 
     ``checkpointer`` is :class:`langgraph.checkpoint.memory.MemorySaver` in tests and
@@ -110,12 +113,15 @@ def build_graph(
     # --- M2 nodes (this slice) ---------------------------------------------------------------------
 
     def build_node(state: TaskGraphState) -> dict:
-        # M2 #4 plugs the builder agent (US-0011) in here. The stub keeps the topology compilable
-        # so a test can exercise M2's routing without the agent stack — same discipline as the M1
-        # #7 design_node stub.
+        # The builder agent (US-0011) implements + opens the draft PR; the test agent (US-0014) then
+        # commits spec-derived tests onto the SAME branch so the open PR already carries them before
+        # the DoD wait (M2 Q2). Either hook may be None so the topology stays compilable without the
+        # agent stack — same discipline as the M1 #7 design_node stub.
         if run_build is None:
             return {"stage": "build"}
         run_build(state["run_id"])
+        if run_tests is not None:
+            run_tests(state["run_id"])
         return {"stage": "build"}
 
     def await_dod(state: TaskGraphState) -> dict:

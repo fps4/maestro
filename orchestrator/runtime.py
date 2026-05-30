@@ -49,11 +49,12 @@ class LangGraphRuntime:
     def __init__(self, *, run_spec: Callable[[str], Any],
                  run_design: Optional[Callable[[str], Any]] = None,
                  run_build:  Optional[Callable[[str], Any]] = None,
+                 run_tests:  Optional[Callable[[str], Any]] = None,
                  run_merge:  Optional[Callable[[str], Any]] = None,
                  checkpointer: Optional[BaseCheckpointSaver] = None):
         self._graph = build_graph(
             run_spec=run_spec, run_design=run_design,
-            run_build=run_build, run_merge=run_merge,
+            run_build=run_build, run_tests=run_tests, run_merge=run_merge,
             checkpointer=checkpointer or InMemorySaver(),
         )
         # One lock per thread_id; held while LangGraph reads/writes the checkpointer for that run.

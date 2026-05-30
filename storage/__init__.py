@@ -19,11 +19,27 @@ from storage.artifactstore import (
     BackendUnavailable,
     InMemoryArtifactStore,
 )
+from storage.config import (
+    ArtifactStoreConfig,
+    Backend,
+    ConfigError,
+    MinIOConfig,
+    load_artifact_store_config,
+    make_store,
+)
+from storage.minio import MinIOArtifactStore
 
 __all__ = [
     "ArtifactRef",
     "ArtifactStore",
+    "ArtifactStoreConfig",
+    "Backend",
     "BackendCorrupt",
     "BackendUnavailable",
+    "ConfigError",
     "InMemoryArtifactStore",
+    "MinIOArtifactStore",
+    "MinIOConfig",
+    "load_artifact_store_config",
+    "make_store",
 ]

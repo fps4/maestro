@@ -14,6 +14,7 @@ dependencies = [
     "PyYAML>=6",                             # read the product register / routing matrix (ADR-0008)
     "langgraph>=0.3",                        # the orchestration runtime (ADR-0014) — gates as interrupt() / Command(resume=...)
     "langgraph-checkpoint-sqlite>=2.0",      # durable resume across restarts; SQLite to start (ADR-0008), Postgres later
+    "boto3>=1.34",                           # the S3-compatible client — reached ONLY through storage.ArtifactStore (ADR-0012); MinIO on ds1 (M2 dogfood) + AWS S3 (M4)
 ]
 
 [project.optional-dependencies]

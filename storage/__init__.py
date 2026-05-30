@@ -8,11 +8,13 @@ through the :class:`ArtifactStore` Protocol exported here — the same indirecti
 The contract is pinned in ``docs/architecture/contracts/artifact-store.md``.
 
 M2 #1 ships the Protocol, the :class:`ArtifactRef` value type, and the in-memory backend used by
-tests and any ephemeral path. The MinIO backend (the M2 dogfood default, Q4) and the presigned-URL
-share path land in M2 #2.
+tests and any ephemeral path. M2 #2 adds the MinIO backend (the M2 dogfood default, Q4) + the config
+loader. M2 #3 adds the **presigned-URL share path** (``presigned_get``) on both backends — the
+short-TTL, per-product read link the workspace artefacts browser (US-0033) resolves to.
 """
 
 from storage.artifactstore import (
+    DEFAULT_PRESIGN_TTL_SECONDS,
     ArtifactRef,
     ArtifactStore,
     BackendCorrupt,
@@ -30,6 +32,7 @@ from storage.config import (
 from storage.minio import MinIOArtifactStore
 
 __all__ = [
+    "DEFAULT_PRESIGN_TTL_SECONDS",
     "ArtifactRef",
     "ArtifactStore",
     "ArtifactStoreConfig",

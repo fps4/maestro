@@ -302,3 +302,63 @@ def test_different_products_with_same_key_have_distinguishable_uris() -> None:
 
     assert a.storage_uri != b.storage_uri
     assert a.sha256 == b.sha256  # content-addressed, same bytes => same digest
+
+
+# --- presigned_get (the share path, M2 #3) ---------------------------------------------------------
+
+
+def test_presigned_get_returns_product_scoped_url_with_expiry() -> None:
+    store = _store()
+    store.put("p-alpha", "tasks/T-1/diff.patch", b"x", "text/plain")
+    url = store.presigned_get("p-alpha", "tasks/T-1/diff.patch")
+
+    # In-memory mints a synthetic URL carrying the product-scoped path + an expires deadline.
+    assert url.startswith("memory://p-alpha/tasks/T-1/diff.patch?expires=")
+    deadline = int(url.split("expires=")[1])
+    now = int(datetime.now(timezone.utc).timestamp())
+    # Default TTL is 900s; allow slack for test execution time.
+    assert now < deadline <= now + 900 + 5
+
+
+def test_presigned_get_honours_custom_ttl() -> None:
+    store = _store()
+    store.put("p-alpha", "k", b"x", "text/plain")
+    before = int(datetime.now(timezone.utc).timestamp())
+    url = store.presigned_get("p-alpha", "k", expires_in=60)
+    deadline = int(url.split("expires=")[1])
+    assert before < deadline <= before + 60 + 5
+
+
+def test_presigned_get_mints_fresh_each_call() -> None:
+    """US-0023 AC #4: an expired URL is re-minted on request — each call mints a fresh deadline,
+    never a cached long-lived link."""
+    store = _store()
+    store.put("p-alpha", "k", b"x", "text/plain")
+    first = store.presigned_get("p-alpha", "k", expires_in=300)
+    # A later call mints a deadline no earlier than the first — a fresh URL every time.
+    second = store.presigned_get("p-alpha", "k", expires_in=300)
+    assert int(second.split("expires=")[1]) >= int(first.split("expires=")[1])
+
+
+def test_presigned_get_is_blind_to_existence() -> None:
+    """Minting does not check the object exists (matches S3 generate_presigned_url); the HTTP edge
+    does the head()/404. An absent key still yields a URL."""
+    url = _store().presigned_get("p-alpha", "never/put.txt")
+    assert url.startswith("memory://p-alpha/never/put.txt?expires=")
+
+
+def test_presigned_get_is_product_isolated() -> None:
+    store = _store()
+    a = store.presigned_get("p-alpha", "k")
+    b = store.presigned_get("p-beta", "k")
+    assert "p-alpha" in a and "p-beta" in b and a != b
+
+
+def test_presigned_get_rejects_bad_inputs() -> None:
+    store = _store()
+    with pytest.raises(ValueError):
+        store.presigned_get("UPPER", "k")          # invalid product_id
+    with pytest.raises(ValueError):
+        store.presigned_get("p-alpha", "../escape")  # invalid key
+    with pytest.raises(ValueError):
+        store.presigned_get("p-alpha", "k", expires_in=0)  # non-positive TTL

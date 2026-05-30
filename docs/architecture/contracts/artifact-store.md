@@ -34,12 +34,12 @@ egress (ADR-0002).
 
 ## Scope
 
-| In (M2 #1 + M2 #2 — store half complete, this doc as it lands)           | Out (later slices, extend additively)                                       |
+| In (M2 #1 + M2 #2 + M2 #3 — store + share half complete, this doc as it lands) | Out (later slices, extend additively)                                       |
 |---|---|
-| The `ArtifactStore` Python Protocol (`put`, `head`, `exists`, `delete_product`) | Presigned-URL share path (`presigned_get`) — **M2 #3** with the share half |
-| The `ArtifactRef` value type and its canonical `storage_uri` shape       | HTTP read endpoint (`GET /api/products/{p}/artifacts/{key}` → 302 to presigned URL) — **M2 #3** |
-| The **in-memory** backend (test fixture + smoke runs) — **M2 #1**        | AWS S3 backend — **M4 commercial onboarding** (same code path, different `endpoint_url`) |
-| The **MinIO** backend (the M2 dogfood per Q4) — **M2 #2**                | The `artifact.stored` event wiring — **M2 #3+**, where the spec/design agent first emits an artefact |
+| The `ArtifactStore` Python Protocol (`put`, `head`, `exists`, `delete_product`, `presigned_get`) | HTTP read endpoint (`GET /api/products/{p}/artifacts/{key}` → 302 to presigned URL) — **M2 #3 / US-0033**, where the workspace browser consumes it |
+| The `ArtifactRef` value type and its canonical `storage_uri` shape       | AWS S3 backend — **M4 commercial onboarding** (same code path, different `endpoint_url`) |
+| The **in-memory** backend (test fixture + smoke runs) — **M2 #1**; `presigned_get` returns a synthetic (non-fetchable) URL for offline edge tests | The `artifact.stored` event wiring — **M2 #3+ / US-0033**, where the first emitter (a PR-diff / test-report artefact) starts using the store |
+| The **MinIO** backend (the M2 dogfood per Q4) — **M2 #2**; real `generate_presigned_url` share path — **M2 #3** | Per-product backend override — **M4** (the first commercial product opting into S3) |
 | `ArtifactStoreConfig` loader + `make_store` factory — **M2 #2**          | Per-product backend override — **M4** (the first commercial product opting into S3) |
 | Per-product isolation (key namespacing + `delete_product` confinement)   | Backup / replication / retention tooling (operational, ADR-0012)            |
 | Key/URI validation and overwrite semantics                               |                                                                              |
@@ -85,6 +85,14 @@ class ArtifactStore(Protocol):
     def exists(self, product_id: str, key: str) -> bool: ...
 
     def delete_product(self, product_id: str) -> int: ...
+
+    def presigned_get(
+        self,
+        product_id: str,
+        key: str,
+        *,
+        expires_in: int = DEFAULT_PRESIGN_TTL_SECONDS,   # 900s
+    ) -> str: ...
 ```
 
 ### `put`
@@ -117,6 +125,26 @@ class ArtifactStore(Protocol):
 
 A convenience equivalent to `head(...) is not None`. Backends MAY implement it more cheaply (e.g.
 S3 `HeadObject` returns metadata anyway, so the in-memory backend's `exists` is just `head` is-not-`None`).
+
+### `presigned_get` (the share path — M2 #3)
+
+- WHEN called, THE STORE SHALL mint and return a **read-only URL** for the one object
+  `(product_id, key)`, valid for `expires_in` seconds (default `DEFAULT_PRESIGN_TTL_SECONDS = 900`).
+  Each call mints a **fresh** URL — there is no cached long-lived link — so an expired URL is
+  re-minted simply by calling again (US-0023 AC #4: never a long-lived public link).
+- THE STORE SHALL scope the URL to that product's object only. The key is already
+  product-namespaced (`<bucket>/<product_id>/<key>`), so a presigned URL **cannot** address another
+  product's bytes (per-product isolation carries into the share path).
+- Minting is **blind**: it does not check the object exists (S3 `generate_presigned_url` signs
+  locally). The HTTP edge that 302s to this URL performs the existence-is-404 check via `head` first
+  (US-0033). A presigned URL to an absent key simply 404s when fetched.
+- THE STORE SHALL reject (`ValueError`) an invalid `product_id` / `key` (same rules as `put`), or a
+  non-positive `expires_in`.
+- THE STORE SHALL never expose the storage admin/console: the URL is the S3 **data plane** GET only
+  (US-0023 AC: console off the public endpoint).
+- The **in-memory** backend returns a *synthetic* `memory://<product_id>/<key>?expires=<unix>` URL —
+  not fetchable, but carrying the product-scoped path + deadline the edge relies on, so the 302 path
+  is testable offline. The **MinIO/S3** backend returns a real signed URL.
 
 ### `delete_product`
 
@@ -201,6 +229,6 @@ Single-instance assumptions are fine through the MVP; cross-instance cache coher
 ## What this contract does NOT pin
 
 - The HTTP shape — that comes in the workspace artefacts contract slice (M2 #2/#3, consumed by [US-0033](../../product/user-stories/EP-03-reviewer-surface/US-0033-workspace-artefacts-browser-m2.md)).
-- The `artifact.stored` event payload — that comes when the first emitter (the spec / design agent) starts using the store (M2 #2). The shape will name `storage_uri` + `sha256` + `kind` + `task_id` (per `data-model.md`'s Artifact entity).
-- Presigned-URL TTL defaults — landed with the share path.
+- The `artifact.stored` event payload — that comes when the first emitter (a PR-diff / test-report artefact, US-0033) starts using the store. The shape will name `storage_uri` + `sha256` + `kind` + `task_id` (per `data-model.md`'s Artifact entity).
+- The HTTP read endpoint (`GET /api/products/{p}/artifacts/{key}` → 302 to `presigned_get`) — lands with the workspace artefacts browser (US-0033), which owns the caller-identity / per-product participation check at the edge.
 - Backup / replication tooling (operational; ADR-0012 leaves this to the runbook).

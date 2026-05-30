@@ -18,7 +18,7 @@ def test_pr_opened_moves_to_merge_gate_and_records_pr(events):
                   payload={"repo": "acme/widget", "pr_number": 7, "pr_url": "u", "branch": "maestro/x"})
     state = project_task(events.read(), "t")
     assert state.stage == "merge_gate"
-    assert state.pr == {"repo": "acme/widget", "number": 7, "url": "u"}
+    assert state.pr == {"repo": "acme/widget", "number": 7, "url": "u", "draft": False}
     assert state.branch == "maestro/x"
 
 

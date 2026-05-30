@@ -84,15 +84,20 @@ class FakeGitHubClient:
         # assert "the file landed" without faking the whole GitHub API surface.
         self.files: dict[tuple[str, str, str], dict] = {}
         self.put_file_calls: list[dict] = []
+        # One entry per commit_files call (US-0011 builder) — ``{repo, branch, message, paths}`` in
+        # order, so a test can assert the one-commit-per-task message sequence.
+        self.commits: list[dict] = []
 
     def create_branch(self, repo, branch, from_ref):
         self.branches.append((repo, branch, from_ref))
         return {"ref": f"refs/heads/{branch}"}
 
-    def open_pull_request(self, repo, head, base, title, body):
+    def open_pull_request(self, repo, head, base, title, body, draft=False):
         number = len(self.prs) + 100
-        self.prs.append((repo, head, base))
-        return {"number": number, "url": f"https://github.com/{repo}/pull/{number}"}
+        self.prs.append({"repo": repo, "head": head, "base": base, "title": title,
+                         "body": body, "draft": draft, "number": number})
+        return {"number": number, "url": f"https://github.com/{repo}/pull/{number}",
+                "draft": draft}
 
     def merge_pull_request(self, repo, number, method):
         self.merges.append((repo, number, method))
@@ -113,6 +118,32 @@ class FakeGitHubClient:
         self.put_file_calls.append({"repo": repo, "branch": branch, "path": path,
                                     "message": message, "sha": sha})
         return {"commit_sha": commit_sha, "file_sha": file_sha, "path": path}
+
+    def commit_files(self, repo, branch, files, message):
+        """Mimic the Git Data API multi-file commit — every file lands in ONE commit. Stores each
+        file (so a later get_contents / put_file sees it) and records the commit in order."""
+        seq = len(self.commits) + 1
+        commit_sha = f"commit-multi-{seq:08x}"
+        for f in files:
+            file_sha = f"blob-multi-{seq:08x}-{f['path']}"
+            self.files[(repo, branch, f["path"])] = {"content": f["content"], "file_sha": file_sha}
+        self.commits.append({"repo": repo, "branch": branch, "message": message,
+                             "paths": [f["path"] for f in files], "commit_sha": commit_sha})
+        return {"commit_sha": commit_sha}
+
+    def get_contents(self, repo, path, ref):
+        """Read a committed file back (the reader role the builder uses to fetch design/spec). ``ref``
+        is a branch in these tests; we match on (repo, ref, path) and fall back to any branch holding
+        the path so a commit-sha ref still resolves offline."""
+        hit = self.files.get((repo, ref, path))
+        if hit is None:
+            for (r, _b, p), v in self.files.items():
+                if r == repo and p == path:
+                    hit = v
+                    break
+        if hit is None:
+            raise FileNotFoundError(f"{repo}@{ref}:{path}")
+        return {"content": hit["content"], "sha": hit["file_sha"], "path": path}
 
 
 @pytest.fixture

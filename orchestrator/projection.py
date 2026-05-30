@@ -184,7 +184,7 @@ def _apply(t: TaskState, e: dict) -> None:
 
     if etype == "pr.opened":
         t.pr = {"repo": payload.get("repo"), "number": payload.get("pr_number"),
-                "url": payload.get("pr_url")}
+                "url": payload.get("pr_url"), "draft": payload.get("draft", False)}
         if payload.get("branch"):
             t.branch = payload["branch"]
     elif etype == "branch.created":

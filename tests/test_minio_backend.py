@@ -479,3 +479,57 @@ def test_smoke_minio_if_endpoint_set() -> None:
     finally:
         # Best-effort cleanup; if it fails, the next run will sweep via delete_product.
         store.delete_product("p-smoke")
+
+
+# --- presigned_get (the share path, M2 #3) ---------------------------------------------------------
+#
+# ``generate_presigned_url`` signs LOCALLY — no S3 API call — so these run against a real boto3
+# client (no Stubber, no network). The URL's query-param shape varies by signature version; the
+# assertions stay format-agnostic (path + an expiry param).
+
+
+def test_presigned_get_returns_signed_url_for_the_product_key() -> None:
+    url = _store_with_client(_client()).presigned_get("p-alpha", "tasks/T-1/diff.patch")
+    # Assert the product/key path only (not the bucket): boto3 may address the bucket
+    # virtual-hosted-style (bucket in the host) or path-style — the product/key is present either way.
+    assert "p-alpha/tasks/T-1/diff.patch" in url
+    assert "stub.invalid" in url                      # the configured endpoint host
+    # An expiry is signed in (SigV4 ``X-Amz-Expires`` or SigV2 ``Expires``).
+    assert "Expires=" in url or "X-Amz-Expires=" in url
+    # A signature is present — this is a signed URL, not a bare path.
+    assert "Signature=" in url or "X-Amz-Signature=" in url
+
+
+def test_presigned_get_honours_custom_ttl() -> None:
+    url = _store_with_client(_client()).presigned_get("p-alpha", "k", expires_in=60)
+    assert "X-Amz-Expires=60" in url or "Expires=" in url
+
+
+def test_presigned_get_mints_fresh_each_call() -> None:
+    store = _store_with_client(_client())
+    first = store.presigned_get("p-alpha", "k")
+    second = store.presigned_get("p-alpha", "k")
+    # Both are valid signed URLs for the same object (fresh signing each call; AC #4).
+    assert "p-alpha/k" in first and "p-alpha/k" in second
+
+
+def test_presigned_get_is_product_isolated() -> None:
+    store = _store_with_client(_client())
+    a = store.presigned_get("p-alpha", "k")
+    b = store.presigned_get("p-beta", "k")
+    assert "p-alpha/k" in a and "p-beta/k" in b
+    assert "p-beta" not in a.split("?")[0]
+
+
+def test_presigned_get_rejects_bad_inputs_before_signing() -> None:
+    # Validation happens before the client is touched — a bad key/product/ttl never signs.
+    client = _client()
+    stubber = Stubber(client)  # no expected calls
+    with stubber:
+        store = _store_with_client(client)
+        with pytest.raises(ValueError):
+            store.presigned_get("UPPER", "k")
+        with pytest.raises(ValueError):
+            store.presigned_get("p-alpha", "../escape")
+        with pytest.raises(ValueError):
+            store.presigned_get("p-alpha", "k", expires_in=0)

@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable
 
 from storage.artifactstore import (
+    DEFAULT_PRESIGN_TTL_SECONDS,
     ArtifactRef,
     BackendCorrupt,
     BackendUnavailable,
@@ -204,6 +205,36 @@ class MinIOArtifactStore:
                 )
 
         return total
+
+    def presigned_get(
+        self,
+        product_id: str,
+        key: str,
+        *,
+        expires_in: int = DEFAULT_PRESIGN_TTL_SECONDS,
+    ) -> str:
+        """Mint a short-TTL presigned GET URL via S3 ``generate_presigned_url`` (US-0023 AC #3/#4).
+
+        ``generate_presigned_url`` signs **locally** — no network round-trip and no existence check —
+        so a fresh URL is minted on every call (an expired link is just re-minted, AC #4). The signed
+        URL points at the product-namespaced key inside the configured bucket, so it can only ever
+        address this product's object. The MinIO admin/console is never involved — this is the S3
+        data plane only (US-0023 AC: never expose the storage console)."""
+        _validate_product_id(product_id)
+        _validate_key(key)
+        if not isinstance(expires_in, int) or expires_in <= 0:
+            raise ValueError(f"expires_in must be a positive integer of seconds; got {expires_in!r}")
+        try:
+            client = self._ensure_client()
+            return client.generate_presigned_url(
+                "get_object",
+                Params={"Bucket": self._bucket, "Key": self._s3_key(product_id, key)},
+                ExpiresIn=expires_in,
+            )
+        except (BackendUnavailable, ValueError):
+            raise
+        except Exception as e:
+            raise BackendUnavailable(f"generate_presigned_url failed: {e}") from e
 
     # -- internals --
 

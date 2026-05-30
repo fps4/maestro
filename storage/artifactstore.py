@@ -16,8 +16,13 @@ import hashlib
 import re
 import threading
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Protocol
+
+# Default presigned-URL lifetime (the share path, M2 #3). Short by design — a reviewer follows the
+# link promptly; an expired link is re-minted on request rather than a long-lived public URL
+# (US-0023 AC #4). 15 minutes mirrors the human-paced gate cadence; callers may pass a shorter TTL.
+DEFAULT_PRESIGN_TTL_SECONDS = 900
 
 # --- Validation ------------------------------------------------------------------------------------
 #
@@ -145,6 +150,26 @@ class ArtifactStore(Protocol):
         """
         ...
 
+    def presigned_get(
+        self,
+        product_id: str,
+        key: str,
+        *,
+        expires_in: int = DEFAULT_PRESIGN_TTL_SECONDS,
+    ) -> str:
+        """Mint a short-TTL, read-only URL for ``(product_id, key)`` (US-0023 AC #3/#4).
+
+        Each call mints a **fresh** URL valid for ``expires_in`` seconds — there is no caching of a
+        long-lived link, so an expired URL is re-minted simply by calling again (AC #4). The URL is
+        scoped to the one product object; the key is already product-namespaced, so a presigned URL
+        can never address another product's bytes.
+
+        Minting is **blind** — it does not check the object exists (S3's ``generate_presigned_url``
+        is a local signing op). The HTTP edge that 302s to this URL is responsible for the
+        existence-is-404 check via :meth:`head` first (artifact-store contract §head).
+        """
+        ...
+
 
 # --- In-memory backend -----------------------------------------------------------------------------
 
@@ -162,7 +187,8 @@ class _StoredObject:
 class InMemoryArtifactStore:
     """An in-process, ephemeral :class:`ArtifactStore` for tests and any path that needs one.
 
-    Not durable, not shared across processes, no presigned URLs. The MinIO backend lands in M2 #2.
+    Not durable, not shared across processes. Its :meth:`presigned_get` returns a **synthetic**
+    (non-fetchable) URL so the HTTP 302 edge is testable offline; the MinIO backend mints real ones.
 
     Thread-safe: every mutating / reading op holds an internal lock for the duration of the call.
     Lock granularity is "the whole store" — fine through the MVP (single-process orchestrator); a
@@ -247,6 +273,25 @@ class InMemoryArtifactStore:
                 # completes — the semantic is "purge what existed when delete_product was called."
                 del self._objects[k]
         return len(keys)
+
+    def presigned_get(
+        self,
+        product_id: str,
+        key: str,
+        *,
+        expires_in: int = DEFAULT_PRESIGN_TTL_SECONDS,
+    ) -> str:
+        """A **synthetic** presigned URL for the in-memory backend — there is no real HTTP object
+        server, so the URL is not fetchable, but it carries the same shape the edge relies on (a
+        product-scoped path plus an ``expires`` deadline) so the HTTP 302 path is testable offline.
+
+        Minting is blind (matches the S3 backend); the edge checks existence via :meth:`head`."""
+        _validate_product_id(product_id)
+        _validate_key(key)
+        if not isinstance(expires_in, int) or expires_in <= 0:
+            raise ValueError(f"expires_in must be a positive integer of seconds; got {expires_in!r}")
+        deadline = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
+        return f"{self._uri(product_id, key)}?expires={int(deadline.timestamp())}"
 
     # -- internal --
 

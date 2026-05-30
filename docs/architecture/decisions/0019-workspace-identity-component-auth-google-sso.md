@@ -1,6 +1,6 @@
 ---
 title: "0019: Workspace identity — component-auth (Google SSO) at the edge, authorization from the register"
-status: proposed
+status: accepted
 date: 2026-05-27
 related:
   - 0018-workspace-read-api-and-frontmatter-index.md

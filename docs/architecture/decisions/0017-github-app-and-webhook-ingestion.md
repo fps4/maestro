@@ -1,6 +1,6 @@
 ---
 title: "0017: GitHub integration — a GitHub App with webhook ingestion (closes PAT-or-App)"
-status: proposed
+status: accepted
 date: 2026-05-27
 related:
   - 0008-system-of-record-and-persistence.md
@@ -59,6 +59,14 @@ maestro integrates with GitHub as a **GitHub App**, not a PAT.
    `repo → product` from the register (ADR-0005/0008), and **appends events to the log** (ADR-0008/0009).
    Current state is the projection of those events, exactly as for maestro-authored facts. **Polling is
    not used** (ADR-0008).
+
+   **Redelivery is deduplicated on `X-GitHub-Delivery` (US-0024, cross-cutting idempotency).** GitHub
+   redelivers webhooks (manual replay, delivery retries) with the **same** `X-GitHub-Delivery` UUID. The
+   receiver SHALL record that id and treat a repeat as a no-op (the event was already appended) — so a
+   redelivery cannot double-append a fact (e.g. two `pr.merged` for one merge). This is the **webhook
+   layer** of maestro's three-layer idempotency story (workspace `Idempotency-Key`, LangGraph
+   checkpointer, webhook delivery-id) — named end-to-end in
+   [`idempotency-and-ordering.md`](../idempotency-and-ordering.md).
 
 4. **Per-product isolation by construction.** A repo maps to exactly the product(s) that own it
    (ADR-0010/0011); a webhook for an unrecognised repo is rejected and logged. Installation tokens are

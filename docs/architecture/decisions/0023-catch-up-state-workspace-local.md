@@ -1,6 +1,6 @@
 ---
 title: "0023: Catch-up state — workspace-local per-fetch markers, not event-log entries"
-status: proposed
+status: accepted
 date: 2026-05-28
 related:
   - 0008-system-of-record-and-persistence.md

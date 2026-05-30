@@ -1,6 +1,6 @@
 ---
 title: "0011: Multi-surface human control — Slack for architects, Telegram for functional reviewers"
-status: proposed
+status: accepted
 date: 2026-05-25
 related:
   - 0001-architect-directed-agentic-delivery.md

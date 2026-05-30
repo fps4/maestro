@@ -1,6 +1,6 @@
 ---
 title: "0021: Plain-language summary on every spec/design — agent-authored, in frontmatter"
-status: proposed
+status: accepted
 date: 2026-05-28
 related:
   - 0006-spec-driven-sdlc.md

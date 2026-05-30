@@ -1,6 +1,6 @@
 ---
 title: "0018: The workspace read API + frontmatter spec index (the surface contract)"
-status: proposed
+status: accepted
 date: 2026-05-27
 related:
   - 0015-reviewer-surfaces-repo-wiki-and-chat-webapp.md
@@ -85,6 +85,13 @@ GitHub token and no authoritative state), and **(b)** how repo `docs/` files map
   manifest to keep in sync, and the `push` reconciler keeps parallel-branch reality reflected. The cost:
   a frontmatter contract the crew (and humans) must honour — validated, with a clear error when a
   `docs/**` file is missing or has malformed `maestro:` frontmatter.
+- **The `unindexed` set must be visible in the UI, not just the payload (US-0024 M8).** A duplicate
+  `(feature, kind)` or malformed `maestro:` block drops a doc to `unindexed` with a `reason` in the read
+  API payload (`workspace-read-api.md`). In a single-architect workflow nobody else notices a spec
+  silently disappeared. **Requirement:** the workspace SHALL surface the `unindexed` set (each with its
+  `reason`) as a persistent banner / dedicated panel on the specs view — not bury it in the API
+  response. The mechanism already ships in the read API; this pins the UI obligation so the failure is
+  loud. (Frontend work, deferred — implementation tracked against the S1/S4 workspace views.)
 - **The workspace stays a pure projection** — no GitHub token in the browser, no authoritative state in
   the webapp; isolation server-side. The ADR-0015 invariant holds by construction.
 - **Auth is deliberately out of scope here.** *How* the workspace authenticates the caller and maps them

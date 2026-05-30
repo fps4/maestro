@@ -30,6 +30,7 @@ The conductor ([`orchestrator.md`](../../../architecture/components/orchestrator
 - WHEN a reviewer selects request-changes at a gate, THE SYSTEM SHALL return the task to the stage that produced the artifact, carrying the feedback.
 - IF a gate reaches its timeout with no decision, THEN THE SYSTEM SHALL act per `config/reviewers.yaml` `on_timeout` (escalate or cancel) and SHALL NEVER auto-approve.
 - IF an agent or `ModelClient` call fails past its retry budget, THEN THE SYSTEM SHALL move the task to `blocked` and notify the architect in Slack.
+- WHEN a task is `blocked` (agent/model failure, the refinement cap of US-0024 H2, or a `ModelClient` budget cap), THE SYSTEM SHALL permit the architect to **resume it from the workspace via an attributed `task.resumed` event** that re-enters the producing stage, OR — where resuming is not meaningful — to re-file; `blocked` SHALL NOT be a silent dead end whose only signal is a Slack ping. *(Decision recorded for US-0024 M2; the `task.resumed` event + workspace affordance are scheduled with the engine-hardening work, not in the M1 slice.)*
 - THE SYSTEM SHALL merge a pull request **only** against a recorded, role-authorized, unconsumed merge-approval event, and SHALL contain no code path that pushes to a default branch directly ([ADR-0016](../../../architecture/decisions/0016-merge-after-workspace-approval.md)).
 
 ## Out of scope

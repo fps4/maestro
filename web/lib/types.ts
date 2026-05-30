@@ -144,6 +144,22 @@ export interface ArtefactPublished {
   seq: number;
 }
 
+// An artefact whose bytes live in the ArtifactStore (US-0033) — a PR diff, test report, SBOM, etc.
+// The per-task artefacts index the browser renders. `href` points at the read API's artefact
+// endpoint (a 302 → short-TTL presigned URL); the internal storage_uri is never exposed here.
+export interface StoredArtefact {
+  kind: string;
+  name: string;
+  key: string;
+  content_type: string;
+  size: number;
+  sha256: string;
+  source: Record<string, unknown> | null;
+  stored_at: number;
+  seq: number;
+  href: string;
+}
+
 export interface TaskDetail {
   task_id: string;
   product_id: string;
@@ -157,6 +173,7 @@ export interface TaskDetail {
   comments: Comment[];
   agent_responses: AgentResponse[];
   artefacts: ArtefactPublished[];
+  stored_artefacts: StoredArtefact[];
 }
 
 // --- write-API response shapes (workspace-write-api.md) ----------------------------------------

@@ -204,6 +204,32 @@ def test_build_helper_is_called_on_design_approve():
     assert build_calls == ["run-1"]
 
 
+def test_test_agent_runs_after_builder_in_build_node():
+    """US-0014: the test agent (run_tests) fires in build_node right after the builder, so its
+    spec-derived tests land in the same PR before the DoD wait — and strictly after the builder."""
+    order: list[str] = []
+    runtime = LangGraphRuntime(run_spec=_record([]),
+                               run_build=lambda rid: order.append(f"build:{rid}"),
+                               run_tests=lambda rid: order.append(f"tests:{rid}"))
+    runtime.dispatch("run-1")
+    runtime.resume_for_decision("run-1", "functional", "approve")
+    runtime.resume_for_decision("run-1", "technical_design", "approve")
+
+    assert order == ["build:run-1", "tests:run-1"]
+
+
+def test_test_agent_hook_is_optional():
+    """build_node stays compilable with run_tests unset — the builder still runs, no test agent."""
+    build_calls: list[str] = []
+    runtime = LangGraphRuntime(run_spec=_record([]),
+                               run_build=_record(build_calls))   # no run_tests
+    runtime.dispatch("run-1")
+    runtime.resume_for_decision("run-1", "functional", "approve")
+    runtime.resume_for_decision("run-1", "technical_design", "approve")
+
+    assert build_calls == ["run-1"]
+
+
 def test_dod_green_routes_to_await_merge_gate():
     runtime = LangGraphRuntime(run_spec=_record([]))
     _advance_to(runtime, "run-1", stop="await_dod")

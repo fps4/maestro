@@ -134,3 +134,10 @@ This is an **umbrella story by deliberate choice** — it is closer to a hardeni
 2. **Tier 2** — H1 model-variant + exit-criteria flag, H2 cost caps (likely its own ADR), M7 prompt versioning, M9 redaction stance, M8 unindexed banner, idempotency note + webhook dedup, negative-test sweep.
 3. **Tier 3** — M10 / ADR status sweep / roadmap honesty / M3 naming — bundle into the next doc-maintenance PR.
 4. **Tier 4** — H4, H5, M1, M2, M4, M5, M6 — define-or-placeholder at the milestone each belongs to.
+
+## Implementation status
+
+- **Tier 1 — shipped** (PR #50, merged): H6 register self-deal invariant, H7 dev-stub + Access belt-and-braces, H2 refinement-loop cap + drain switch. H3 (MinIO durability) remains an ops task on ds1.
+- **Tier 2 (audit/egress slice) — shipped** (this PR): H2 `ModelClient` budget caps (per-run / per-day, env-config, hard-refuse) + ADR-0002 extension; M7 prompt provenance (`prompt_template_id` + git-blob-SHA `prompt_template_version`) on every `llm_call` + schema migration; M9 minimal secret/email redaction floor applied to persisted error text + the M2 corpus stance.
+- **Tier 2 (remaining)** — H1 model-variant + exit-criteria flag, M8 unindexed banner (web/), idempotency engineering note + ADR-0017 webhook-dedup, negative-test sweep.
+- **Tier 3 / Tier 4** — pending (doc reconciliation + define-or-placeholder).

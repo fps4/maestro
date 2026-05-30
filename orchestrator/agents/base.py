@@ -231,7 +231,10 @@ class Agent:
             kwargs["max_tokens"] = self._max_output_tokens
         return self._model.complete(
             agent=self._prompt.agent, run_id=run_id, tier=self._prompt.model_tier,
-            system=self._prompt.body, prompt=user_message, **kwargs,
+            system=self._prompt.body, prompt=user_message,
+            prompt_template_id=self._prompt.template_id,
+            prompt_template_version=self._prompt.template_version,
+            **kwargs,
         )
 
     # --- artefact validation ---------------------------------------------------------------------

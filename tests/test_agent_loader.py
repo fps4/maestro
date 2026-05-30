@@ -144,3 +144,53 @@ def test_real_design_agent_prompt_loads():
     assert p.model_tier == "strong"
     assert {"task", "product", "spec_ref"} <= p.required_inputs()
     assert "proposed_adrs" in p.known_outputs()
+
+
+# --- US-0024 M7: prompt provenance (template id + git blob SHA version) --------------------------
+
+def test_loaded_prompt_carries_template_id_and_blob_sha(tmp_path):
+    p = tmp_path / "spec-agent.md"
+    p.write_text(textwrap.dedent("""\
+        ---
+        agent: spec
+        model_tier: standard
+        inputs:
+          - task
+        outputs:
+          - artefact_commit
+        ---
+
+        # Spec agent
+        body
+        """))
+    loaded = load_prompt(p)
+    assert loaded.template_id == "spec-agent"
+    assert len(loaded.template_version) == 40                      # git blob SHA is 40 hex chars
+    assert all(c in "0123456789abcdef" for c in loaded.template_version)
+
+
+def test_template_version_changes_iff_content_changes(tmp_path):
+    def _write(body):
+        f = tmp_path / "spec-agent.md"
+        f.write_text("---\nagent: spec\nmodel_tier: standard\ninputs:\n  - task\n"
+                     "outputs:\n  - artefact_commit\n---\n\n" + body)
+        return load_prompt(f).template_version
+
+    v1 = _write("# Spec\none")
+    v1_again = _write("# Spec\none")
+    v2 = _write("# Spec\ntwo")
+    assert v1 == v1_again                                          # stable for identical bytes
+    assert v1 != v2                                                # changes when the prompt changes
+
+
+def test_blob_sha_matches_git_hash_object_vector():
+    # `printf '' | git hash-object --stdin` → the well-known empty-blob SHA. Pins our local
+    # computation to git's so the recorded version is the same id a reviewer can `git cat-file`.
+    from orchestrator.agents.loader import _git_blob_sha
+    assert _git_blob_sha("") == "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
+
+
+def test_real_spec_prompt_stamps_a_version():
+    p = load_prompt("standards/prompts/spec-agent.md")
+    assert p.template_id == "spec-agent"
+    assert len(p.template_version) == 40

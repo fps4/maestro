@@ -8,6 +8,7 @@ Keeping this parsing in one place means the prompt contract is exercised by a si
 and the `standards/prompts/README.md` table of M1/M3 agents stays the authoritative source for what
 shapes are legal — there is no hidden second contract embedded in code.
 """
+import hashlib
 import pathlib
 from dataclasses import dataclass
 from typing import Optional, Union
@@ -56,6 +57,9 @@ class Prompt:
     inputs: tuple[PromptIO, ...]
     outputs: tuple[PromptIO, ...]
     body: str                        # the system prompt the LLM reads (markdown after frontmatter)
+    # US-0024 M7: prompt provenance stamped onto every LLM call this prompt drives (ADR-0009/0014).
+    template_id: str = ""            # stable logical id, e.g. 'spec-agent'
+    template_version: str = ""       # git blob SHA of the prompt file — changes iff the file changes
 
     def required_inputs(self) -> set[str]:
         return {io.name for io in self.inputs if io.required}
@@ -81,10 +85,21 @@ def load_prompt(path: Union[str, pathlib.Path]) -> Prompt:
     meta, body = parse_frontmatter(text)
     if meta is None:
         raise PromptInvalid(f"{p}: no YAML frontmatter block")
-    return _build_prompt(meta, body, source=str(p))
+    return _build_prompt(meta, body, source=str(p),
+                         template_id=p.stem, template_version=_git_blob_sha(text))
 
 
-def _build_prompt(meta: dict, body: str, *, source: str) -> Prompt:
+def _git_blob_sha(text: str) -> str:
+    """The git blob SHA of ``text`` — the same id ``git hash-object`` produces, computed locally so
+    no git invocation or commit is needed. It changes iff the prompt's bytes change, which is exactly
+    the "which version of the prompt" identity US-0024 M7 wants for replay/traceability."""
+    data = text.encode("utf-8")
+    blob = b"blob " + str(len(data)).encode("ascii") + b"\x00" + data
+    return hashlib.sha1(blob).hexdigest()
+
+
+def _build_prompt(meta: dict, body: str, *, source: str,
+                  template_id: str = "", template_version: str = "") -> Prompt:
     """Validate ``meta`` against the prompt contract (`standards/prompts/README.md`)."""
     agent = meta.get("agent")
     if agent not in _AGENTS:
@@ -111,7 +126,8 @@ def _build_prompt(meta: dict, body: str, *, source: str) -> Prompt:
     if not body.strip():
         raise PromptInvalid(f"{source}: prompt body is empty")
     return Prompt(agent=agent, model_tier=tier, max_output_tokens=max_tokens,
-                  inputs=inputs, outputs=outputs, body=body)
+                  inputs=inputs, outputs=outputs, body=body,
+                  template_id=template_id or f"{agent}-agent", template_version=template_version)
 
 
 def _parse_io_list(raw, *, field: str, source: str) -> tuple[PromptIO, ...]:

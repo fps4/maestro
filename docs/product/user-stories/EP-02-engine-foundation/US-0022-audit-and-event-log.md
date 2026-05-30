@@ -23,6 +23,7 @@ so that I can prove what an agent was permitted to do, what it did, and who appr
 ## Acceptance criteria (EARS)
 
 - WHEN a state change, agent action, gate decision, or LLM call occurs, THE SYSTEM SHALL append a record carrying the same `run_id` so the run is pivotable across all four stores.
+- WHEN recording an LLM call, THE SYSTEM SHALL include `prompt_template_id` and `prompt_template_version` (the git blob SHA of the prompt file) so the call is traceable to which prompt at which version produced it (US-0024 M7).
 - WHEN a gate is decided, THE SYSTEM SHALL record the decision, its rationale, the context shown to the reviewer, the reviewer id, and the decision class (auto / approve / never).
 - THE SYSTEM SHALL keep the audit tier append-only and tamper-evident (WORM + hash-chained) and SHALL NOT permit edits or deletes within the retention window.
 - WHEN persisting any record, THE SYSTEM SHALL redact PII and secrets before storage, and prompt/response content SHALL be off by default, stored only when explicitly enabled.

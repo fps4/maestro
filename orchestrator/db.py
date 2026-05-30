@@ -17,7 +17,7 @@ import sqlite3
 DEFAULT_DB = "data/maestro.db"
 
 # Bump only by ADDING a migration — never edit an applied one (standards/patterns.yaml).
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS events (
@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     latency_ms    INTEGER NOT NULL DEFAULT 0,
     finish_reason TEXT,                          -- stop_reason, or 'error' on a failed attempt
     error         TEXT,                          -- set when the call failed (still recorded)
+    prompt_template_id      TEXT,                -- US-0024 M7: which prompt produced this (e.g. 'spec-agent')
+    prompt_template_version TEXT,                -- US-0024 M7: git blob SHA of the prompt file (replay/traceability)
     ts            REAL    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_llm_calls_run_id ON llm_calls (run_id);
@@ -92,6 +94,7 @@ def connect(path: str | None = None, *, check_same_thread: bool = True) -> sqlit
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.executescript(_SCHEMA)
+    _migrate(conn)
     # On an existing DB, replace the recorded version so the meta reflects the latest schema applied.
     conn.execute(
         "INSERT INTO schema_meta (key, value) VALUES ('version', ?) "
@@ -100,3 +103,19 @@ def connect(path: str | None = None, *, check_same_thread: bool = True) -> sqlit
     )
     conn.commit()
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Idempotent additive migrations for DBs created before the current ``SCHEMA_VERSION``.
+
+    ``CREATE TABLE IF NOT EXISTS`` leaves an *existing* table untouched, so a column added to
+    ``_SCHEMA`` never reaches an already-created DB. Each migration here is an ``ADD COLUMN`` guarded
+    by a presence check — safe to run on every connect, on fresh and existing DBs alike (SQLite
+    ``ADD COLUMN`` is cheap and non-rewriting). New columns are nullable, so old rows read as NULL.
+    """
+    cols = {r["name"] for r in conn.execute("PRAGMA table_info(llm_calls)")}
+    # v3 (US-0024 M7): prompt provenance on each LLM call.
+    if "prompt_template_id" not in cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN prompt_template_id TEXT")
+    if "prompt_template_version" not in cols:
+        conn.execute("ALTER TABLE llm_calls ADD COLUMN prompt_template_version TEXT")

@@ -12,6 +12,12 @@ next-env.d.ts
 .env.local
 .env*.local
 
+# test artefacts
+test-results/
+playwright-report/
+playwright/.cache/
+coverage/
+
 # misc
 *.log
 .DS_Store

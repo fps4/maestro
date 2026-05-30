@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { ApiErrorNotice } from '@/components/api-error-notice';
+import { ArtefactsPanel } from '@/components/artefacts-panel';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { CommentForm } from '@/components/comment-form';
@@ -173,6 +174,19 @@ export default async function TaskPage({
               )}
             </div>
           )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Artefacts</CardTitle>
+              <CardDescription>
+                The PR diff, test report and SBOM this task produced — resolved through the artefact
+                store on demand, never a long-lived link (ADR-0012).
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <ArtefactsPanel productId={productId} artefacts={task.stored_artefacts} />
+            </CardContent>
+          </Card>
         </div>
       </div>
 

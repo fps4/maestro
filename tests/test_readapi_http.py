@@ -171,3 +171,70 @@ def test_get_task_includes_comments_over_http(content_reader, monkeypatch):
     finally:
         server.shutdown()
         server.server_close()
+
+
+# --- US-0033: the artefact endpoint over the wire (302 → presigned URL) --------------------------
+
+from storage import InMemoryArtifactStore  # noqa: E402
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    """Don't follow the 302 — the presigned Location is a memory:// (or off-host) URL we only assert."""
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+def _get_no_redirect(url, headers=None):
+    opener = urllib.request.build_opener(_NoRedirect)
+    req = urllib.request.Request(url, headers=headers or {})
+    try:
+        with opener.open(req, timeout=5) as r:
+            return r.status, dict(r.headers)
+    except urllib.error.HTTPError as e:
+        return e.code, dict(e.headers)
+
+
+@pytest.fixture
+def store_base_url(content_reader):
+    register = Register(products={
+        "maestro": Product(id="maestro", name="maestro", product_type="technical", visibility="public",
+                           repos=(REPO,),
+                           participants=(Participant(handle="@arch", role="architect", email=ARCH),)),
+    })
+    events = EventLog(db.connect(":memory:", check_same_thread=False))
+    store = InMemoryArtifactStore()
+    store.put("maestro", "tasks/t/pr-diff.patch", b"--- a\n+++ b\n", "text/x-diff")
+    server = make_server(ReadAPI(register, events, content_reader, store=store),
+                         host="127.0.0.1", port=0)
+    t = threading.Thread(target=server.serve_forever, daemon=True)
+    t.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        server.server_close()
+
+
+def test_artifact_endpoint_302s_to_presigned_url(store_base_url, monkeypatch):
+    _as_arch(monkeypatch)
+    status, headers = _get_no_redirect(
+        f"{store_base_url}/api/products/maestro/artifacts/tasks/t/pr-diff.patch")
+    assert status == 302
+    assert headers["Location"].startswith("memory://maestro/tasks/t/pr-diff.patch?expires=")
+    # The short-lived redirect must never be cached and re-served stale (AC #7).
+    assert headers.get("Cache-Control") == "no-store"
+
+
+def test_artifact_endpoint_absent_key_is_404(store_base_url, monkeypatch):
+    _as_arch(monkeypatch)
+    status, _ = _get_no_redirect(
+        f"{store_base_url}/api/products/maestro/artifacts/tasks/t/missing.patch")
+    assert status == 404
+
+
+def test_artifact_endpoint_requires_identity(store_base_url, monkeypatch):
+    monkeypatch.delenv("MAESTRO_DEV_IDENTITY", raising=False)
+    monkeypatch.delenv("MAESTRO_ENV", raising=False)
+    status, _ = _get_no_redirect(
+        f"{store_base_url}/api/products/maestro/artifacts/tasks/t/pr-diff.patch")
+    assert status == 401

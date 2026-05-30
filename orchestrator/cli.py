@@ -111,7 +111,13 @@ def cmd_serve(a) -> int:
     db_path = a.db
     conn = db.connect(db_path, check_same_thread=False)
     events = EventLog(conn)
-    read = ReadAPI(register, events, HttpGitHubClient(token), default_branch=default_branch)
+    # The ArtifactStore backs the US-0033 artefact endpoint (302 → presigned URL). Defaults to the
+    # in-memory backend; a real deploy sets the instance MinIO block (ADR-0012 / Q4) — that config
+    # wiring lands with the first artefact emitter (no producer stores artefacts yet in this slice).
+    from storage import load_artifact_store_config, make_store
+    store = make_store(load_artifact_store_config(None))
+    read = ReadAPI(register, events, HttpGitHubClient(token), default_branch=default_branch,
+                   store=store)
 
     dispatcher = resumer = None
     if a.engine:

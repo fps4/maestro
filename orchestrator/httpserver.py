@@ -141,6 +141,14 @@ def make_handler(read: ReadAPI, write: Optional[WriteAPI] = None):
                     self._send(200, doc, extra_headers={"ETag": etag})
             elif len(parts) == 5 and parts[:2] == ["api", "products"] and parts[3] == "tasks":
                 self._send(200, read.get_task(identity, parts[2], parts[4]))
+            # GET /api/products/{p}/artifacts/{key...} — 302 to a short-TTL presigned URL (US-0033).
+            # The key is path-like (may contain '/'), so it is the whole tail after "artifacts".
+            elif len(parts) >= 5 and parts[:2] == ["api", "products"] and parts[3] == "artifacts":
+                key = "/".join(parts[4:])
+                url = read.artifact_url(identity, parts[2], key)
+                # Redirect, never proxy the bytes (US-0033 AC #2). ``no-store`` so the short-lived
+                # redirect target is never cached and re-served stale (AC #7).
+                self._send(302, None, extra_headers={"Location": url, "Cache-Control": "no-store"})
             else:
                 raise NotFoundRoute()
 

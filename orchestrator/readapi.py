@@ -24,11 +24,13 @@ from orchestrator.projection import (
     ArtefactPublished,
     Comment,
     GateDecision,
+    StoredArtefact,
     TaskState,
     project,
     project_task,
 )
 from orchestrator.register import Register
+from storage import ArtifactStore, BackendUnavailable
 from orchestrator.specindex import (
     KINDS,
     KIND_FUNCTIONAL,
@@ -71,11 +73,15 @@ class Degraded(APIError):
 
 class ReadAPI:
     def __init__(self, register: Register, events, content: RepoContentReader,
-                 default_branch: str = "main"):
+                 default_branch: str = "main", store: Optional[ArtifactStore] = None):
         self._register = register
         self._events = events
         self._content = content
         self._default_branch = default_branch
+        # The ArtifactStore (US-0023) the artefact endpoint mints presigned URLs from. Optional so the
+        # read-only S1 surface (and tests that don't exercise artefacts) can omit it; the artefact
+        # endpoint returns 503 when it is absent (no store wired).
+        self._store = store
         self._read_lock = threading.Lock()  # serialise event-log reads across request threads
         # Index cache: rebuild a branch's index only when its head commit changes — not per request.
         # Blob cache: content-addressed frontmatter, shared across branches/rebuilds. The webhook `push`
@@ -167,6 +173,12 @@ class ReadAPI:
             # chronological order. The workspace chains adjacent (kind, path) refs to render the
             # diff-of-artefact view (workspace-ux-design.md §refinement-loop step 4).
             "artefacts": [_artefact_json(a) for a in task.artefacts],
+            # The per-task artefacts index (US-0033): artefacts whose bytes live in the ArtifactStore
+            # (PR diff, test report, SBOM, …). Each carries an ``href`` to the artefact endpoint,
+            # which mints a short-TTL presigned URL on request — the workspace never embeds a
+            # long-lived public link (US-0033 AC #2).
+            "stored_artefacts": [_stored_artefact_json(product.id, task.task_id, a)
+                                 for a in task.stored_artefacts],
         }
 
     def get_spec(self, identity: str, product_id: str, feature: str, kind: str,
@@ -214,6 +226,36 @@ class ReadAPI:
                     "content": obj.get("content", ""),
                     "status": _status(task, spec.kind) if task else None}
         raise NotFound(f"no {kind} for feature {feature!r} on branch {target!r}")
+
+    def artifact_url(self, identity: str, product_id: str, key: str) -> str:
+        """``GET /api/products/{product_id}/artifacts/{key}`` resolution (US-0033 AC #2/#5).
+
+        Returns a **short-TTL presigned URL** for the product's object — the HTTP binding 302-redirects
+        the caller to it; the orchestrator never proxies the bytes. Per-product isolation is enforced
+        the same way every other read is: the caller must participate in ``product_id`` or the call is
+        ``404`` (existence not disclosed — ADR-0010/0011), and the key is resolved **only** under that
+        product's namespace, so a presigned URL can never address another product's bytes.
+
+        - Unknown-to-caller product → ``404`` (``_authorize_product``).
+        - Object absent under the product → ``404`` (existence-is-404; the store ``head`` is ``None``).
+        - No store wired, or the store is unreachable → ``503`` (``Degraded``) so the workspace shows
+          the index read-only with a retry, never a stale copy (US-0033 AC #7).
+        """
+        product = self._authorize_product(identity, product_id)
+        if self._store is None:
+            raise Degraded("artifact store is not configured")
+        if not key:
+            raise NotFound("artifact key is required")
+        try:
+            ref = self._store.head(product.id, key)
+            if ref is None:
+                raise NotFound(f"artifact {key!r} not found")
+            return self._store.presigned_get(product.id, key)
+        except BackendUnavailable as exc:
+            raise Degraded(f"artifact store unavailable: {exc}") from exc
+        except ValueError as exc:
+            # An invalid key shape (the store's validation) — a malformed request, not a 5xx.
+            raise NotFound(f"artifact {key!r} not found") from exc
 
     # --- isolation + identity -------------------------------------------------------------------
 
@@ -329,6 +371,17 @@ def _agent_response_json(r: AgentResponse) -> dict:
 def _artefact_json(a: ArtefactPublished) -> dict:
     return {"agent": a.agent, "kind": a.kind, "feature": a.feature, "ref": a.ref,
             "via": a.via, "published_at": a.published_at, "seq": a.seq}
+
+
+def _stored_artefact_json(product_id: str, task_id: str, a: StoredArtefact) -> dict:
+    """Shape one stored-artefact index entry for the wire. ``href`` points at the artefact endpoint
+    (US-0033) — the workspace follows it to a freshly-minted presigned URL; the bytes/uri never
+    appear here, so the browser never holds a long-lived link (AC #2)."""
+    return {"kind": a.kind, "name": a.name, "key": a.key,
+            "content_type": a.content_type, "size": a.size, "sha256": a.sha256,
+            "source": a.source, "stored_at": a.stored_at, "seq": a.seq,
+            "href": (f"/api/products/{quote(product_id)}/artifacts/"
+                     f"{quote(a.key, safe='/')}")}
 
 
 def _ref_json(ref: SpecRef) -> dict:

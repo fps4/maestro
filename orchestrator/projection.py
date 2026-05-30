@@ -110,6 +110,29 @@ class ArtefactPublished:
 
 
 @dataclass
+class StoredArtefact:
+    """An artefact whose **bytes live in the `ArtifactStore`** (US-0023/US-0033) — a PR-diff
+    snapshot, a test report, an SBOM, or a spec/design copy. Distinct from
+    :class:`ArtefactPublished` (which references markdown committed to the *repo* for the
+    diff-of-artefact view): this is the per-task **artefacts index** the workspace browser renders,
+    each entry resolvable to short-TTL presigned content through the store (US-0033 AC #1/#2).
+
+    Projected from ``artifact.stored`` events. The event log carries ``storage_uri + sha256`` and the
+    store key — and **only** those references (ADR-0008/0009); the store holds the bytes."""
+    kind: str                           # pr_diff | test_report | sbom | diff_snapshot | functional_spec | technical_design
+    key: str                            # the ArtifactStore object key (the read endpoint mints a presigned URL for it)
+    name: str                           # display name for the index (defaults to the key's basename)
+    product_id: Optional[str]
+    storage_uri: str
+    sha256: str
+    content_type: str
+    size: int
+    source: Optional[dict]              # what produced it — {event, seq} / {agent} (audit breadcrumb)
+    stored_at: float
+    seq: int
+
+
+@dataclass
 class TaskState:
     task_id: str             # == run_id
     stage: str = "intake"
@@ -124,6 +147,10 @@ class TaskState:
     # Every artefact commit on this task — producer events + agent responses — so the workspace
     # can chain adjacent (kind, path) refs into a diff-of-artefact view without re-walking the log.
     artefacts: list[ArtefactPublished] = field(default_factory=list)
+    # The per-task artefacts index (US-0033): artefacts whose bytes live in the ArtifactStore,
+    # projected from ``artifact.stored`` events, in chronological order. Each is resolvable to
+    # short-TTL presigned content through the read API's artefact endpoint.
+    stored_artefacts: list[StoredArtefact] = field(default_factory=list)
     # Currently-pending gates by type: ``{type: {gate_id, seq, opened_at}}``. An entry appears when a
     # producing event lands (``spec.drafted`` / ``design.produced`` / ``pr.opened``) and is popped on
     # the first ``gate.decided`` for that type — so a request-changes that re-opens the producing
@@ -181,6 +208,24 @@ def _apply(t: TaskState, e: dict) -> None:
                 published_at=e["ts"],
                 seq=seq,
             ))
+
+    if etype == "artifact.stored":
+        # An artefact's bytes landed in the ArtifactStore (US-0033). Record the reference into the
+        # per-task artefacts index; the read API mints a presigned URL per request from the key.
+        key = payload.get("key") or ""
+        t.stored_artefacts.append(StoredArtefact(
+            kind=payload.get("kind") or "artefact",
+            key=key,
+            name=payload.get("name") or key.rsplit("/", 1)[-1] or key,
+            product_id=payload.get("product_id"),
+            storage_uri=payload.get("storage_uri") or "",
+            sha256=payload.get("sha256") or "",
+            content_type=payload.get("content_type") or "application/octet-stream",
+            size=int(payload.get("size") or 0),
+            source=payload.get("source"),
+            stored_at=e["ts"],
+            seq=seq,
+        ))
 
     if etype == "pr.opened":
         t.pr = {"repo": payload.get("repo"), "number": payload.get("pr_number"),

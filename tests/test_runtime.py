@@ -56,16 +56,17 @@ def test_approve_functional_routes_to_design_then_suspends_at_design_gate():
     assert spec_calls == ["run-1"]
 
 
-def test_approve_design_ends_the_graph():
-    """M1 ends after design approval; M2 will wire build + merge_gate. The graph state is terminal
-    (no next node) — the projection's status follows from the gate.decided event independently."""
+def test_approve_design_advances_through_build_to_await_dod():
+    """M2 #3: design approval now routes to build_node, which advances to await_dod and suspends
+    there waiting for the CI poller. The graph is no longer terminal at this point — M1 ended
+    here; M2 carries on through build → DoD → merge."""
     runtime = LangGraphRuntime(run_spec=_record([]))
     runtime.dispatch("run-1")
     runtime.resume_for_decision("run-1", "functional", "approve")
     runtime.resume_for_decision("run-1", "technical_design", "approve")
 
     snap = runtime.state("run-1")
-    assert snap.next == ()
+    assert snap.next == ("await_dod",)
 
 
 # --- request_changes loops -----------------------------------------------------------------------
@@ -162,3 +163,127 @@ def test_state_returns_a_snapshot_with_the_carry_state():
     snap = runtime.state("run-1")
     assert snap.values.get("last_decision") == "approve"
     assert snap.values.get("last_gate_type") == "functional"
+
+
+# --- M2 #3: build → DoD → merge_gate → merge_exec topology --------------------------------------
+
+
+def _advance_to(runtime: LangGraphRuntime, run_id: str, stop: str) -> None:
+    """Step the runtime through the M1 prefix until it suspends at the named M2 node.
+
+    Reduces M2 test boilerplate — every M2 test starts from "design has been approved" or later.
+    """
+    runtime.dispatch(run_id)
+    runtime.resume_for_decision(run_id, "functional", "approve")
+    runtime.resume_for_decision(run_id, "technical_design", "approve")
+    if stop == "await_dod":
+        return
+    runtime.resume_for_dod(run_id, "green")
+    if stop == "await_merge_gate":
+        return
+    raise ValueError(f"unsupported stop {stop!r}")
+
+
+def test_build_helper_is_called_on_design_approve():
+    """When M2 #4 plugs in the builder agent's dispatcher, the build node calls it before
+    suspending at await_dod. Pin the seam here so #4 just swaps the closure."""
+    build_calls: list[str] = []
+    runtime = LangGraphRuntime(run_spec=_record([]),
+                               run_build=_record(build_calls))
+    runtime.dispatch("run-1")
+    runtime.resume_for_decision("run-1", "functional", "approve")
+    runtime.resume_for_decision("run-1", "technical_design", "approve")
+
+    assert build_calls == ["run-1"]
+
+
+def test_dod_green_routes_to_await_merge_gate():
+    runtime = LangGraphRuntime(run_spec=_record([]))
+    _advance_to(runtime, "run-1", stop="await_dod")
+    runtime.resume_for_dod("run-1", "green")
+
+    snap = runtime.state("run-1")
+    assert snap.next == ("await_merge_gate",)
+    assert snap.values.get("last_dod_status") == "green"
+
+
+def test_dod_red_ends_the_graph():
+    """A red DoD ends the run — M2 has no "fix and retry" path (M3 may add one). The projection
+    records the failure independently from the ``dod.red`` event the CI poller emits."""
+    runtime = LangGraphRuntime(run_spec=_record([]))
+    _advance_to(runtime, "run-1", stop="await_dod")
+    runtime.resume_for_dod("run-1", "red")
+
+    assert runtime.state("run-1").next == ()
+
+
+def test_dod_unknown_status_ends_the_graph_defensively():
+    """Defensive: an unrecognised status doesn't advance through to a merge gate (no silent
+    "approve by ambiguity"). The route_after_dod default-case is deliberate."""
+    runtime = LangGraphRuntime(run_spec=_record([]))
+    _advance_to(runtime, "run-1", stop="await_dod")
+    runtime.resume_for_dod("run-1", "unknown")
+
+    assert runtime.state("run-1").next == ()
+
+
+def test_approve_merge_gate_runs_merge_exec_and_ends():
+    """The full M2 happy path through the topology. ``run_merge`` is the seam where a later slice
+    wires ``GitHubAdapter.merge`` (ADR-0016 boundary — the execution half; M0+M1 proved refusal)."""
+    merge_calls: list[str] = []
+    runtime = LangGraphRuntime(run_spec=_record([]),
+                               run_merge=_record(merge_calls))
+    _advance_to(runtime, "run-1", stop="await_merge_gate")
+    runtime.resume_for_decision("run-1", "technical_merge", "approve")
+
+    assert merge_calls == ["run-1"]
+    assert runtime.state("run-1").next == ()
+
+
+def test_request_changes_on_merge_gate_re_runs_build_node():
+    """The architect saw the implementation and wants a different one — loop back to **build**,
+    not design. Mirrors the M1 design-gate loop, one step further down the chain. The builder
+    re-runs and re-opens the merge gate when DoD goes green again."""
+    build_calls: list[str] = []
+    runtime = LangGraphRuntime(run_spec=_record([]),
+                               run_build=_record(build_calls))
+    _advance_to(runtime, "run-1", stop="await_merge_gate")
+    runtime.resume_for_decision("run-1", "technical_merge", "request_changes")
+
+    snap = runtime.state("run-1")
+    assert snap.next == ("await_dod",)               # build ran again, paused at the next DoD wait
+    assert build_calls == ["run-1", "run-1"]         # ran once on first build, again on re-build
+
+
+def test_reject_on_merge_gate_ends_the_graph():
+    runtime = LangGraphRuntime(run_spec=_record([]))
+    _advance_to(runtime, "run-1", stop="await_merge_gate")
+    runtime.resume_for_decision("run-1", "technical_merge", "reject")
+
+    assert runtime.state("run-1").next == ()
+
+
+def test_merge_exec_node_stubs_when_run_merge_not_wired():
+    """``run_merge`` is optional through M2 #3 — the topology compiles and the graph reaches END
+    even without a real merge adapter wired. The ADR-0016 boundary lives **inside** the adapter
+    that ``run_merge`` will eventually call; the node itself just dispatches."""
+    runtime = LangGraphRuntime(run_spec=_record([]))   # no run_merge
+    _advance_to(runtime, "run-1", stop="await_merge_gate")
+    runtime.resume_for_decision("run-1", "technical_merge", "approve")
+
+    assert runtime.state("run-1").next == ()
+
+
+def test_dod_resume_carries_through_to_state():
+    """Like the gate-decision carry-through — the DoD status lands in the graph state for
+    observability. The routing fn reads only ``status``; this asserts the seam."""
+    runtime = LangGraphRuntime(run_spec=_record([]))
+    _advance_to(runtime, "run-1", stop="await_dod")
+    runtime.resume_for_dod("run-1", "green")
+
+    snap = runtime.state("run-1")
+    assert snap.values.get("last_dod_status") == "green"
+    # The merge-gate suspend hasn't yet carried a ``last_decision`` for the merge gate — that lands
+    # on the next resume_for_decision. Carry of the previous gate's value is the M1 invariant we
+    # don't disturb here.
+    assert snap.values.get("last_gate_type") == "technical_design"

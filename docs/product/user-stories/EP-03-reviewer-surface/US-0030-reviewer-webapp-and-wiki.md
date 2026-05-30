@@ -47,6 +47,10 @@ record ([ADR-0008](../../../architecture/decisions/0008-system-of-record-and-per
   never an open inbound port.
 - IF the orchestrator is unavailable, THEN THE SYSTEM SHALL show gate state read-only and SHALL NOT
   accept a decision it cannot record — no decision is lost or fabricated.
+- WHEN the specs view loads, THE SYSTEM SHALL surface any `unindexed` specs (each with its `reason`)
+  in a persistent banner / dedicated panel — never only in the API payload — so a duplicate
+  `(feature, kind)` or malformed `maestro:` block is visible to the single human author (US-0024 M8;
+  the read API already carries `unindexed[]` + `reason`, ADR-0018). *Frontend work in `web/`.*
 
 ## Out of scope
 

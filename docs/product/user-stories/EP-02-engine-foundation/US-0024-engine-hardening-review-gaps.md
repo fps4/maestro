@@ -1,10 +1,12 @@
 ---
 title: "US-0024: Engine hardening — close the review-validated architecture gaps"
 persona: architect
-status: draft
+status: closed
 complexity: XL
 milestone: M2
 last_updated: 2026-05-30
+closed_on: 2026-05-30
+closed_by: "@farid (architect)"
 prd: docs/product/prd/0001-architect-directed-delivery-loop.md
 related:
   - docs/architecture/decisions/0002-claude-api-direct-via-modelclient.md
@@ -28,6 +30,27 @@ so that the load-bearing M2 risks (audit-chain durability, governance separation
 This story supersedes `REVIEW-NOTES-2026-05-30.md`. Every finding below was re-validated in a second pass against the current docs and, where code exists, against `orchestrator/` directly. The validation verdict is recorded per finding. Three findings from the original review were corrected and are folded in here in their corrected form (H1 softened, M8 softened, M10 reframed); one cross-cutting claim (idempotency) was sharpened.
 
 This is an **umbrella story by deliberate choice** — it is closer to a hardening backlog than a single unit of work. The acceptance criteria are grouped by finding ID and tiered (§Sequencing). Sub-items expected to grow their own ADR or story are flagged inline; when they spin out, replace the AC group here with a pointer.
+
+## Disposition (closed 2026-05-30)
+
+Closed as an umbrella: every one of the 17 validated findings is now **shipped in code**, **specified in docs**, or **spun into a child story** — nothing is left only inside this story. Residual *implementation* proceeds step-by-step under the homes below.
+
+| Finding | Outcome | Home |
+|---|---|---|
+| H6 self-deal invariant, H7 dev-stub auth, H2 refinement cap + drain switch | shipped (code) | PR #50 (merged) |
+| H2 budget caps, M7 prompt provenance, M9 redaction floor | shipped (code) | PR #51 (merged) |
+| Tier 3 reconciliation (ADR sweep, M10, roadmap honesty, M3 note) + idempotency note + ADR-0017 dedup | shipped (docs) | PR #52 (merged) |
+| H3 MinIO durability | ops task (M2 entrance) | ds1 ops + roadmap risks |
+| H1 model-variant + "no independent review yet" flag | specified | [US-0015](../EP-01-delivery-loop/US-0015-independent-reviewer-agent.md), m2-build-to-merge.md |
+| M8 unindexed banner | specified (frontend pending) | [US-0030](../EP-03-reviewer-surface/US-0030-reviewer-webapp-and-wiki.md) AC + ADR-0018 |
+| M1 escalate action, M2 task.resumed | decision recorded | ADR-0022, [US-0020](US-0020-orchestrate-delivery-task.md) |
+| H4 triage, M4 knowledge dep | constraint/dependency recorded | roadmap risks |
+| H5 revert flow | child story (M5) | [US-0018](../EP-01-delivery-loop/US-0018-revert-a-merged-pr.md) |
+| M5 DoD-CI bootstrap | child story (M4) | [US-0002](../EP-00-platform-scaffold/US-0002-bootstrap-dod-ci-on-a-product.md) |
+| M6 hallucinated-dep check | child story (M3) | [US-0025](US-0025-hallucinated-dependency-check.md) |
+| Negative-test sweep (cross-cutting) | residual; the merge boundary + Tier-1 boundaries already carry negative tests, the **webhook-receiver** negative tests land with that receiver in M3 | ADR-0016/0017/0019 test requirements |
+
+The acceptance criteria below are retained as the historical record of the finding-by-finding scope; live tracking now follows the homes above.
 
 ## Acceptance criteria (EARS)
 

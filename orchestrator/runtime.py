@@ -1,22 +1,24 @@
-"""The orchestrator runtime — owns the LangGraph instance + the write API's dispatcher/resumer
-hooks (ADR-0014).
+"""The orchestrator runtime — owns the LangGraph instance + the write API / CI-poller hooks
+(ADR-0014).
 
 One process, one runtime, one graph instance per delivery task (``thread_id = task_id``). The
 runtime is **the only component** that imports LangGraph; everything upstream (the write API,
-the projection, the read API) sees it as two opaque callables:
+the projection, the read API, the CI poller) sees it as opaque callables:
 
 * :meth:`dispatch` — start a graph run after the workspace write API emits ``task.dispatched``.
 * :meth:`resume_for_decision` — resume a suspended graph after the gate-decision endpoint emits
-  ``gate.decided``.
+  ``gate.decided`` (functional / technical_design / **technical_merge** — M2).
+* :meth:`resume_for_dod` — resume a suspended graph after the CI poller emits ``dod.green`` or
+  ``dod.red`` (M2 — wired by M2 #4's CI status loop).
 
 That isolation is the point: the engine spine stays LangGraph-free; ADR-0008's "event log is the
-truth" invariant is preserved because the spec/design nodes call into
-:mod:`orchestrator.agents` helpers that read/write the log directly. The graph state is a
-**rebuildable execution cache** (ADR-0014), not authoritative.
+truth" invariant is preserved because the spec/design/build nodes call into
+:mod:`orchestrator.agents` helpers (and the GitHub adapter for the merge exec) that read/write the
+log directly. The graph state is a **rebuildable execution cache** (ADR-0014), not authoritative.
 
-Async-vs-sync: the runtime's two entry points are **synchronous** — they invoke the graph and
-return when it next interrupts or terminates. The boot path wraps them in a thread pool so the
-HTTP request that triggered them doesn't block on a multi-second LLM call (see
+Async-vs-sync: the runtime's entry points are **synchronous** — they invoke the graph and return
+when it next interrupts or terminates. The boot path wraps them in a thread pool so the HTTP
+request that triggered them doesn't block on a multi-second LLM call (see
 :func:`make_async_dispatcher` / :func:`make_async_resumer`). Tests pass the sync forms directly so
 they can assert against the event log immediately.
 """
@@ -37,37 +39,54 @@ class LangGraphRuntime:
     """Holds the compiled graph + injected hooks; serialises ``dispatch`` / ``resume`` calls per
     thread-id so two concurrent decision events on the same task don't tangle the checkpointer.
 
-    ``run_spec`` / ``run_design`` are the spec / design dispatcher helpers
-    (``orchestrator.agents.spec.run_spec_for_run`` and — when M1 #8 lands — ``run_design_for_run``).
-    Wiring them in here, not on the graph build, lets a test inject deterministic no-op closures.
+    ``run_spec`` / ``run_design`` / ``run_build`` / ``run_merge`` are the spec / design / build /
+    merge dispatcher helpers. Wiring them in here, not on the graph build, lets a test inject
+    deterministic no-op closures. The M2 #3 slice stubs build / merge by default (``None``); M2 #4+
+    fills them with the real builder agent and the ``GitHubAdapter.merge`` call (ADR-0016
+    boundary).
     """
 
     def __init__(self, *, run_spec: Callable[[str], Any],
                  run_design: Optional[Callable[[str], Any]] = None,
+                 run_build:  Optional[Callable[[str], Any]] = None,
+                 run_merge:  Optional[Callable[[str], Any]] = None,
                  checkpointer: Optional[BaseCheckpointSaver] = None):
         self._graph = build_graph(
             run_spec=run_spec, run_design=run_design,
+            run_build=run_build, run_merge=run_merge,
             checkpointer=checkpointer or InMemorySaver(),
         )
         # One lock per thread_id; held while LangGraph reads/writes the checkpointer for that run.
         self._locks: dict[str, threading.Lock] = {}
         self._locks_lock = threading.Lock()       # protect the dict above
 
-    # --- the two entry points the write API calls ----------------------------------------------
+    # --- the entry points external code calls ---------------------------------------------------
 
     def dispatch(self, run_id: str) -> None:
         """Start a graph run for a freshly dispatched task. Synchronous; returns when the graph
-        interrupts (at the first ``await_*_gate`` node) or terminates."""
+        interrupts (at the first ``await_*`` node) or terminates."""
         with self._lock_for(run_id):
             self._graph.invoke({"run_id": run_id}, _config(run_id))
 
     def resume_for_decision(self, run_id: str, gate_type: str, decision: str) -> None:
-        """Resume a suspended graph with the architect's gate decision. ``gate_type`` is carried
+        """Resume a suspended graph with the decider's gate decision. ``gate_type`` is carried
         through to the next node's state (observability — the routing logic itself reads only
-        ``decision``)."""
+        ``decision``). Used by the workspace write API's gate-decision endpoint for the
+        ``functional``, ``technical_design``, and (M2) ``technical_merge`` gates."""
         with self._lock_for(run_id):
             self._graph.invoke(
                 Command(resume={"decision": decision, "gate_type": gate_type}),
+                _config(run_id),
+            )
+
+    def resume_for_dod(self, run_id: str, status: str) -> None:
+        """Resume a suspended graph with the DoD result (``"green"`` or ``"red"``). Called by the
+        CI poller (M2 #4) after ``dod.green`` / ``dod.red`` lands in the event log. Separate from
+        :meth:`resume_for_decision` because DoD is not a *human* gate — the resumer's caller is the
+        CI status loop, not the workspace."""
+        with self._lock_for(run_id):
+            self._graph.invoke(
+                Command(resume={"status": status}),
                 _config(run_id),
             )
 

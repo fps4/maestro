@@ -19,6 +19,15 @@ DEFAULT_REGISTER = "config/products.yaml"
 EXAMPLE_REGISTER = "config/products.example.yaml"
 
 
+class RegisterError(ValueError):
+    """The register is structurally invalid; maestro must not start (US-0024 H6).
+
+    Raised at load time so a governance-breaking roster (e.g. the same human holding both
+    ``architect`` and ``functional_reviewer`` on a commercial product — which would collapse the
+    split-review guarantee of ADR-0003) fails the boot, never silently runs degraded.
+    """
+
+
 @dataclass(frozen=True)
 class Participant:
     handle: str
@@ -57,6 +66,19 @@ class Product:
     def participant_for(self, identity: str) -> Optional[Participant]:
         """The participant this identity names, or None — the read API's authz lookup (ADR-0019)."""
         return next((p for p in self.participants if p.matches(identity)), None)
+
+    def self_dealing_handles(self) -> list[str]:
+        """Handles that hold **both** ``architect`` and ``functional_reviewer`` on this product.
+
+        On a commercial product this set must be empty (US-0024 H6): the split-review matrix
+        (ADR-0003) routes the functional gate to ``functional_reviewer`` precisely so that the
+        architect does not sign off on their own commercial scope. One human in both roles silently
+        turns that guarantee off. Membership is compared by ``handle`` — the roster's stable per-human
+        key. Returned sorted so the error message is deterministic.
+        """
+        architects = {p.handle for p in self.participants if p.role == "architect"}
+        functional = {p.handle for p in self.participants if p.role == "functional_reviewer"}
+        return sorted(architects & functional)
 
 
 @dataclass
@@ -116,4 +138,22 @@ def load_register(path: Optional[str] = None, *, allow_example: bool = False) ->
             participants=parts,
         )
         products[prod.id] = prod
+    _enforce_role_separation(products)
     return Register(products=products)
+
+
+def _enforce_role_separation(products: dict[str, "Product"]) -> None:
+    """Refuse to load a commercial product whose roster lets one human hold both the architect and
+    functional_reviewer roles (US-0024 H6 / ADR-0003). Technical products are exempt — there the
+    architect *is* the only reviewer by design.
+    """
+    for prod in products.values():
+        if prod.product_type != "commercial":
+            continue
+        offenders = prod.self_dealing_handles()
+        if offenders:
+            raise RegisterError(
+                f"product {prod.id!r} is commercial but {', '.join(offenders)} hold(s) both "
+                f"'architect' and 'functional_reviewer' — the split-review separation (ADR-0003) "
+                f"requires these roles to be different people on a commercial product"
+            )

@@ -149,7 +149,7 @@ class WriteAPI:
     def __init__(self, register: Register, events: EventLog, routing: RoutingResolver,
                  idempotency: IdempotencyStore, *,
                  id_factory=None, comment_id_factory=None, bundle_id_factory=None,
-                 dispatcher=None, resumer=None):
+                 dispatcher=None, resumer=None, refinement_cap=None):
         """``id_factory`` mints task ids; ``comment_id_factory`` mints comment ids;
         ``bundle_id_factory`` mints feedback-bundle ids. All three are injectable for deterministic
         tests; production uses :func:`_default_run_id` / :func:`_default_comment_id` /
@@ -172,6 +172,9 @@ class WriteAPI:
         self._bundle_id_factory = bundle_id_factory or _default_bundle_id
         self._dispatcher = dispatcher
         self._resumer = resumer
+        # US-0024 H2: an explicit override for the refinement-loop cap (tests inject a small value);
+        # ``None`` reads the configured cap from the routing matrix (gate.max_refinement_iterations).
+        self._refinement_cap_override = refinement_cap
         # One writer lock across request threads — the read API has its own read lock, and SQLite's
         # single-writer model gives us serialization for free; this just keeps the idempotency
         # check-then-insert sequence atomic.
@@ -433,9 +436,21 @@ class WriteAPI:
             attributed_to = {
                 "email": identity, "role": participant.role, "product_id": product.id,
             }
+
+            # US-0024 H2: bound the refinement loop. Once this gate has already seen ``cap``
+            # request_changes cycles, a further request_changes **blocks** the task rather than
+            # opening yet another re-draft — an unbounded request_changes → re-draft → … loop can
+            # burn material cost on a pathological task. The architect re-files or resumes (US-0020).
+            cap = self._refinement_cap()
+            blocked_by_cap = False
+            if decision == "request_changes":
+                prior_rc = sum(1 for g in fresh.gates
+                               if g.gate == gate_type and g.decision == "request_changes")
+                blocked_by_cap = prior_rc >= cap
+
             bundle_id = None
             bundle_items = None
-            if decision == "request_changes":
+            if decision == "request_changes" and not blocked_by_cap:
                 bundle_id = self._bundle_id_factory()
                 bundle_items = self._collect_feedback_items(fresh, gate_type)
 
@@ -454,10 +469,11 @@ class WriteAPI:
                     "attributed_to": attributed_to,
                     "feedback_bundle_id": bundle_id,
                     "if_match_seq": if_match,
+                    "refinement_capped": blocked_by_cap,
                 },
             )
 
-            if decision == "request_changes":
+            if decision == "request_changes" and not blocked_by_cap:
                 # The bundle is a server-side projection (ADR-0020 §eventing): one event after the
                 # decision carries the anchored-items snapshot the agent will read. We do not append
                 # an event when the bundle is empty — the rationale alone is the hand-off, and an
@@ -476,6 +492,24 @@ class WriteAPI:
                         "attributed_to": attributed_to,
                     },
                 )
+            elif blocked_by_cap:
+                # The decision is still recorded (the architect *did* request changes — an audited
+                # fact); the system's response is to block, not to loop. The projection flips the
+                # task to ``blocked`` on this event (projection._apply: task.blocked).
+                self._events.append(
+                    run_id=task_id,
+                    actor=participant.handle,
+                    type="task.blocked",
+                    target=f"task:{task_id}",
+                    payload={
+                        "task_id": task_id,
+                        "product_id": product.id,
+                        "reason": "refinement_cap_exceeded",
+                        "gate": gate_type,
+                        "cap": cap,
+                        "attributed_to": attributed_to,
+                    },
+                )
 
             response = {
                 "task_id": task_id,
@@ -486,6 +520,9 @@ class WriteAPI:
                 "event_seq": event["seq"],
                 "feedback_bundle_id": bundle_id,
             }
+            if blocked_by_cap:
+                response["status"] = "blocked"
+                response["blocked_reason"] = "refinement_cap_exceeded"
             if idempotency_key:
                 self._idempotency.remember(
                     identity, self.ENDPOINT_DECISION, idempotency_key,
@@ -497,9 +534,21 @@ class WriteAPI:
         # Resume the LangGraph stage outside the write lock. Replays don't reach here (cache
         # short-circuit above). On ``reject`` the graph still resumes — the routing rule sends
         # the run to END so the checkpointer marks the thread done; the projection independently
-        # sets ``status=cancelled``. Both happen exactly once per fresh decision.
-        self._kick(self._resumer, task_id, gate_type, decision)
+        # sets ``status=cancelled``. Both happen exactly once per fresh decision. When the
+        # refinement cap blocked the task we do **not** resume — looping the graph back to the
+        # producer is exactly what the cap exists to prevent.
+        if not blocked_by_cap:
+            self._kick(self._resumer, task_id, gate_type, decision)
         return response
+
+    # --- refinement-loop bound (US-0024 H2) -----------------------------------------------------
+
+    def _refinement_cap(self) -> int:
+        """The max request_changes cycles a gate may take before blocking. An explicit constructor
+        override wins (tests); otherwise the configured cap from the routing matrix."""
+        if self._refinement_cap_override is not None:
+            return self._refinement_cap_override
+        return self._routing.refinement_cap()
 
     # --- engine-stream kick (LangGraph runtime hook; ADR-0014) ---------------------------------
 

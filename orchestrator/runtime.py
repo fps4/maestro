@@ -115,28 +115,73 @@ def _config(run_id: str) -> dict:
     return {"configurable": {"thread_id": run_id}}
 
 
+# --- drain mode / kill switch (US-0024 H2) -------------------------------------------------------
+
+
+class DrainSwitch:
+    """An instance-wide kill switch the architect can flip to stop **new agent work** (US-0024 H2).
+
+    Flipping it does not touch the event log or reject the architect's inputs — a dispatch/decision
+    still records its event (the audited fact). It only stops the engine from *acting*: while
+    drained, the async dispatcher/resumer skip kicking the LangGraph run, so no new LLM/tool work
+    starts. This is the one-toggle response to a runaway task (extended thinking + tool use +
+    request_changes storms can burn material cost); the refinement cap bounds one task, this bounds
+    the whole instance. Thread-safe: the HTTP request threads read it, the architect's toggle writes.
+    """
+
+    def __init__(self, drained: bool = False):
+        self._drained = drained
+        self._lock = threading.Lock()
+
+    @property
+    def drained(self) -> bool:
+        with self._lock:
+            return self._drained
+
+    def drain(self) -> None:
+        """Stop new agent work instance-wide."""
+        with self._lock:
+            self._drained = True
+
+    def resume(self) -> None:
+        """Resume normal operation; new agent work flows again."""
+        with self._lock:
+            self._drained = False
+
+
 # --- async wrappers for the production boot path -------------------------------------------------
 
 
 def make_async_dispatcher(runtime: LangGraphRuntime,
-                          executor: ThreadPoolExecutor) -> Callable[[str], Future]:
+                          executor: ThreadPoolExecutor,
+                          drain: Optional[DrainSwitch] = None) -> Callable[[str], Optional[Future]]:
     """Wrap :meth:`LangGraphRuntime.dispatch` so the write API's HTTP request returns immediately
     after the ``task.dispatched`` event lands, while the graph runs the spec node in the
-    background. The returned ``Future`` is for tests/observability; the write API discards it."""
+    background. The returned ``Future`` is for tests/observability; the write API discards it.
 
-    def _dispatch(run_id: str) -> Future:
+    When ``drain`` is engaged (US-0024 H2) the kick is skipped — the ``task.dispatched`` event is
+    already authoritative, so the run can be re-attached from the log once drain is lifted — and
+    ``None`` is returned in place of a ``Future``."""
+
+    def _dispatch(run_id: str) -> Optional[Future]:
+        if drain is not None and drain.drained:
+            return None
         return executor.submit(runtime.dispatch, run_id)
 
     return _dispatch
 
 
 def make_async_resumer(runtime: LangGraphRuntime,
-                       executor: ThreadPoolExecutor) -> Callable[[str, str, str], Future]:
+                       executor: ThreadPoolExecutor,
+                       drain: Optional[DrainSwitch] = None
+                       ) -> Callable[[str, str, str], Optional[Future]]:
     """Like :func:`make_async_dispatcher` for the gate-decision path. The HTTP response returns
     after ``gate.decided`` is logged; the graph resumes in the background (which may take seconds
-    if the next node runs the design agent)."""
+    if the next node runs the design agent). Skipped while ``drain`` is engaged (US-0024 H2)."""
 
-    def _resume(run_id: str, gate_type: str, decision: str) -> Future:
+    def _resume(run_id: str, gate_type: str, decision: str) -> Optional[Future]:
+        if drain is not None and drain.drained:
+            return None
         return executor.submit(runtime.resume_for_decision, run_id, gate_type, decision)
 
     return _resume

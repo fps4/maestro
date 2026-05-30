@@ -18,7 +18,14 @@ import pytest
 # pyproject.toml and the slice's PR comment names the install one-liner; CI installs it.
 pytest.importorskip("langgraph", reason="install langgraph: pip install -e '.'")
 
-from orchestrator.runtime import LangGraphRuntime  # noqa: E402
+from concurrent.futures import ThreadPoolExecutor  # noqa: E402
+
+from orchestrator.runtime import (  # noqa: E402
+    DrainSwitch,
+    LangGraphRuntime,
+    make_async_dispatcher,
+    make_async_resumer,
+)
 
 
 def _record(calls):
@@ -287,3 +294,54 @@ def test_dod_resume_carries_through_to_state():
     # on the next resume_for_decision. Carry of the previous gate's value is the M1 invariant we
     # don't disturb here.
     assert snap.values.get("last_gate_type") == "technical_design"
+
+
+# --- US-0024 H2: drain mode / kill switch -------------------------------------------------------
+
+
+def test_drain_switch_toggles():
+    switch = DrainSwitch()
+    assert switch.drained is False
+    switch.drain()
+    assert switch.drained is True
+    switch.resume()
+    assert switch.drained is False
+
+
+def test_async_dispatcher_skips_kick_while_drained():
+    """The kill switch stops new agent work: while drained, the async dispatcher does not submit
+    the graph run (returns None). The ``task.dispatched`` event has already landed upstream — the
+    run is recoverable from the log once drain lifts."""
+    spec_calls: list[str] = []
+    runtime = LangGraphRuntime(run_spec=_record(spec_calls))
+    switch = DrainSwitch()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        dispatch = make_async_dispatcher(runtime, executor, drain=switch)
+
+        switch.drain()
+        assert dispatch("run-1") is None                   # skipped — no work submitted
+
+        switch.resume()
+        fut = dispatch("run-2")
+        assert fut is not None
+        fut.result(timeout=5)
+
+    assert spec_calls == ["run-2"]                          # only the un-drained dispatch ran
+
+
+def test_async_resumer_skips_kick_while_drained():
+    spec_calls: list[str] = []
+    runtime = LangGraphRuntime(run_spec=_record(spec_calls))
+    switch = DrainSwitch()
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        dispatch = make_async_dispatcher(runtime, executor)
+        resume = make_async_resumer(runtime, executor, drain=switch)
+        dispatch("run-1").result(timeout=5)                # suspends at functional gate
+
+        switch.drain()
+        assert resume("run-1", "functional", "approve") is None   # resume skipped while drained
+        assert runtime.state("run-1").next == ("await_functional_gate",)   # did not advance
+
+        switch.resume()
+        resume("run-1", "functional", "approve").result(timeout=5)
+    assert runtime.state("run-1").next == ("await_design_gate",)   # advanced once un-drained

@@ -14,6 +14,13 @@ Identity (ADR-0019): the caller identity is taken from the ``X-Maestro-Identity`
 edge (Cloudflare Access → component-auth) — **never** trusted from the client otherwise. Locally, with
 no edge, ``MAESTRO_DEV_IDENTITY`` supplies a stub so render + isolation can be built first; the stub is
 **refused when ``MAESTRO_ENV=production``**. No identity → ``401``.
+
+Dev-stub belt-and-braces (US-0024 H7, ADR-0019): the stub alone is not enough to be honoured. Even when
+configured (non-production), it is granted **only** to a request that carries a Cloudflare Access JWT
+(``Cf-Access-Jwt-Assertion``) *or* originates from loopback — so a bare URL-knower reaching the tunnel
+without an Access assertion gets no identity and cannot dispatch tasks or approve merges as the stub.
+The matching startup probe (``orchestrator.boot._check_dev_identity``) refuses to start at all unless
+``MAESTRO_ENV=dev`` when the stub is set, so a stub left on in staging/production fails fast.
 """
 import json
 import os
@@ -25,9 +32,12 @@ from orchestrator.readapi import APIError, ReadAPI, Unauthenticated
 from orchestrator.writeapi import WriteAPI
 
 IDENTITY_HEADER = "X-Maestro-Identity"
+ACCESS_JWT_HEADER = "Cf-Access-Jwt-Assertion"   # Cloudflare Access assertion (ADR-0019 edge)
 IDEMPOTENCY_HEADER = "Idempotency-Key"
 IF_MATCH_HEADER = "If-Match"
 MAX_REQUEST_BODY_BYTES = 64 * 1024            # writes are tiny JSON; reject anything mistaken
+
+_LOOPBACK_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
 class NotFoundRoute(APIError):
@@ -38,13 +48,29 @@ class NotFoundRoute(APIError):
         super().__init__("no such route")
 
 
-def resolve_identity(headers) -> str | None:
-    """The authenticated caller, from the trusted edge header or the dev stub (ADR-0019)."""
+def _is_loopback(client_host: Optional[str]) -> bool:
+    """True if the request came from the local host (pure-local dev, no edge). Factored out so a
+    test can monkeypatch it to simulate the edge-deployment posture over a loopback socket."""
+    return client_host in _LOOPBACK_HOSTS
+
+
+def resolve_identity(headers, client_host: Optional[str] = None) -> str | None:
+    """The authenticated caller, from the trusted edge header or the dev stub (ADR-0019).
+
+    The edge header (set by Cloudflare Access → component-auth) is always honoured. The dev stub is
+    honoured only off-production AND only when the request carries an Access JWT or comes from
+    loopback (US-0024 H7) — otherwise ``None`` (the caller will get a 401).
+    """
     edge = headers.get(IDENTITY_HEADER)
     if edge:
         return edge.strip()
-    if os.environ.get("MAESTRO_ENV") != "production":
-        return os.environ.get("MAESTRO_DEV_IDENTITY") or None
+    if os.environ.get("MAESTRO_ENV") == "production":
+        return None
+    stub = os.environ.get("MAESTRO_DEV_IDENTITY") or None
+    if stub is None:
+        return None
+    if headers.get(ACCESS_JWT_HEADER) or _is_loopback(client_host):
+        return stub
     return None
 
 
@@ -65,7 +91,7 @@ def make_handler(read: ReadAPI, write: Optional[WriteAPI] = None):
             qs = parse_qs(parsed.query)
             one = lambda k: (qs.get(k) or [None])[0]  # noqa: E731
             try:
-                identity = resolve_identity(self.headers)
+                identity = resolve_identity(self.headers, self.client_address[0])
                 if identity is None:
                     raise Unauthenticated("no caller identity")
                 self._route_get(parts, one, identity)
@@ -84,7 +110,7 @@ def make_handler(read: ReadAPI, write: Optional[WriteAPI] = None):
             parts = [unquote(p) for p in parsed.path.split("/") if p]
             try:
                 body = self._read_json_body()
-                identity = resolve_identity(self.headers)
+                identity = resolve_identity(self.headers, self.client_address[0])
                 if identity is None:
                     raise Unauthenticated("no caller identity")
                 idempotency_key = self.headers.get(IDEMPOTENCY_HEADER)

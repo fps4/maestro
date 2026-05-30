@@ -45,6 +45,9 @@ gate:
   timeout_seconds: 86400             # how long a gate waits for a decision before escalating
   on_timeout: escalate               # escalate | cancel  (never auto-approve)
   quorum: 1                          # the first valid decision from a role-holder resolves the gate
+  max_refinement_iterations: 5       # US-0024 H2: cap on request_changes -> re-draft cycles per
+                                     # gate before the task is blocked rather than looped again
+                                     # (unbounded refinement can burn material cost). Never 0.
 
 # Products (their product_type, repos, participant rosters, and per-product Telegram group/bot)
 # are defined in the product register: config/products.yaml (ADR-0008/0011). This file holds only

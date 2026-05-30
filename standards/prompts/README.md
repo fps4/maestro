@@ -41,6 +41,12 @@ Then the prompt body — instructions, examples, constraints — in markdown. Ke
 | [`spec-agent.md`](spec-agent.md)     | drafted 2026-05-29 | US-0010 |
 | [`design-agent.md`](design-agent.md) | drafted 2026-05-29 | US-0013 |
 
+## M2 agents
+
+| File | Status | Backs |
+|---|---|---|
+| [`impl-agent.md`](impl-agent.md) | drafted 2026-05-30 | US-0011 |
+
 ## M3 agents
 
 | File | Status | Backs |

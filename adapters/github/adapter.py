@@ -45,10 +45,12 @@ class GitHubClient(Protocol):
     """The minimal GitHub surface the adapter needs; injectable so the guard is testable offline."""
 
     def create_branch(self, repo: str, branch: str, from_ref: str) -> dict: ...
-    def open_pull_request(self, repo: str, head: str, base: str, title: str, body: str) -> dict: ...
+    def open_pull_request(self, repo: str, head: str, base: str, title: str, body: str,
+                          draft: bool = False) -> dict: ...
     def merge_pull_request(self, repo: str, number: int, method: str) -> dict: ...
     def put_file(self, repo: str, path: str, content: str, branch: str, message: str,
                  sha: Optional[str] = None) -> dict: ...
+    def commit_files(self, repo: str, branch: str, files: list[dict], message: str) -> dict: ...
 
 
 def append_merge_approval(events: EventLog, run_id: str, repo: str, pr_number: int,
@@ -82,12 +84,13 @@ class GitHubAdapter:
                                                                 "from_ref": from_ref})
         return result
 
-    def open_pr(self, run_id: str, repo: str, head: str, base: str, title: str, body: str) -> dict:
-        pr = self._client.open_pull_request(repo, head, base, title, body)
+    def open_pr(self, run_id: str, repo: str, head: str, base: str, title: str, body: str,
+                draft: bool = False) -> dict:
+        pr = self._client.open_pull_request(repo, head, base, title, body, draft=draft)
         self._events.append(run_id=run_id, actor=self._actor, type="pr.opened",
                             target=f"{repo}#{pr['number']}",
                             payload={"repo": repo, "branch": head, "pr_number": pr["number"],
-                                     "pr_url": pr.get("url")})
+                                     "pr_url": pr.get("url"), "draft": draft})
         return pr
 
     def commit_artefact(self, run_id: str, repo: str, branch: str, path: str, content: str,
@@ -117,6 +120,40 @@ class GitHubAdapter:
                      "file_sha": result.get("file_sha"),
                      "message": message,
                      "updated": sha is not None},
+        )
+        return result
+
+    def commit_change(self, run_id: str, repo: str, branch: str, files: list[dict], message: str,
+                      *, task: Optional[int] = None,
+                      requirements: Optional[list] = None) -> dict:
+        """Commit the builder agent's implementation — **one atomic commit, many files** (US-0011).
+
+        The spec/design agents land a single markdown artefact through :meth:`commit_artefact`; the
+        builder lands code, and the M2 commit-shape resolution pins **one commit per task-list entry**
+        (message ``task-{n}: <title>``) so the commit graph mirrors the design's task structure and
+        ``git bisect`` isolates a later DoD failure to one task. The Contents API commits one file at
+        a time, so a multi-file task would fan out into several commits; this path uses the Git Data
+        API (``commit_files``) to keep a task's files in **one** commit.
+
+        ``files`` is a list of ``{"path", "content"}``. The same ``maestro/*``-only guard the other
+        write paths enforce applies here — the adapter is the only code path into a non-default GitHub
+        write, so the default-branch refusal lives in one place (ADR-0016). One ``commit.created``
+        event per commit, so the audit replays exactly which commits the builder produced
+        (ADR-0008/0009).
+        """
+        if not branch.startswith("maestro/"):
+            raise ValueError(
+                f"agents commit only to maestro/* branches, got {branch!r} (standards/git.yaml)"
+            )
+        result = self._client.commit_files(repo, branch, files, message)
+        self._events.append(
+            run_id=run_id, actor=self._actor, type="commit.created",
+            target=f"{repo}:{branch}",
+            payload={"repo": repo, "branch": branch, "task": task,
+                     "requirements": list(requirements) if requirements is not None else None,
+                     "paths": [f["path"] for f in files],
+                     "commit_sha": result.get("commit_sha"),
+                     "message": message},
         )
         return result
 

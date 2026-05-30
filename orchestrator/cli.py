@@ -126,6 +126,7 @@ def cmd_serve(a) -> int:
         from langgraph.checkpoint.sqlite import SqliteSaver
 
         from orchestrator.agents.design import run_design_for_run
+        from orchestrator.agents.impl import run_impl_for_run
         from orchestrator.agents.spec import run_spec_for_run
         from orchestrator.runtime import (
             LangGraphRuntime,
@@ -146,12 +147,19 @@ def cmd_serve(a) -> int:
             run_design_for_run(run_id, events=events, register=register,
                                 model=model, github=github_adapter)
 
+        def _build(run_id: str) -> None:
+            # The builder reads the approved design + spec content through the same GitHub client
+            # the read API uses (reader=), and writes commits + the draft PR through the adapter.
+            run_impl_for_run(run_id, events=events, register=register, model=model,
+                             github=github_adapter, reader=github_client,
+                             base_branch=default_branch)
+
         # The checkpointer lives in the same SQLite file as the event log (ADR-0008 / ADR-0014):
         # one DB to back up, langgraph's tables sit alongside ours by name. A future Postgres
         # cutover (concurrency-driven, ADR-0008) moves both at once.
         checkpoint_path = db_path or ":memory:"
         checkpoint_conn = SqliteSaver.from_conn_string(checkpoint_path).__enter__()
-        runtime = LangGraphRuntime(run_spec=_spec, run_design=_design,
+        runtime = LangGraphRuntime(run_spec=_spec, run_design=_design, run_build=_build,
                                     checkpointer=checkpoint_conn)
 
         # Background pool so dispatch/resume don't block the HTTP request. Workers > 1 so a slow
@@ -160,7 +168,7 @@ def cmd_serve(a) -> int:
         engine_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="maestro-engine")
         dispatcher = make_async_dispatcher(runtime, engine_pool)
         resumer = make_async_resumer(runtime, engine_pool)
-        print(f"✓ engine: LangGraph runtime + spec/design agents wired "
+        print(f"✓ engine: LangGraph runtime + spec/design/impl agents wired "
               f"(checkpointer={checkpoint_path})")
 
     write = WriteAPI(register, events, routing, IdempotencyStore(conn),

@@ -25,6 +25,8 @@ class LLMCall:
     latency_ms: int = 0
     finish_reason: Optional[str] = None
     error: Optional[str] = None
+    prompt_template_id: Optional[str] = None        # US-0024 M7: which prompt produced this call
+    prompt_template_version: Optional[str] = None   # US-0024 M7: git blob SHA of the prompt file
     id: str = ""
     ts: float = 0.0
 
@@ -39,13 +41,32 @@ class LLMAudit:
         d = asdict(call)
         self._conn.execute(
             "INSERT INTO llm_calls (id, run_id, agent, model, tier, input_tokens, output_tokens, "
-            "cache_read, cache_write, cost_usd, latency_ms, finish_reason, error, ts) "
+            "cache_read, cache_write, cost_usd, latency_ms, finish_reason, error, "
+            "prompt_template_id, prompt_template_version, ts) "
             "VALUES (:id, :run_id, :agent, :model, :tier, :input_tokens, :output_tokens, "
-            ":cache_read, :cache_write, :cost_usd, :latency_ms, :finish_reason, :error, :ts)",
+            ":cache_read, :cache_write, :cost_usd, :latency_ms, :finish_reason, :error, "
+            ":prompt_template_id, :prompt_template_version, :ts)",
             d,
         )
         self._conn.commit()
         return call
+
+    def spend(self, *, run_id: Optional[str] = None, since: Optional[float] = None) -> float:
+        """Total recorded ``cost_usd`` — the basis for the US-0024 H2 budget caps. Optionally scope
+        to one ``run_id`` (per-run cap) and/or to calls at-or-after ``since`` epoch-seconds (per-day
+        cap). Reads the audit, which is the system of record for spend (ADR-0002/0009)."""
+        clauses, params = [], []
+        if run_id is not None:
+            clauses.append("run_id = ?")
+            params.append(run_id)
+        if since is not None:
+            clauses.append("ts >= ?")
+            params.append(since)
+        where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
+        row = self._conn.execute(
+            f"SELECT COALESCE(SUM(cost_usd), 0.0) AS total FROM llm_calls{where}", params
+        ).fetchone()
+        return float(row["total"])
 
     def read(self, run_id: Optional[str] = None) -> list[dict]:
         if run_id is None:

@@ -52,6 +52,9 @@ The roadmap's M2 line maps to user stories as follows.
 - **The merge boundary's other half** — ADR-0016 already refuses to merge without an approval event ([M0 spine](m1-spec-to-design.md) / M1 #4); M2 is when it actually merges. The `merge.executed` event is what marks `done`.
 - **DoD orchestration** ([ADR-0006](../architecture/decisions/0006-spec-driven-sdlc.md)): the spec-adherence gate is the test agent (US-0014); the SAST / secret / dependency / license-SBOM floors run in CI. The orchestrator reads CI status (via the GitHub adapter), opens the merge gate only when all are green.
 - **Workspace merge-gate page** — the same `decide_gate` endpoint pattern from M1 #4, with `gate.type = "merge"` (the contract already names it forward-compatible). The PR-diff anchor locator (`{path, side, line}`) is the new anchoring shape, also already named in the M1 contract.
+- **Engine guardrails** ([US-0024](../product/user-stories/EP-02-engine-foundation/US-0024-engine-hardening-review-gaps.md), Tier 1–2): the refinement-loop cap + drain switch + `ModelClient` budget caps bound runaway cost; prompt provenance lands on every `llm_call` (M7); the register self-deal invariant and dev-stub Access guard close the governance/auth gaps.
+
+**M2 audit-corpus redaction stance (US-0024 M9).** M2 writes PR diffs, intent text, comments and (if content capture is enabled) LLM I/O. Concrete DLP tooling (e.g. Presidio) is M3 (ADR-0009). The **M2 floor** is a minimal, dependency-free secret/email regex (`model.redact.redact`) applied where maestro persists model I/O that could echo a credential — today the `error` field of a failed `llm_call`. Prompt/response *content* stays off by default. Operating rule until the M3 tooling lands: **do not paste live secrets into intent or comments** — the M2 corpus is floor-redacted, not DLP-grade.
 
 ## Dependency order
 

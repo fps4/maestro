@@ -51,3 +51,13 @@ class RoutingResolver:
         """The participants who may decide this gate: holders of the resolved role for the product."""
         role = self.role_for(product.product_type, gate)
         return product.role_holders(role)
+
+    def refinement_cap(self) -> int:
+        """Max ``request_changes`` → re-draft cycles allowed on a gate before the task is blocked
+        (US-0024 H2). Read from ``gate.max_refinement_iterations``; defaults to 5, floored at 1 so a
+        zero/negative misconfiguration can never block a task on its first request_changes."""
+        raw = self._matrix.get("gate", {}).get("max_refinement_iterations", 5)
+        try:
+            return max(1, int(raw))
+        except (TypeError, ValueError):
+            return 5

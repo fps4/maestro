@@ -62,6 +62,7 @@ def boot(*, db_path: Optional[str] = None, probe: bool = False,
     checks = [
         _check_github(github_client, probe),
         _check_anthropic(model, probe),
+        _check_dev_identity(),
         _check_slack(),
     ]
     failed = [c for c in checks if c.ok is False]
@@ -98,6 +99,28 @@ def _check_anthropic(model: ModelClient, probe: bool) -> ConnectionStatus:
                                 f"live call ok ({res.call.model}, {res.call.latency_ms}ms)")
     except Exception as exc:
         return ConnectionStatus("anthropic", False, f"call failed: {exc}")
+
+
+def _check_dev_identity() -> ConnectionStatus:
+    """Belt-and-braces startup probe for the dev-stub identity path (US-0024 H7, ADR-0019).
+
+    If ``MAESTRO_DEV_IDENTITY`` is set, refuse to start unless ``MAESTRO_ENV`` is exactly ``dev``.
+    This makes "production rejects the stub" a fail-fast invariant rather than a per-request env
+    check that silently permits the stub in *any* non-``production`` environment (staging, unset).
+    A stub mistakenly left on behind the tunnel can otherwise let a URL-knower act as anyone, and
+    ADR-0016 made the merge boundary single-layer — so an unauthenticated approver is a merged PR.
+    """
+    stub = os.environ.get("MAESTRO_DEV_IDENTITY")
+    if not stub:
+        return ConnectionStatus("dev-identity", None, "no dev stub set (edge-authenticated path)")
+    env = os.environ.get("MAESTRO_ENV")
+    if env != "dev":
+        return ConnectionStatus(
+            "dev-identity", False,
+            f"MAESTRO_DEV_IDENTITY is set but MAESTRO_ENV={env!r} — the stub is allowed only when "
+            f"MAESTRO_ENV='dev'; unset the stub or set MAESTRO_ENV=dev",
+        )
+    return ConnectionStatus("dev-identity", True, f"dev stub active as {stub!r} (MAESTRO_ENV=dev)")
 
 
 def _check_slack() -> ConnectionStatus:

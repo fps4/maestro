@@ -1,5 +1,14 @@
 """Routing resolution (ADR-0003) + the register projection (ADR-0008/0010)."""
-from orchestrator.register import Participant, load_register
+import textwrap
+
+import pytest
+
+from orchestrator.register import (
+    Participant,
+    Product,
+    RegisterError,
+    load_register,
+)
 
 
 def test_technical_merge_gate_routes_to_architect(routing, register):
@@ -38,3 +47,76 @@ def test_example_register_loads_and_resolves_repos():
     acme = reg.product("acme-billing")
     assert acme.product_type == "commercial"
     assert [p.handle for p in acme.role_holders("functional_reviewer")] == ["@priya", "@sam"]
+
+
+# --- US-0024 H6: architect self-deal invariant on commercial products ---------------------------
+
+def _write_register(tmp_path, body: str):
+    p = tmp_path / "products.yaml"
+    p.write_text(textwrap.dedent(body))
+    return str(p)
+
+
+def test_self_dealing_handles_detects_one_human_in_both_roles():
+    prod = Product(
+        id="acme", name="Acme", product_type="commercial", visibility="private",
+        repos=("acme/api",),
+        participants=(
+            Participant(handle="@you", role="architect", email="you@example.com"),
+            Participant(handle="@you", role="functional_reviewer", email="you@example.com"),
+            Participant(handle="@priya", role="functional_reviewer"),
+        ),
+    )
+    assert prod.self_dealing_handles() == ["@you"]
+
+
+def test_commercial_product_with_self_dealing_architect_refuses_to_load(tmp_path):
+    path = _write_register(tmp_path, """
+        version: 1
+        products:
+          - id: acme
+            name: Acme
+            product_type: commercial
+            repos: [acme/api]
+            participants:
+              - { handle: "@you", role: architect, email: you@example.com }
+              - { handle: "@you", role: functional_reviewer, email: you@example.com }
+    """)
+    with pytest.raises(RegisterError) as ei:
+        load_register(path)
+    msg = str(ei.value)
+    assert "@you" in msg and "commercial" in msg and "ADR-0003" in msg
+
+
+def test_commercial_product_with_separated_roles_loads(tmp_path):
+    path = _write_register(tmp_path, """
+        version: 1
+        products:
+          - id: acme
+            name: Acme
+            product_type: commercial
+            repos: [acme/api]
+            participants:
+              - { handle: "@you",   role: architect,           email: you@example.com }
+              - { handle: "@priya", role: functional_reviewer, email: priya@example.com }
+    """)
+    reg = load_register(path)
+    assert reg.product("acme") is not None
+
+
+def test_technical_product_is_exempt_from_role_separation(tmp_path):
+    # On a technical product the architect is the only reviewer by design — holding both roles is
+    # not a governance break, so the loader must NOT refuse it.
+    path = _write_register(tmp_path, """
+        version: 1
+        products:
+          - id: solo
+            name: Solo
+            product_type: technical
+            repos: [solo/api]
+            participants:
+              - { handle: "@you", role: architect,           email: you@example.com }
+              - { handle: "@you", role: functional_reviewer, email: you@example.com }
+    """)
+    reg = load_register(path)
+    assert reg.product("solo") is not None

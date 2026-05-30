@@ -206,7 +206,7 @@ def test_get_task_returns_projected_state(api, events):
     assert out == {"task_id": "run-9c2e3f", "product_id": "maestro", "stage": "intake",
                    "status": "active", "branch": None, "pr": None, "merged": False,
                    "gates": [], "open_gates": [], "comments": [],
-                   "agent_responses": [], "artefacts": []}
+                   "agent_responses": [], "artefacts": [], "stored_artefacts": []}
 
 
 def test_get_task_unknown_is_404(api):
@@ -300,3 +300,99 @@ def test_get_task_surfaces_open_gate_with_seq(api, events):
     assert og["seq"] == opener["seq"]
     assert og["gate_id"] == f"gate-{opener['seq']:04x}"
     assert isinstance(og["opened_at"], float)
+
+
+# --- US-0033: the artefact endpoint (302 → presigned URL) + the stored-artefacts index ----------
+
+from storage import BackendUnavailable, InMemoryArtifactStore  # noqa: E402
+
+
+class _UnavailableStore:
+    """A store whose head() always reports the backend is down — to exercise the 503 path."""
+    def head(self, product_id, key):
+        raise BackendUnavailable("minio down")
+    def presigned_get(self, product_id, key, **kw):
+        raise BackendUnavailable("minio down")
+
+
+@pytest.fixture
+def store():
+    return InMemoryArtifactStore()
+
+
+@pytest.fixture
+def api_with_store(register, events, content_reader, store):
+    return ReadAPI(register, events, content_reader, store=store)
+
+
+def test_artifact_url_mints_presigned_for_a_stored_object(api_with_store, store):
+    store.put("maestro", "tasks/t/pr-diff.patch", b"--- a\n+++ b\n", "text/x-diff")
+    url = api_with_store.artifact_url(ARCH, "maestro", "tasks/t/pr-diff.patch")
+    # In-memory mints a synthetic product-scoped URL; the point is it resolves, scoped to the product.
+    assert url.startswith("memory://maestro/tasks/t/pr-diff.patch?expires=")
+
+
+def test_artifact_url_absent_object_is_404(api_with_store):
+    with pytest.raises(NotFound):
+        api_with_store.artifact_url(ARCH, "maestro", "tasks/t/nope.patch")
+
+
+def test_artifact_url_non_participant_product_is_404(api_with_store, store):
+    # Even though the object 'exists' under 'secret', the caller isn't a member → 404, not 403, and
+    # the store is never consulted (authorize fails first — existence not disclosed).
+    store.put("secret", "tasks/t/x.patch", b"x", "text/plain")
+    with pytest.raises(NotFound):
+        api_with_store.artifact_url(ARCH, "secret", "tasks/t/x.patch")
+
+
+def test_artifact_url_unknown_product_is_404(api_with_store):
+    with pytest.raises(NotFound):
+        api_with_store.artifact_url(ARCH, "no-such-product", "k")
+
+
+def test_artifact_url_no_identity_is_unauthenticated(api_with_store):
+    with pytest.raises(Unauthenticated):
+        api_with_store.artifact_url("", "maestro", "k")
+
+
+def test_artifact_url_no_store_is_degraded(register, events, content_reader):
+    api = ReadAPI(register, events, content_reader)   # no store wired
+    with pytest.raises(Degraded):
+        api.artifact_url(ARCH, "maestro", "k")
+
+
+def test_artifact_url_backend_unavailable_is_degraded(register, events, content_reader):
+    api = ReadAPI(register, events, content_reader, store=_UnavailableStore())
+    with pytest.raises(Degraded):
+        api.artifact_url(ARCH, "maestro", "tasks/t/x.patch")
+
+
+def test_artifact_url_isolation_holds_for_same_key_across_products(api_with_store, store):
+    # The same key under two products resolves to two product-scoped URLs; a caller only reaches
+    # the product they participate in.
+    store.put("maestro", "shared/key.txt", b"mine", "text/plain")
+    url = api_with_store.artifact_url(ARCH, "maestro", "shared/key.txt")
+    assert "maestro/shared/key.txt" in url
+    with pytest.raises(NotFound):
+        api_with_store.artifact_url(ARCH, "secret", "shared/key.txt")
+
+
+def test_get_task_includes_stored_artefacts_index(api_with_store, events):
+    """The per-task projection surfaces the artefacts index with an href to the artefact endpoint;
+    the bytes/uri are never inlined (the workspace follows href → freshly-minted presigned URL)."""
+    task_id = "task-art-1"
+    events.append(run_id=task_id, actor="o", type="task.dispatched",
+                  payload={"product_id": "maestro", "intent": "x"})
+    events.append(run_id=task_id, actor="builder", type="artifact.stored",
+                  payload={"task_id": task_id, "product_id": "maestro", "kind": "pr_diff",
+                           "key": "tasks/task-art-1/pr-diff.patch", "storage_uri": "minio://b/secret-uri",
+                           "sha256": "d" * 64, "content_type": "text/x-diff", "size": 99})
+    detail = api_with_store.get_task(ARCH, "maestro", task_id)
+    assert "stored_artefacts" in detail
+    entry = detail["stored_artefacts"][0]
+    assert entry["kind"] == "pr_diff"
+    assert entry["name"] == "pr-diff.patch"
+    assert entry["href"] == "/api/products/maestro/artifacts/tasks/task-art-1/pr-diff.patch"
+    # The storage_uri (the internal location) is NOT exposed on the index — only the href is.
+    assert "storage_uri" not in entry
+    assert "secret-uri" not in str(entry)

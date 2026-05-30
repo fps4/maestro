@@ -144,6 +144,39 @@ the branch; omitted ⇒ the product repo's **default branch**.
 Responds `404` if no `(feature, kind)` doc exists on that branch for this product; `502/503`
 (`code: "degraded"`) if the content fetch upstream fails (retryable — see the error model).
 
+### `GET /api/products/{product_id}/artifacts/{key}` — an artefact's bytes (US-0033)
+
+Resolves a stored artefact (PR diff, test report, SBOM, …) whose bytes live in the `ArtifactStore`
+([US-0023](../../product/user-stories/EP-02-engine-foundation/US-0023-artifact-store-and-sharing.md)).
+`{key}` is the path-like, **product-namespaced** object key (it may contain `/`). The endpoint
+**302-redirects** to a freshly-minted, short-TTL **presigned URL** — it never proxies the bytes through
+the orchestrator, and never embeds a long-lived public link (US-0033 AC #2).
+
+```
+302 Found
+Location: <short-TTL presigned URL, scoped to this product's object>
+Cache-Control: no-store
+```
+
+- Per-product isolation is enforced exactly as every other read: the caller must participate in
+  `product_id` or the response is **`404`** (existence not disclosed — ADR-0010/0011), and the key is
+  resolved **only** under that product's namespace, so a presigned URL can never reach another
+  product's bytes.
+- The object's absence under the product is **`404`** (existence-is-404; the store `head` is `None`).
+- The store being unconfigured or unreachable is **`503`** (`code: "degraded"`) — the workspace shows
+  the artefacts index read-only with a retry, never a stale cached copy (US-0033 AC #7).
+- Each request mints a **fresh** presigned URL, so a link that expired between mint and click is
+  re-minted simply by re-following the endpoint (US-0023 AC #4).
+
+The per-task index of these artefacts rides on the task projection as `stored_artefacts[]` — each entry
+carries `{kind, name, key, content_type, size, sha256, source, stored_at, seq, href}`, where `href` is
+this endpoint. The internal `storage_uri` is **never** exposed on the index; only `href` is.
+
+Projected from **`artifact.stored`** events (`payload: {task_id, product_id, kind, key, name?,
+storage_uri, sha256, content_type, size, source?}`). No producer emits these yet — the first emitter
+(a PR-diff / test-report / SBOM artefact) lands as a follow-up; this slice ships the index + endpoint
+the browser consumes.
+
 ## The frontmatter index contract
 
 The index ([ADR-0018](../decisions/0018-workspace-read-api-and-frontmatter-index.md)) is built by reading

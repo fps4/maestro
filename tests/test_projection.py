@@ -210,3 +210,40 @@ def test_agent_response_from_design_re_opens_technical_design_gate(events):
     assert state.stage == "technical_gate"
     assert "technical_design" in state.open_gates
     assert state.open_gates["technical_design"]["seq"] == resp["seq"]
+
+
+def test_artifact_stored_appends_to_stored_artefacts_index(events):
+    """US-0033: artifact.stored events project into the per-task artefacts index (the browser's
+    source), distinct from the spec/design diff-chaining `artefacts` list."""
+    events.append(run_id="t", actor="o", type="task.created", payload={})
+    events.append(run_id="t", actor="builder-1", type="artifact.stored",
+                  payload={"task_id": "t", "product_id": "maestro", "kind": "pr_diff",
+                           "key": "tasks/t/pr-diff.patch", "storage_uri": "minio://b/maestro/tasks/t/pr-diff.patch",
+                           "sha256": "a" * 64, "content_type": "text/x-diff", "size": 1234,
+                           "source": {"event": "pr.opened", "seq": 5}})
+    state = project_task(events.read(), "t")
+    assert len(state.stored_artefacts) == 1
+    a = state.stored_artefacts[0]
+    assert a.kind == "pr_diff"
+    assert a.key == "tasks/t/pr-diff.patch"
+    assert a.name == "pr-diff.patch"            # defaulted to the key's basename
+    assert a.product_id == "maestro"
+    assert a.size == 1234 and a.sha256 == "a" * 64
+    assert a.source == {"event": "pr.opened", "seq": 5}
+
+
+def test_stored_artefacts_are_chronological_and_named(events):
+    events.append(run_id="t", actor="o", type="task.created", payload={})
+    events.append(run_id="t", actor="t-agent", type="artifact.stored",
+                  payload={"task_id": "t", "product_id": "maestro", "kind": "test_report",
+                           "key": "tasks/t/report.json", "name": "JUnit report",
+                           "storage_uri": "minio://b/x", "sha256": "b" * 64,
+                           "content_type": "application/json", "size": 10})
+    events.append(run_id="t", actor="sbom", type="artifact.stored",
+                  payload={"task_id": "t", "product_id": "maestro", "kind": "sbom",
+                           "key": "tasks/t/sbom.spdx.json", "storage_uri": "minio://b/y",
+                           "sha256": "c" * 64, "content_type": "application/json", "size": 20})
+    state = project_task(events.read(), "t")
+    assert [a.kind for a in state.stored_artefacts] == ["test_report", "sbom"]
+    assert state.stored_artefacts[0].name == "JUnit report"      # explicit name preserved
+    assert state.stored_artefacts[1].name == "sbom.spdx.json"    # defaulted from key

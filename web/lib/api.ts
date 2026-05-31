@@ -85,3 +85,61 @@ export function getTask(productId: string, taskId: string): Promise<TaskDetail> 
     `/api/products/${encodeURIComponent(productId)}/tasks/${encodeURIComponent(taskId)}`,
   );
 }
+
+export interface ArtefactContent {
+  contentType: string;
+  text: string;
+}
+
+/**
+ * Fetch a stored artefact's **content** for in-app rendering (US-0033 AC #3/#4).
+ *
+ * Server-side only: resolve the read API's artefact endpoint (which 302s to a short-TTL presigned
+ * URL), then fetch the bytes from that URL here on the workspace server and hand the text to a
+ * renderer. This keeps the caller identity server-side and dodges browser CORS on the store; the
+ * bytes are rendered in-app, never proxied through the *orchestrator* (US-0033 AC #2 — the
+ * orchestrator only minted the URL). Throws `ApiError` on 404 (absent / not a participant) or 503
+ * (store unavailable / expired) so the viewer can show a retry (AC #7).
+ */
+export async function getArtefactContent(
+  productId: string,
+  key: string,
+): Promise<ArtefactContent> {
+  const keyPath = key.split('/').map(encodeURIComponent).join('/');
+  const path = `/api/products/${encodeURIComponent(productId)}/artifacts/${keyPath}`;
+
+  const headers: Record<string, string> = {};
+  const id = await callerIdentity();
+  if (id) headers['X-Maestro-Identity'] = id;
+
+  // Step 1: ask the orchestrator for the presigned URL (it answers 302, never the bytes).
+  let redirect: Response;
+  try {
+    redirect = await fetch(`${API_BASE}${path}`, {
+      headers,
+      redirect: 'manual',
+      cache: 'no-store',
+    });
+  } catch {
+    throw new ApiError(503, 'degraded', `cannot reach the read API at ${API_BASE}`);
+  }
+  if (redirect.status === 404) throw new ApiError(404, 'not_found', 'artefact not found');
+  if (redirect.status !== 302 && redirect.status !== 307) {
+    throw new ApiError(503, 'degraded', 'artefact store unavailable');
+  }
+  const location = redirect.headers.get('location');
+  if (!location) throw new ApiError(503, 'degraded', 'artefact store returned no location');
+
+  // Step 2: follow the presigned URL to the bytes (server-side; identity stays here).
+  let res: Response;
+  try {
+    res = await fetch(location, { cache: 'no-store' });
+  } catch {
+    throw new ApiError(503, 'degraded', 'artefact content fetch failed');
+  }
+  if (!res.ok) throw new ApiError(503, 'degraded', `artefact content fetch failed (${res.status})`);
+  return {
+    contentType: res.headers.get('content-type') ?? 'application/octet-stream',
+    text: await res.text(),
+  };
+}

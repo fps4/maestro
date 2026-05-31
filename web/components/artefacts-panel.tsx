@@ -38,17 +38,27 @@ function sourceLabel(source: StoredArtefact['source']): string | null {
   return event ?? agent ?? null;
 }
 
-function artefactHref(productId: string, key: string): string {
-  // The workspace route (not the raw API): it forwards identity and 302s to the presigned URL.
-  const segments = key.split('/').map(encodeURIComponent).join('/');
-  return `/products/${encodeURIComponent(productId)}/artifacts/${segments}`;
+function encodeKey(key: string): string {
+  return key.split('/').map(encodeURIComponent).join('/');
+}
+
+// The in-app viewer (renders diff / test report / SBOM); task-scoped for back-navigation.
+function viewerHref(productId: string, taskId: string, key: string): string {
+  return `/products/${encodeURIComponent(productId)}/tasks/${encodeURIComponent(taskId)}/artifacts/${encodeKey(key)}`;
+}
+
+// The raw redirect route (forwards identity, 302s to the presigned URL) — "open raw" / download.
+function rawHref(productId: string, key: string): string {
+  return `/products/${encodeURIComponent(productId)}/artifacts/${encodeKey(key)}`;
 }
 
 export function ArtefactsPanel({
   productId,
+  taskId,
   artefacts,
 }: {
   productId: string;
+  taskId: string;
   artefacts: StoredArtefact[];
 }) {
   if (artefacts.length === 0) {
@@ -81,13 +91,21 @@ export function ArtefactsPanel({
                 {source ? <> · from {source}</> : null}
               </p>
             </div>
-            <a
-              href={artefactHref(productId, a.key)}
-              className="shrink-0 text-sm font-medium text-primary underline-offset-4 hover:underline"
-              rel="noopener"
-            >
-              View
-            </a>
+            <div className="flex shrink-0 items-center gap-3 text-sm">
+              <a
+                href={viewerHref(productId, taskId, a.key)}
+                className="font-medium text-primary underline-offset-4 hover:underline"
+              >
+                View
+              </a>
+              <a
+                href={rawHref(productId, a.key)}
+                className="text-muted-foreground underline-offset-4 hover:underline"
+                rel="noopener"
+              >
+                Raw
+              </a>
+            </div>
           </li>
         );
       })}

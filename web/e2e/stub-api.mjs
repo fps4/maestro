@@ -49,11 +49,18 @@ const server = createServer((req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${port}`);
   const path = url.pathname;
 
-  // The "presigned" target carries its own auth (an S3 signature) — the browser follows the redirect
-  // to it WITHOUT the maestro identity header, exactly as it would a real presigned URL.
+  // The "presigned" target carries its own auth (an S3 signature) — the browser / workspace server
+  // follows the redirect to it WITHOUT the maestro identity header, exactly as a real presigned URL.
+  // Serves the pr_diff content schema so the in-app viewer renders the structured diff.
   if (path === '/fake-presigned') {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    return res.end('--- a\n+++ b\n@@ fake presigned artefact body @@\n');
+    res.writeHead(200, { 'Content-Type': 'application/vnd.maestro.diff+json' });
+    return res.end(
+      JSON.stringify({
+        base: 'main',
+        head: 'maestro/task-smoke-1',
+        files: [{ path: 'orchestrator/agents/impl.py', status: 'modified', old: 'old line\n', new: 'new line\n' }],
+      }),
+    );
   }
 
   // Every read-API route requires the caller identity (the dev-stub forwards it as X-Maestro-Identity).

@@ -17,11 +17,17 @@ test('artefacts panel lists a task artefact and View resolves through the redire
   await expect(item.getByText('PR diff')).toBeVisible();
   await expect(item.getByText(/2\.0 KB/)).toBeVisible();
 
-  // The View link points at the workspace route (not the raw /api/... href), and following it lands
-  // on the (stubbed) presigned content after the server-side identity-forwarding 302.
+  // The View link points at the in-app viewer (task-scoped), not the raw /api/... href.
   const view = item.getByRole('link', { name: 'View' });
-  await expect(view).toHaveAttribute('href', '/products/maestro/artifacts/tasks/task-smoke-1/pr-diff.patch');
+  await expect(view).toHaveAttribute(
+    'href',
+    '/products/maestro/tasks/task-smoke-1/artifacts/tasks/task-smoke-1/pr-diff.patch',
+  );
 
+  // Following it renders the artefact in-app: the workspace server fetches the content via the
+  // identity-forwarding redirect → presigned URL, and the pr_diff renderer shows the changed file.
   await view.click();
-  await expect(page.locator('body')).toContainText('fake presigned artefact body');
+  // The pr_diff renderer shows the changed file header (exact — the diff panes also contain the path).
+  await expect(page.getByText('orchestrator/agents/impl.py', { exact: true })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Back to task/ })).toBeVisible();
 });

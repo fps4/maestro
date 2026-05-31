@@ -184,7 +184,11 @@ export default async function TaskPage({
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <ArtefactsPanel productId={productId} artefacts={task.stored_artefacts} />
+              <ArtefactsPanel
+                productId={productId}
+                taskId={taskId}
+                artefacts={task.stored_artefacts}
+              />
             </CardContent>
           </Card>
         </div>

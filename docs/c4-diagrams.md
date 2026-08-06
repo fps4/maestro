@@ -1,7 +1,8 @@
 # maestro — Governed Application Platform — C4 Diagrams
 
-**Status:** Draft v0.3 — for refinement
-**Companions:** `conceptual-design.md` (v0.8), `technical-design.md` (v0.6), and the service designs `ps1-identity-service.md`, `ps2-record-spine.md`, `ps3-specs-service.md`, `ps7-data-service.md`. These diagrams are **derived**, never authoritative — where a diagram and a document disagree, the document is right and the diagram is stale.
+**Status:** Draft v0.4 — for refinement
+**Companions:** `conceptual-design.md` (v1.0), `technical-design.md` (v1.0), and the service designs `ps1-identity-service.md`, `ps2-record-spine.md`, `ps3-specs-service.md`, `ps7-data-service.md`, `ps14-work-service.md`, `ps15-agent-service.md`, `ps16-runtime-service.md`. These diagrams are **derived**, never authoritative — where a diagram and a document disagree, the document is right and the diagram is stale.
+**On this document's own governance:** `platform-standards.md` §5.4 and finding 12 record that this file is a second, ungoverned descriptive specification of a subject D39 already puts in PS3, with no `verified_at` and no PS12 to expire it — and v0.3 proved the point by citing three stale companion versions and mapping containers to PS1–PS13 while PS14 and PS15 existed. **v0.4 fixes the instance and not the mechanism**, which is V15's actual finding.
 **Rendering note:** Mermaid's C4 support is marked experimental upstream. Layout varies between renderers; the semantics do not. If a diagram lays out badly in your viewer, the element and relationship lists are still the content.
 
 ---
@@ -13,7 +14,7 @@ C4's four levels map onto this platform's own vocabulary, and the mapping is not
 | C4 level | Here | Note |
 |---|---|---|
 | **1 Context** | The platform, its people, and the systems it touches | §3 of the conceptual design supplies the actors, already separated into client-side roles, external parties, and platform functions |
-| **2 Container** | PS1–PS13 and AE1–AE7 | §9's generation boundary decides membership: *provided, never generated* and *composed from primitives* are containers |
+| **2 Container** | PS1–PS16 and AE1–AE7 | §9's generation boundary decides membership: *provided, never generated* and *composed from primitives* are containers |
 | **3 Component** | Inside one service | Drawn for PS2, PS3+PS4, and PS7 — the ones with enough internal structure to be worth it |
 | **4 Code** | Not drawn | C4's own guidance, and it would be stale within a week |
 
@@ -87,6 +88,8 @@ C4Container
             ContainerDb(ps2arc, "PS2 Record spine — archive", "Object store", "Sealed segments and Merkle chain. The system of record")
             Container(ps12, "PS12 Assurance and drift", "Service", "Triggers, re-evaluation, expiry, the conformance record")
             Container(ps13, "PS13 Artifact custody", "Service", "Artifact identity, signature, SBOM, rollback target")
+            Container(ps14, "PS14 work-service", "Service", "Commitments and their closure. Authority checked at claim")
+            Container(ps16, "PS16 runtime-service", "Service", "The instance: version, environment, envelope, authority, hosting party. Executes the ones we host")
             Container(ps8, "PS8 Notification", "Service", "Deadline-bearing delivery, tracked and recorded")
             Container(ps6, "PS6 Telemetry", "Prometheus and Grafana", "Ingestion, storage, query, dashboard runtime")
             ContainerDb(ps7, "PS7 data-service", "Service over four engines", "Record, document, event, series. Classification, schema evolution, history, lineage, erasure")
@@ -110,13 +113,19 @@ C4Container
     Rel(ps2arc, ps8, "Delivers the daily integrity root")
     Rel(ps13, ps2log, "Records deployment events")
     Rel(ps7, ps2log, "Records PayloadErased")
+    Rel(ps12, ps14, "Raises a work item; PS14 chases it")
+    Rel(ps16, ps2log, "Records instance lifecycle. Never an invocation")
+    Rel(ps16, ps13, "Resolves the pinned artifact and the rollback target")
+    Rel(ps16, ps3, "Requires an accepted decision before an instance exists")
 
     UpdateLayoutConfig($c4ShapeInRow="3", $c4BoundaryInRow="1")
 ```
 
 **What this diagram argues.** The two boundaries are the answer to T-L and T29: everything inside *per tenant* is isolated logically or physically as the deployment chooses; everything inside *shared* qualifies only because it holds no tenant runtime data. PS2 appears as two containers on purpose — the log and the archive are different things with different retention, and T4 turns on the distinction.
 
-Note how few arrows there are into PS2, and what each one carries. **Only four containers write to it: PS3 and PS4 with versions and decisions, PS13 with deployment events, and PS7 with `PayloadErased` and nothing else.** That is R11 and P13 drawn rather than asserted — and PS7's single edge is the point of PS2 §8, since erasure has to be recorded on the spine precisely because it is never performed on it. *(v0.1 of this document omitted the PS7 edge and claimed three writers; PS2 §9 always permitted it — see `ps7-data-service.md` §16.1.)*
+Note how few arrows there are into PS2, and what each one carries. **Five containers write to it: PS3 and PS4 with versions and decisions, PS13 with deployment events, PS7 with `PayloadErased` and nothing else, and PS16 with instance lifecycle.** That is R11 and P13 drawn rather than asserted — and PS7's single edge is the point of PS2 §8, since erasure has to be recorded on the spine precisely because it is never performed on it. *(v0.1 of this document omitted the PS7 edge and claimed three writers; PS2 §9 always permitted it — see `ps7-data-service.md` §16.1.)*
+
+**PS16's edge is labelled with what it does *not* carry, and that is the point of it** (T52). A runtime service is the estate's most likely source of PS2 volume leakage, because every invocation superficially looks like something worth recording. Four instance-lifecycle types reach the spine; invocations go to PS6 and their effects to PS7. **The `PS16 → PS3` edge is the other half**: an instance cannot exist without an accepted decision behind it, which is P13 reaching the runtime rather than stopping at the composition plane.
 
 ---
 
@@ -139,12 +148,17 @@ C4Container
             Container(ae7, "AE7 Offline sync", "Engine", "Conflict resolution, ordering, partial connectivity")
         }
         Container_Boundary(provided, "Provided, never generated") {
+            Container(ps16, "PS16 runtime-service", "FaaS over a per-tenant namespace", "Admission: instance, workload principal, tenant handle, idempotency key, credentials. Then it runs")
             ContainerDb(ps7, "PS7 data-service", "Service over four engines", "All four shapes, both access modes")
             Container(ps9, "PS9 Edge and capability", "Gateway", "Grant enforcement")
             Container(ps6, "PS6 Telemetry", "Prometheus", "Metric ingestion and dashboard runtime")
+            Container(ps10, "PS10 Secrets", "OpenBao", "Invocation-scoped credentials only")
         }
     }
 
+    Rel(ps9, ps16, "Every inbound request terminates here first")
+    Rel(ps16, genapp, "Admits an invocation, or refuses it and records the refusal")
+    Rel(ps16, ps10, "Requests a credential that expires with the invocation")
     Rel(genapp, ae1, "Composes a process")
     Rel(genapp, ae3, "Routes every binding value")
     Rel(genapp, ps7, "Declares a shape and an access mode, never a store")
@@ -157,6 +171,10 @@ C4Container
 ```
 
 **What this diagram argues.** Three relationships carry most of §9. `AE5 → AE3` is the determinism boundary — the agent proposes, the calculation engine computes anything binding (P3, T14). `AE6 → PS9` is why capability enforcement is provided rather than composed (D41): if outbound calls could route around the gateway, P8's grants would be advisory.
+
+**`PS16 → generated application` is new in v0.4 and it changes what this diagram is about.** Through v0.3 the generated application floated with no substrate — it composed engines and wrote to PS7 and nothing said where it *ran*, which is §4.5's omission drawn rather than argued. With PS16 in the frame the direction of the arrow is the finding: **the runtime calls the application, not the other way round.** Under T44 the application has no process of its own to be called into; it is admitted, and admission is where the tenant handle is bound, the workload principal is minted, and the idempotency key is checked. That is why PS16 sits in the provided boundary between PS9 and the application rather than beneath it.
+
+PS10 is drawn here for the first time for the same reason: under a long-running container its credentials are injected once at boot, which is a deployment detail; under T44 they expire with the invocation, which is an edge.
 
 `AE6 → PS7` is the third, added in v0.2, and it is the one that keeps T19 honest. **The exchange engine and the data service are separate containers precisely because a connector crosses a trust boundary and enforces a capability grant**, which is governance rather than data — and the edge between them carries two obligations, not one: the fact, and its `ingested_from` provenance (PS7 H13). Drawing them as one box is the collapse T33 exists to prevent, and it is what `event-integration-platform` is today.
 
@@ -323,8 +341,9 @@ C4Deployment
 
     Deployment_Node(ds2, "ds2", "Docker host, core-services stack") {
         Deployment_Node(netint, "net-internal", "Docker network") {
-            Container(maestro, "maestro services", "Node containers", "PS1 layer, PS2, PS3 + PS4, PS5, PS11, PS12, PS13")
+            Container(maestro, "maestro services", "Node containers", "PS1 layer, PS2, PS3 + PS4, PS5, PS11, PS12, PS13, PS14, PS16 record half")
             Container(ds, "data-service", "Node container", "PS7. Its own deployable, its own console")
+            Container(faas, "faasd", "containerd", "PS16 execution. One namespace per tenant. Nothing to run in the first wave")
             ContainerQueue(kafka, "Kafka", "KRaft single broker", "governance.events and PS7 event shape. One broker, two topologies — T-G")
             ContainerDb(pg, "PostgreSQL", "Container", "Projections and PS7 record shape. Schema per tenant")
             ContainerDb(ch, "ClickHouse", "Container", "PS7 series shape. Database per tenant")
@@ -351,7 +370,11 @@ C4Deployment
     Rel(ds, kafka, "Event shape, topic per tenant")
     Rel(ds, minio, "Document shape")
     Rel(ds, idp, "OIDC")
+    Rel(maestro, faas, "Provisions a namespace and a function; admits an invocation")
+    Rel(faas, ds, "Application writes, under a handle bound at admission")
 ```
+
+**The PoC runs a real FaaS with nothing on it, and that is deliberate** (§3.2 of the technical design). There is nothing to execute until the composition plane exists, so `faasd` here is empty — but the cheap PoC answer is a long-running container per application, and §2.2 of the PS16 design lists four Tier 1 invariants that are structural under one substrate and merely conventional under the other. **Fake the scale, never the shape**, applied to the third of the three things that rule was written for.
 
 **Three things are real here even though they look optional at this scale** (§3.2 of the technical design): the archive as a store separate from Kafka, the explicit tenant-to-partition map, and the daily seal. Faking any of them fakes the shape rather than the scale.
 
@@ -372,9 +395,12 @@ C4Deployment
                 Container(idpk, "identity-service", "Pods", "Authentication")
             }
             Deployment_Node(nscore, "namespace maestro", "Tenant-scoped by binding, not by filter") {
-                Container(corek, "maestro services", "Pods", "PS1 layer, PS2, PS3 + PS4, PS5, PS12, PS13, PS8")
+                Container(corek, "maestro services", "Pods", "PS1 layer, PS2, PS3 + PS4, PS5, PS12, PS13, PS14, PS8, PS16 record half")
                 Container(dsk, "data-service", "Pods", "PS7. Separately deployable and separately substitutable")
                 Container(chk, "ClickHouse", "Pods", "PS7 series shape")
+            }
+            Deployment_Node(nstenant, "namespace tenant-<id>", "One per tenant. PLAT-RUN-001") {
+                Container(fn, "Application functions", "Knative or OpenFaaS", "This tenant's applications, co-resident. Scale to zero above the warm floor")
             }
             Deployment_Node(nsedge, "namespace edge", "Ingress") {
                 Container(envoy, "Envoy or ALB ingress", "Pods", "PS9 exposure. Enforcement is in maestro code")
@@ -407,11 +433,18 @@ C4Deployment
     Rel(dsk, chk, "Series shape")
     Rel(dsk, arch, "Document shape")
     Rel(dsk, topic, "Appends PayloadErased")
+    Rel(envoy, corek, "Inbound to an application terminates at PS9, then PS16 admission")
+    Rel(corek, fn, "Provisions, admits, scales, rolls back, tears down")
+    Rel(fn, dsk, "Writes under a handle bound at admission; no egress otherwise")
 ```
 
 **The physical isolation level is this diagram with a dedicated MSK cluster, RDS instance, S3 bucket and namespace per tenant — and no change to any service.** That is what T28's binding rule buys: the code cannot tell which level it is running at, so the level is a deployment decision. `PS11` and the marketplace stay shared at both levels.
 
-**Every managed service here is a hosted build of an open component** (T21): MSK is Kafka, RDS is Postgres, S3 has an S3-API-compatible open equivalent, Managed Grafana is Grafana. That is what keeps §13.5's hand-over promise honest.
+**`namespace tenant-<id>` is the one node here that is a Tier 1 standard rather than a deployment convenience** (`PLAT-RUN-001`, T45). A tenant's own applications share it; two tenants never do. **The `fn → dsk` edge is drawn as the only edge out of that node on purpose** — under T44 the namespace carries a network policy with no general egress, so the absence of every other arrow is the diagram's content rather than its omission. That is D41 enforced by topology, which §11's omissions list would otherwise have to explain away.
+
+**At the physical level the tenant namespace becomes a node pool or a cluster** — the same third row as everywhere else, and unlike the data plane it costs nothing to move, because a function is a stateless OCI artifact and its state was never local (`PLAT-RUN-003`). **Compute is therefore the most reversible thing in this diagram and the data plane remains the least**, which is §14.7's ordering criterion re-derived from the substrate rather than assumed from the table.
+
+**Every managed service here is a hosted build of an open component** (T21): MSK is Kafka, RDS is Postgres, S3 has an S3-API-compatible open equivalent, Managed Grafana is Grafana, and the FaaS layer is Knative or OpenFaaS on EKS rather than Lambda — which is the same rule at the point it is most tempting to break (§3.1).
 
 ---
 
@@ -459,6 +492,9 @@ Recorded so their absence reads as a decision rather than an oversight.
 | **Per-archetype containers** | An archetype is a composition pattern; the twelve of them share seven engines, which is what §4.3's matrix shows better than a diagram would |
 | **Code level** | C4's own guidance, and it would be stale within a week |
 | **`exchange-service` internals** | AE6 appears as one container and no more. It is deferred in the technical design's engine order and has no design document — T-Q asks whether it needs one. Drawing components for a service nobody has designed would invent them |
+| **PS15 `agent-service`** | It has a design and no container here yet. Its component-level content is the mediator's ordered checks, which is a *sequence* and belongs in a dynamic diagram rather than a container one — and PS15 §1.2 has not decided whether it is a repository or a deployable, which is exactly what a container diagram would be asserting |
+| **PS16 component level** | The admission chain is six ordered steps and would draw as PS2's validator does, but the execution half is deferred by trigger (§6) and **T-W** asks whether PS16 is one service or two. Drawing components would settle T-W in a derived document, which is the inversion §1 exists to prevent |
+| **An invocation as a relationship into PS2** | Its absence *is* T52, and it is the one omission in this table that is a standard rather than a scoping choice. Every other row says *not yet* or *not here*; this one says *never* |
 
 ---
 
@@ -468,4 +504,5 @@ Recorded so their absence reads as a decision rather than an oversight.
 |---|---|---|
 | 0.1 | 2026-08-03 | Initial set. Context, two container diagrams split by generation boundary, two component diagrams for PS2 and PS3 + PS4, two deployment diagrams for the Docker PoC and the Kubernetes plus AWS MVP, and one dynamic diagram for the Explore gate. Two modelling decisions recorded: a generated application is a software system rather than a container, and the eight planes are never drawn as boxes. §10 records deliberate omissions |
 | 0.2 | 2026-08-04 | **PS7 component diagram added as §7**, from `ps7-data-service.md` — the classification validator drawn ahead of the shape router, and the shape router as the only component that knows an engine exists (T19, T22). Sections 7–11 renumbered to 8–12. **Two missing container edges corrected:** `PS7 → PS2` for `PayloadErased`, which §3's prose had claimed did not exist (PS2 §9 always permitted it), and `AE6 → PS7` carrying the fact plus its `ingested_from` provenance, which is the interface T33's split turns on. PS7 relabelled `data-service` in both container diagrams (T32). Both deployment diagrams extended with the series engine and with `data-service` as its own deployable authenticating directly to `identity-service`; the MVP diagram now shows PS2's and PS7's event topologies as two distinct shapes on one MSK cluster (T34), and the PoC note states what T-G still leaves open. `exchange-service` internals added to §11's deliberate omissions, pending T-Q |
+| 0.4 | 2026-08-06 | **PS16 `runtime-service` drawn into both container diagrams and both deployment diagrams** (T43, T44). In §4 it changes what the diagram is about: through v0.3 the generated application floated with no substrate, composing engines and writing to PS7 with nothing saying where it *ran* — §4.5's omission drawn rather than argued. The **direction of the new arrow is the finding**: the runtime calls the application, because under T44 the application has no process of its own to be called into, and admission is where the tenant handle binds, the workload principal is minted and the idempotency key is checked. PS10 appears in §4 for the first time for the same reason — invocation-scoped credentials are an edge where boot-time injection was a deployment detail. In §3, `PS16 → PS2` is labelled with **what it does not carry** (T52), and `PS16 → PS3` puts P13 in the runtime rather than stopping it at the composition plane; the writers-to-PS2 count corrected from four to five. **The MVP diagram gains `namespace tenant-<id>`**, which is a Tier 1 standard rather than a deployment convenience (`PLAT-RUN-001`) and whose single outbound edge is the content — no general egress is D41 enforced by topology. The PoC gains an empty `faasd`, deliberately: there is nothing to run in the first wave and the cheap answer, a long-running container per application, is the one §2.2 of the PS16 design rules out. **PS14 added to the platform-services container diagram** and to both deployment node lists, having been missing since it existed, with the `PS12 → PS14` raise-and-chase edge drawn (T36). §11 gains three omissions, one of which — an invocation as an edge into PS2 — is the only row in that table that says *never* rather than *not yet*. Companion versions corrected and §5.4's finding about this document acknowledged in the header: **v0.4 fixes the instance and not the mechanism**, which is V15's point |
 | 0.3 | 2026-08-05 | **Renamed to `maestro`** (conceptual D44) — the document title, the §2 context-diagram title, and the three `System`/`System_Boundary` labels that carried the retired `"The Platform"` placeholder. Cross-references updated for the dropped `adel-` filename prefix, and the stale `ps1-identity.md` and `ps3-specification-service.md` companion references corrected. **No element, relationship, boundary, or diagram was added, removed, or redrawn** — which is the point worth recording, since a naming change that moved a boundary in a derived document would mean the boundary was never in the source |

@@ -1,7 +1,8 @@
 # PS2 — Record Spine — Service Design
 
-**Status:** Draft v0.2 — for refinement
-**Companions:** `conceptual-design.md` (v0.8) is authoritative for *what* and *why*; `technical-design.md` (v0.5) is authoritative for *what we build first, on what, and in what order*; `ps1-identity-service.md` (v0.1) holds the principal model this service records against. Where any of them conflict, that order of precedence holds and this document is wrong.
+**Status:** Draft v0.3 — for refinement
+**Companions:** `conceptual-design.md` (v1.0) is authoritative for *what* and *why*; `technical-design.md` (v1.1) is authoritative for *what we build first, on what, and in what order*; `ps1-identity-service.md` (v0.1) holds the principal model this service records against. Where any of them conflict, that order of precedence holds and this document is wrong.
+**Realised as:** `services/record-spine` — **one deployable in the maestro monorepo, never its own repository** (**T53**, §1.2).
 **Scope:** One service. The append-only governance event log, the durable archive, the integrity chain, and the projection contract. Not the projections' own contents — those belong to the services that own them (PS3, PS4, PS12).
 **Why this one:** PS2 is the second service in the build order and the first that cannot be retrofitted (§2.1). Every conformance record produced before it exists is permanently weaker.
 
@@ -22,6 +23,31 @@ The chain of record in §4.2 — opportunity, business case, specification, appl
 | The conformance record | PS12 | v0.3 listed it as a PS2 projection. A projection can replay; it cannot re-evaluate against a new pack version or produce an attestation |
 | Pack storage | PS11 | Pack *publication* is an event here; the pack is not |
 | The gate | PS4 | PS2 records that a gate decided; it does not decide, and it has no propose/accept semantics of its own (§6.3) |
+| A general-purpose append-only log | — | §1.2. That product is a library, and it is the part of PS2 with no value |
+
+### 1.2 Where it lives, and why it is the one service that could never leave
+
+*New in v0.3. Decided upstream in **T53**, §3.4 of the technical design — which is where the rule belongs and where it had been owed since v0.6, cited by two other service designs as a decision number that meant something else.*
+
+**`services/record-spine`, in the maestro monorepo. Not its own repository, and unlike every other candidate, not one day either.**
+
+The rule is that a repository boundary is earned by a *consumer*: `identity-service` and `specs-service` are outside because the platform consumes rather than builds them, and `data-service` and `exchange-service` are inside with an explicit trigger — *a consumer that is not maestro* — that is unmet rather than impossible. **PS2's case is different in kind, and worth stating in this document because it is a claim about what this service is.**
+
+**Its genericity could only be bought by deleting its invariants.** R1 rejects an append naming an agent as `accountable`. R2 copies the oversight level in force onto the decision rather than joining it to current configuration. R13 refuses an identity provider's `sub`. §3.3's fifteen types are maestro's lifecycle spelled out — `OpportunityRaised`, `GateDecisionRecorded`, `PhaseTransitioned`, `SpecificationClassChanged`. `specs-service` is genuinely generic because its ADR-0001 makes artifact types, gates, and lifecycles **workspace configuration**; the identical move here means making **P12 configurable**, and P12 is the one thing in the design that must never be. Strip the maestro-specific parts and what remains is an append-only log with a Merkle chain, which is a library — and it is precisely the half of PS2 that carries no assurance weight.
+
+**Its exit obligation is discharged by an artifact rather than by a repository, and that is stronger.** §13.5's hand-over is the reason a repository feels necessary for a platform service. **R12's `export` already produces the archive, the segment manifests, and the verifier**, and T24 forbids the verifier depending on any vendor primitive — so a party holding an export verifies it with no maestro, no repository, and no account. R12 also puts that path in the **first wave** rather than at exit, which exercises it continuously in exactly the way PS7 §1.3 argues a separate repository would exercise a product's. **PS2's unit of handover is the export bundle, and it has been since v0.1.**
+
+**What co-location costs here, stated because distance was doing real work.** R11 keeps `append` off MCP and confines it to authenticated service-to-service calls, so PS2 has no external write path *by design* — and in one repository, a short import reaches a projection's store or the sealer directly and is invisible afterwards. Three of §3.4's five import rules bind this service:
+
+| Rule | Protects |
+|---|---|
+| `data-service` and `record-spine` share only `packages/*`, never each other | The **PS2 → PS7 → PS2 cycle**. PS7 depends on PS2 and appends `PayloadErased` (§8); co-location makes the return edge easy to create by accident |
+| `packages/chain-verifier` imports nothing from `services/*` or `products/*` | **T24 and P9.** One maestro import and §5.4's independent verifiability is gone — and it would be gone silently, since the verifier would still pass |
+| Nothing outside `services/record-spine` writes to the log or the archive | R11 as a lint rule, since it is no longer a network boundary |
+
+**These are only as strong as the pipeline that runs them**, and `platform-standards.md` **V4** already finds six Tier 1 invariants whose stated enforcement is a CI that does not exist. Adding three more unenforced rules would make this section a description of a boundary rather than a boundary.
+
+**Five packages are shared with PS7 and should be extracted deliberately rather than discovered twice** (PS7 §1.3): tenant-handle binding, the tenant→partition map, the type registry with compatibility checking and upcast-on-read, content-addressed blob storage, and export packaging. **That sharing is the whole saving.** It is not PS2 and PS7 becoming one service — T12 forbids it and the cycle above makes it unbuildable.
 
 ---
 
@@ -312,6 +338,7 @@ Step 5 depends on PS8, which is why the §5.1 build order branches PS8 off PS2 r
 | R10 | **Breaking payload changes create a new type; readers upcast, history is never rewritten** | §9 names schema evolution as a catastrophic-failure surface, and the digest chain makes rewriting detectable anyway |
 | R11 | **MCP exposes read, verify, and export — never append** | PS2 has no gate of its own (§6.3); an agent write here bypasses the semantics PS3 and PS4 own, which is what P13 exists to prevent |
 | R12 | **`export` is built in the first wave** | §13.5's exit promise is contractual; a path first exercised at exit is not a capability |
+| R14 | **PS2 is one deployable in the maestro monorepo and is the one service that could never earn its own repository; its handover unit is R12's export bundle, not a repository** | T53 upstream. Every other candidate has an *unmet condition*; PS2 has an impossible one — genericity here costs R1, R2, R13 and the taxonomy, which is P12 made configurable. The §13.5 obligation is already discharged better than a split would: T24's verifier depends on no vendor primitive and R12 builds the path in the first wave. What is lost is that R11's no-external-write-path was enforced by *distance*, so three of §3.4's import rules now carry it — and they are worth exactly as much as the pipeline that runs them (V4) |
 | R13 | **Every principal reference in an event is a maestro principal id; an identity provider's `sub` is rejected at append** | T30. Subjects are minted per identity deployment and re-mint on a deployment-model change, against records that are immutable and multi-year. This is the one field where the indirection cannot be added later, because the archive is already sealed |
 
 ---
@@ -334,5 +361,6 @@ Step 5 depends on PS8, which is why the §5.1 build order branches PS8 off PS2 r
 
 | Version | Date | Change |
 |---|---|---|
+| 0.3 | 2026-08-06 | **§1.2 added — repository placement, settled as permanent rather than provisional** (R14, T53 upstream). PS2 is one deployable in the maestro monorepo and, unlike `data-service` and `exchange-service`, is not a split-out candidate with an unmet condition: **its genericity could only be bought by deleting R1, R2, R13 and §3.3's taxonomy**, which is `specs-service`'s ADR-0001 move applied to the one thing that must never be configuration — P12. Strip those and what remains is a log with a Merkle chain, which is a library and is the half of PS2 that carries no assurance weight. **The §13.5 hand-over is discharged by an artifact rather than a repository**: R12's `export` already yields the archive, the manifests, and a verifier that T24 forbids from depending on any vendor primitive, and R12 puts that path in the first wave, so it is exercised continuously. **The cost is recorded rather than glossed** — R11's absence of an external write path was enforced by repository distance, and three of §3.4's five import rules now carry it, worth exactly as much as the pipeline that runs them (`platform-standards.md` V4). §1.1 gains a row for the generic log this service is deliberately not. Companion versions corrected to conceptual v1.0 and technical v1.1; a `Realised as` line added. **Note that T53 is the number PS7 §1.3/H19 and PS15 §15.2 have been citing as T35**, which was never this decision |
 | 0.2 | 2026-08-03 | **T-L closed upstream** (technical design §3.3) and §4 survived it unchanged — the exclusive-partition model is the logical level, and the physical level is the same design with a cluster per tenant, which is what T28's binding rule buys. §2.2 rewritten from a blocking prerequisite to a settled one; §4.1 reframed as the logical level. **R13 added — every principal reference is a maestro principal id and a provider `sub` is rejected at append** (T30), because subjects are minted per identity deployment and the archive is sealed before anyone notices |
 | 0.1 | 2026-08-03 | Initial design. Envelope with mandatory attribution and a schema-enforced payload boundary (R1–R3). Exclusive partition per tenant with an explicit map and a stated ceiling, proposed as the answer to T-B and T-L (R4–R5). Integrity chain moved to the sealer and the archive rather than the envelope (R6), with daily anchoring through PS8 as the answer to self-attestation (R7). Projection contract with archive-then-log rebuild (R8). Erasure as an event (R9). Schema evolution by new type and read-time upcast (R10). MCP read-only (R11) and first-wave export (R12). Build order in five gated steps; failure modes; R-A to R-E opened |

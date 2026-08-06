@@ -1,0 +1,355 @@
+/**
+ * The workspace definition — the whole domain model, as data (ADR-0001).
+ *
+ * Declarations describe STRUCTURE and CONSTRAINTS, never behaviour. There are no expressions, no
+ * conditionals and no hooks: where judgement is needed a definition declares a required evaluation,
+ * an evaluator answers through the port, and the service records the verdict.
+ *
+ * This file is the only place that knows what a definition may say. It knows nothing about what any
+ * particular definition does say — no `business_case`, no `sponsor`, no `explore`.
+ */
+
+import { z } from 'zod';
+
+/** Durations as `90d`, `12h`, `30m`. Parsed once, here, so no caller invents a second syntax. */
+const durationPattern = /^(\d+)(m|h|d|w)$/;
+
+export function parseDuration(value: string): number {
+  const m = durationPattern.exec(value);
+  if (!m) throw new Error(`Not a duration: ${value} (expected e.g. 90d, 12h, 30m)`);
+  const n = Number(m[1]);
+  switch (m[2]) {
+    case 'm':
+      return n * 60_000;
+    case 'h':
+      return n * 3_600_000;
+    case 'd':
+      return n * 86_400_000;
+    case 'w':
+      return n * 604_800_000;
+    default:
+      throw new Error(`Not a duration: ${value}`);
+  }
+}
+
+const sizePattern = /^(\d+)(B|KB|MB|GB)$/i;
+
+export function parseSize(value: string): number {
+  const m = sizePattern.exec(value);
+  if (!m) throw new Error(`Not a size: ${value} (expected e.g. 25MB)`);
+  const n = Number(m[1]);
+  const unit = (m[2] ?? 'B').toUpperCase();
+  const factor = unit === 'GB' ? 1 << 30 : unit === 'MB' ? 1 << 20 : unit === 'KB' ? 1 << 10 : 1;
+  return n * factor;
+}
+
+const identifier = z
+  .string()
+  .min(1)
+  .max(64)
+  .regex(/^[a-z][a-z0-9_]*$/, 'must be lower snake_case');
+
+const linkDeclaration = z.object({
+  id: identifier,
+  to: identifier,
+  /**
+   * At most one link per type may be pinned (§2.6). A pinned link resolves to a specific version at
+   * acceptance and freezes; everything else points at a lineage and follows it.
+   */
+  pinned: z.boolean().default(false),
+  description: z.string().optional(),
+});
+
+const attachmentPolicy = z.object({
+  max_size: z.string().default('25MB'),
+  media_types: z.array(z.string()).default(['image/png', 'image/jpeg', 'application/pdf']),
+});
+
+const typeDeclaration = z.object({
+  id: identifier,
+  title: z.string().optional(),
+  facet_schema: z.string(),
+  body_format: z.enum(['markdown/v1', 'text/v1']).default('markdown/v1'),
+  attachments: attachmentPolicy.optional(),
+  draft_expiry: z.string().optional(),
+  /**
+   * Effective dating is opt-in per type, and it is the one thing a catalogue type needs that a
+   * tenant artifact does not. A business case is accepted or it is not; a standard is accepted AND
+   * in force between two dates, and can lapse with no successor (ADR-0010).
+   */
+  effective_dating: z.boolean().default(false),
+  /**
+   * A version carrying personal data must be classified at propose, with the vocabulary read from
+   * configuration. An unclassified write is not merely unclassified — it is unclassifiable, and
+   * cannot be given a retention rule or a lawful basis afterwards.
+   */
+  classification_required: z.boolean().default(false),
+  /** Whether artifacts of this type may reference standards in the catalogue workspace. */
+  catalogue_refs: z.boolean().default(false),
+  links: z.array(linkDeclaration).default([]),
+});
+
+export type TypeDeclaration = z.infer<typeof typeDeclaration>;
+
+const ownerResolver = z.discriminatedUnion('resolver', [
+  z.object({ resolver: z.literal('role'), role: z.string() }),
+  z.object({ resolver: z.literal('routing_table'), table: z.string(), key: z.string() }),
+  z.object({ resolver: z.literal('assignment') }),
+]);
+
+export type OwnerResolver = z.infer<typeof ownerResolver>;
+
+const gateDeclaration = z.object({
+  id: identifier,
+  title: z.string().optional(),
+  decides_on: identifier,
+  owner: ownerResolver,
+  outcomes: z.array(identifier).min(1),
+  /** Which outcome, if any, reopens a draft carrying the reviewer's reasoning. */
+  reopens_on: identifier.optional(),
+  blocking: z.boolean().default(true),
+  requires: z
+    .object({
+      confirmed_facets: z.boolean().default(false),
+      evaluations: z.array(identifier).default([]),
+      /**
+       * Refuse to open while a referenced standard's acceptance has lapsed. Declared per gate
+       * because a lapse that blocks release legitimately does not block an early gate.
+       */
+      catalogue_acceptances: z.boolean().default(false),
+    })
+    .default({}),
+  /**
+   * Declared per gate because a small organisation legitimately cannot honour it — in which case
+   * the exemption is visible rather than assumed.
+   */
+  separation_of_duties: z.enum(['exclude_creator', 'exclude_proposer']).optional(),
+  attribution_profile: identifier.default('default'),
+  /**
+   * A publication gate classifies its own change as material or not, and a material one lapses
+   * every acceptance resting on the previous version (ADR-0010).
+   */
+  records_materiality: z.boolean().default(false),
+});
+
+export type GateDeclaration = z.infer<typeof gateDeclaration>;
+
+const transition = z
+  .object({
+    from: identifier,
+    to: identifier,
+    via: z.enum(['propose', 'system']).optional(),
+    via_gate: identifier.optional(),
+    on: identifier.optional(),
+  })
+  .refine((t) => Boolean(t.via) !== Boolean(t.via_gate), {
+    message: 'a transition is authorised by exactly one of `via` or `via_gate`',
+  });
+
+export type Transition = z.infer<typeof transition>;
+
+const lifecycle = z.object({
+  phases: z.array(identifier).min(1),
+  initial: identifier.optional(),
+  transitions: z.array(transition),
+});
+
+const attributionRule = z.object({
+  must_resolve_to: z.literal('principal'),
+  kind: z.enum(['human', 'agent', 'service']).optional(),
+});
+
+const attributionProfile = z.object({
+  id: identifier,
+  required: z.array(identifier).min(1),
+  rules: z.record(attributionRule).default({}),
+  optional: z.array(identifier).default([]),
+});
+
+export type AttributionProfile = z.infer<typeof attributionProfile>;
+
+const evaluatorDeclaration = z.object({
+  id: identifier,
+  endpoint: z.string(),
+  reads: z.literal('facets').default('facets'),
+  timeout_ms: z.number().int().positive().default(10_000),
+});
+
+export const workspaceDefinitionSchema = z
+  .object({
+    workspace: z
+      .string()
+      .min(1)
+      .regex(/^[a-z][a-z0-9-]*$/, 'must be lower kebab-case'),
+    definition_version: z.number().int().positive(),
+    title: z.string().optional(),
+    /**
+     * A catalogue workspace holds standards, packs and constructs and is readable — never writable
+     * — from a tenant session. A tenant workspace holds a tenant's own chain of record and is
+     * reachable from nowhere else at all (ADR-0008).
+     */
+    kind: z.enum(['tenant', 'catalogue']).default('tenant'),
+    types: z.array(typeDeclaration).min(1),
+    attribution_profiles: z.array(attributionProfile).min(1),
+    gates: z.array(gateDeclaration).default([]),
+    lifecycle,
+    evaluators: z.array(evaluatorDeclaration).default([]),
+  })
+  .superRefine((def, ctx) => {
+    const typeIds = new Set(def.types.map((t) => t.id));
+    const phaseIds = new Set(def.lifecycle.phases);
+    const gateIds = new Set(def.gates.map((g) => g.id));
+    const profileIds = new Set(def.attribution_profiles.map((p) => p.id));
+    const evaluatorIds = new Set(def.evaluators.map((e) => e.id));
+
+    const fail = (path: (string | number)[], message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
+
+    def.types.forEach((type, i) => {
+      // At most one pinned link per type. Two frozen references would make "the version that
+      // justified this" ambiguous, which is the whole property the pin exists to provide.
+      const pinned = type.links.filter((l) => l.pinned);
+      if (pinned.length > 1) {
+        fail(
+          ['types', i, 'links'],
+          `type \`${type.id}\` declares ${pinned.length} pinned links; at most one is allowed`,
+        );
+      }
+      const seen = new Set<string>();
+      type.links.forEach((link, j) => {
+        if (seen.has(link.id)) fail(['types', i, 'links', j], `duplicate link id \`${link.id}\``);
+        seen.add(link.id);
+        if (!typeIds.has(link.to)) {
+          fail(['types', i, 'links', j, 'to'], `link \`${link.id}\` targets undeclared type \`${link.to}\``);
+        }
+      });
+      if (type.draft_expiry) {
+        try {
+          parseDuration(type.draft_expiry);
+        } catch (e) {
+          fail(['types', i, 'draft_expiry'], (e as Error).message);
+        }
+      }
+      if (type.attachments) {
+        try {
+          parseSize(type.attachments.max_size);
+        } catch (e) {
+          fail(['types', i, 'attachments', 'max_size'], (e as Error).message);
+        }
+      }
+    });
+
+    def.gates.forEach((gate, i) => {
+      if (!typeIds.has(gate.decides_on)) {
+        fail(
+          ['gates', i, 'decides_on'],
+          `gate \`${gate.id}\` decides on undeclared type \`${gate.decides_on}\``,
+        );
+      }
+      if (!profileIds.has(gate.attribution_profile)) {
+        fail(
+          ['gates', i, 'attribution_profile'],
+          `undeclared attribution profile \`${gate.attribution_profile}\``,
+        );
+      }
+      if (gate.reopens_on && !gate.outcomes.includes(gate.reopens_on)) {
+        fail(['gates', i, 'reopens_on'], `\`${gate.reopens_on}\` is not one of this gate's outcomes`);
+      }
+      gate.requires.evaluations.forEach((ev, j) => {
+        if (!evaluatorIds.has(ev)) {
+          fail(['gates', i, 'requires', 'evaluations', j], `undeclared evaluator \`${ev}\``);
+        }
+      });
+    });
+
+    def.lifecycle.transitions.forEach((t, i) => {
+      if (!phaseIds.has(t.from))
+        fail(['lifecycle', 'transitions', i, 'from'], `undeclared phase \`${t.from}\``);
+      if (!phaseIds.has(t.to)) fail(['lifecycle', 'transitions', i, 'to'], `undeclared phase \`${t.to}\``);
+      if (t.via_gate && !gateIds.has(t.via_gate)) {
+        fail(['lifecycle', 'transitions', i, 'via_gate'], `undeclared gate \`${t.via_gate}\``);
+      }
+      if (t.via_gate && t.on) {
+        const gate = def.gates.find((g) => g.id === t.via_gate);
+        if (gate && !gate.outcomes.includes(t.on)) {
+          fail(
+            ['lifecycle', 'transitions', i, 'on'],
+            `\`${t.on}\` is not an outcome of gate \`${t.via_gate}\``,
+          );
+        }
+      }
+    });
+
+    if (def.lifecycle.initial && !phaseIds.has(def.lifecycle.initial)) {
+      fail(['lifecycle', 'initial'], `undeclared phase \`${def.lifecycle.initial}\``);
+    }
+
+    // Every attribution profile must name a human somewhere. A profile where an agent could occupy
+    // every required field is a profile under which nobody is answerable (ADR-0005).
+    def.attribution_profiles.forEach((profile, i) => {
+      const namesAHuman = profile.required.some((field) => profile.rules[field]?.kind === 'human');
+      if (!namesAHuman) {
+        fail(
+          ['attribution_profiles', i, 'rules'],
+          `profile \`${profile.id}\` requires no field that must resolve to a human; a decision under it would leave nobody answerable`,
+        );
+      }
+    });
+  });
+
+export type WorkspaceDefinition = z.infer<typeof workspaceDefinitionSchema>;
+
+export class DefinitionError extends Error {
+  constructor(
+    message: string,
+    readonly issues: Array<{ path: string; message: string }>,
+  ) {
+    super(message);
+    this.name = 'DefinitionError';
+  }
+}
+
+/**
+ * Parse a definition, naming the failing path.
+ *
+ * "Invalid definition" sends someone reading a 400-line YAML file top to bottom.
+ * "types[2].links[1].to: link `implements` targets undeclared type `funcional_spec`" does not.
+ */
+export function parseWorkspaceDefinition(input: unknown): WorkspaceDefinition {
+  const result = workspaceDefinitionSchema.safeParse(input);
+  if (result.success) return result.data;
+  const issues = result.error.issues.map((i) => ({
+    path: i.path.join('.') || '(root)',
+    message: i.message,
+  }));
+  throw new DefinitionError(
+    `Workspace definition is invalid:\n${issues.map((i) => `  ${i.path}: ${i.message}`).join('\n')}`,
+    issues,
+  );
+}
+
+// --- lookups, so no caller re-scans the arrays ---
+
+export function typeIn(def: WorkspaceDefinition, id: string): TypeDeclaration | undefined {
+  return def.types.find((t) => t.id === id);
+}
+
+export function gateIn(def: WorkspaceDefinition, id: string): GateDeclaration | undefined {
+  return def.gates.find((g) => g.id === id);
+}
+
+export function profileIn(def: WorkspaceDefinition, id: string): AttributionProfile | undefined {
+  return def.attribution_profiles.find((p) => p.id === id);
+}
+
+export function gatesDecidingOn(def: WorkspaceDefinition, type: string): GateDeclaration[] {
+  return def.gates.filter((g) => g.decides_on === type);
+}
+
+export function pinnedLinkFor(type: TypeDeclaration): TypeDeclaration['links'][number] | undefined {
+  return type.links.find((l) => l.pinned);
+}
+
+export function initialPhase(def: WorkspaceDefinition): string {
+  return def.lifecycle.initial ?? def.lifecycle.phases[0]!;
+}

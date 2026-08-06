@@ -59,15 +59,14 @@ a real editor and a trustworthy approval live in one service
 ## Project Layout
 
 ```
-specs-service/
- ├── service/          # REST API + MCP server + workers
- │    ├── src/         # drafts, versions, gates, decisions, rendering, ports
- │    └── Dockerfile
- ├── console/          # The product UI (Next.js) — author, review, decide, register
- ├── sdk/              # Headless TypeScript client (@fps4/specs-service-sdk)
- ├── config/           # workspace.example.yaml → types, links, gates, lifecycles
- ├── docker/           # Compose base + overrides (MongoDB replica set, MinIO)
- └── docs/             # design/ · reference/ · guides/ · product/ (index: docs/README.md)
+mstr-specs/
+ ├── api/              # REST API + MCP server. domain/ is pure; a lint rule keeps it that way
+ ├── web/              # The console (Next.js) — author, review, decide, read the standards
+ ├── config/
+ │    ├── workspaces/  # THE domain model, as data: types, links, gates, lifecycles, schemas
+ │    └── ds1/         # Deploy configuration, non-secret values only
+ ├── infra/docker/     # Dockerfiles + compose (MongoDB replica set, MinIO)
+ └── docs/             # design/ · design/ui/ (the approved console design) · decisions/
 ```
 
 ## Core model
@@ -137,5 +136,11 @@ Two planes: a **Docs** plane you read and a **Delivery** plane you track. Start 
 
 ## Status
 
-**Design draft v0.2.** No implementation yet. Seven ADRs are written and the build order is in
-[`architecture.md`](docs/design/architecture.md) §12.
+**First build.** Steps 1–9 of [`architecture.md`](docs/design/architecture.md) §12 are implemented,
+plus the MCP surface. 145 tests pass, including the loop through HTTP and the adversarial
+cross-workspace read.
+
+**Not built yet:** the evaluator port's outbound call (verdicts are recorded through the API but the
+service does not yet call out), the TypeScript SDK, export, and redaction. The catalogue holds no
+real standards — the pack registry does not exist, and a fixture presented as a standard would be
+worse than an empty shelf.

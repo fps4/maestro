@@ -1,0 +1,155 @@
+name: dod
+
+# The Definition-of-Done gate. Every item here is blocking; see CONTRIBUTING.md.
+#
+# Runs on the shared self-hosted ds1 runner, which is itself containerized and talks to the *host*
+# Docker socket. That rules out `container:` jobs and host bind-mounts — paths do not translate
+# across the socket — so every job does its work via `docker build` (the context is STREAMED to the
+# daemon) plus sibling containers on a per-run network.
+#
+# A successful run on main triggers deploy-ds1.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dod-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The ds1 runner predates Node 24; pin the checkout JS action to the node20 it has.
+  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
+
+jobs:
+  secret-scan:
+    # The floor: no credentials committed. The gitleaks binary rather than the Action, which needs
+    # a paid organisation licence; the repository is baked into the image so the scan works here.
+    runs-on: [self-hosted, ds1]
+    steps:
+      - uses: actions/checkout@v4
+      - name: gitleaks
+        run: |
+          TAG=ms-gitleaks:${{ github.run_id }}-${{ github.run_attempt }}
+          docker build -t "$TAG" -f infra/docker/gitleaks.Dockerfile .
+          docker run --rm "$TAG" detect --no-git --source=/repo --config=/repo/.gitleaks.toml --redact --no-banner
+          docker rmi "$TAG" 2>/dev/null || true
+
+  api-build:
+    # Building the api image runs typecheck, lint and the compile (see api.Dockerfile). Any failure
+    # fails the gate, and nothing that did not pass can be shipped.
+    runs-on: [self-hosted, ds1]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t ms-api:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/api.Dockerfile .
+
+  web-build:
+    # Same shape for the console: typecheck, lint, tests and the production build.
+    runs-on: [self-hosted, ds1]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t ms-web:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/web.Dockerfile .
+
+  test:
+    # The full suite against a real MongoDB REPLICA SET. Unit tests pin the domain rules;
+    # integration tests drive the whole loop through HTTP and include the adversarial
+    # cross-workspace read, which is a build gate rather than a nice-to-have.
+    #
+    # A standalone mongod would not do: the transactional outbox needs multi-document transactions,
+    # and the service refuses to start without a replica set. Testing against a configuration the
+    # service refuses to run on would prove nothing.
+    runs-on: [self-hosted, ds1]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the CI image
+        run: docker build -t ms-ci:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/ci.Dockerfile .
+      - name: Test against a sibling replica set on a per-run network
+        run: |
+          set -e
+          SUFFIX=${{ github.run_id }}-${{ github.run_attempt }}
+          NET=ms-net-$SUFFIX
+          MONGO=ms-mongo-$SUFFIX
+
+          docker network create "$NET"
+
+          # No auth here, deliberately. The container is on a throwaway per-run network with no
+          # published port, and running without a keyfile keeps the setup to one container — the
+          # thing under test is transactions, not credentials.
+          docker run -d --name "$MONGO" --network "$NET" --network-alias mongo \
+            --health-cmd "mongosh --quiet --eval \"db.hello().setName === 'rs0' || quit(1)\"" \
+            --health-interval 3s --health-timeout 3s --health-retries 30 \
+            mongo:7 --replSet rs0 --bind_ip_all
+
+          # Initiate before waiting on health: the healthcheck asserts the replica set exists, so it
+          # can never pass until this has run.
+          for i in $(seq 1 30); do
+            if docker exec "$MONGO" mongosh --quiet --eval 'db.adminCommand({ping:1}).ok' >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          docker exec "$MONGO" mongosh --quiet --eval '
+            try { rs.status() } catch (e) { rs.initiate({_id:"rs0",members:[{_id:0,host:"mongo:27017"}]}) }
+          '
+
+          for i in $(seq 1 40); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' "$MONGO" 2>/dev/null)" = healthy ] && break
+            sleep 2
+          done
+          [ "$(docker inspect -f '{{.State.Health.Status}}' "$MONGO")" = healthy ] || {
+            echo "::error::the replica set never became healthy"; docker logs --tail 40 "$MONGO"; exit 1; }
+
+          docker run --rm --network "$NET" \
+            -e MONGO_URI="mongodb://mongo:27017/?replicaSet=rs0" \
+            ms-ci:$SUFFIX bash -lc "cd api && npm run lint && npm run typecheck && npm test && cd ../web && npm test"
+      - name: Cleanup
+        if: always()
+        run: |
+          SUFFIX=${{ github.run_id }}-${{ github.run_attempt }}
+          docker rm -f "ms-mongo-$SUFFIX" 2>/dev/null || true
+          docker network rm "ms-net-$SUFFIX" 2>/dev/null || true
+          docker rmi "ms-ci:$SUFFIX" 2>/dev/null || true
+
+  workspace-definitions:
+    # Every committed workspace definition must parse and satisfy its own referential rules — a
+    # gate deciding on a declared type, no type with two pinned links, no profile under which
+    # nobody would be answerable. The definitions ARE the domain model (ADR-0001), so this is the
+    # equivalent of typechecking them.
+    runs-on: [self-hosted, ds1]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the CI image
+        run: docker build -t ms-ci-def:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/ci.Dockerfile .
+      - name: Validate every committed definition
+        run: |
+          docker run --rm ms-ci-def:${{ github.run_id }}-${{ github.run_attempt }} \
+            bash -lc "cd api && npm run workspace:validate"
+      - name: Cleanup
+        if: always()
+        run: docker rmi "ms-ci-def:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true
+
+  dependency-scan:
+    # Known vulnerabilities in what we ship. High and above fails; the report is printed either way
+    # so a moderate finding is visible without blocking.
+    runs-on: [self-hosted, ds1]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the CI image
+        run: docker build -t ms-ci-audit:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/ci.Dockerfile .
+      - name: npm audit
+        run: |
+          docker run --rm ms-ci-audit:${{ github.run_id }}-${{ github.run_attempt }} bash -lc '
+            set -e
+            for pkg in api web; do
+              echo "::group::$pkg"
+              (cd $pkg && npm audit --omit=dev || true)
+              (cd $pkg && npm audit --omit=dev --audit-level=high)
+              echo "::endgroup::"
+            done
+          '
+      - name: Cleanup
+        if: always()
+        run: docker rmi "ms-ci-audit:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true

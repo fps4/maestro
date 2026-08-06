@@ -476,11 +476,17 @@ standalone `mongod` is not a supported configuration, including in development.
 
 ## 9. Stack
 
-TypeScript on Node 22 LTS, matching `identity-service`. Fastify with JSON-Schema-compiled validation
-at the route boundary, since facet validation is the enforcement point. MongoDB driver directly, no
-ODM — the document shapes are ours and per-workspace databases are resolved at runtime. Ajv for facet
-schemas, TypeBox for derived types. `@modelcontextprotocol/sdk` for MCP. Next.js console.
-Vitest plus Testcontainers, since the meaningful tests are integration-shaped.
+TypeScript on Node 22 LTS, matching `identity-service`. Fastify with zod validation at the route
+boundary. MongoDB driver directly, no ODM — the document shapes are ours and per-workspace databases
+are resolved at runtime. **Ajv with draft 2020-12** for facet schemas. Next.js console, token-driven
+Tailwind. Vitest, with the integration tests driving a real single-node replica set, since the
+meaningful behaviour here is integration-shaped: a transaction that half-applies, a pin that resolves
+against stored state, an index that stops a query crossing a boundary.
+
+**The repository layout is `api/` and `web/`**, each with its own `package.json`, lockfile and
+Dockerfile, plus `infra/docker/`, `config/` and `docs/`. There is deliberately no npm workspace: each
+image's build context is streamed to the Docker daemon on the CI runner, and independent lockfiles
+keep those contexts small and the two builds genuinely independent.
 
 **No workflow or event-sourcing framework.** Propose, accept and supersede are the product; a
 framework that owns them owns the thing being sold.
@@ -520,6 +526,9 @@ a gated artifact are out of scope, and a proposal to relax that is a strategy ch
 | D8 | Principal ids are local; an issuer's `sub` is never stored on a record | §7.2 |
 | D9 | At most one link per type is pinned, resolved to a version at acceptance and frozen | §2.6 |
 | D10 | Redaction is the single permitted mutation, recorded, and detectable by digest mismatch | §8.3 |
+| D11 | The catalogue is a workspace, reached read-only; a tenant carries a reference, never a link | [ADR-0008](decisions/0008-the-catalogue-is-a-workspace.md) |
+| D12 | External and platform standards are distinct types; licence disposition is a required facet | [ADR-0009](decisions/0009-external-and-platform-standards-are-distinct-types.md) |
+| D13 | Versions may be effective-dated; only a *material* change lapses an acceptance | [ADR-0010](decisions/0010-effective-dating-and-acceptance-lapse.md) |
 
 ---
 
@@ -564,5 +573,6 @@ Steps 1–7 are the product. Everything after makes it complete.
 
 | Version | Date | Change |
 |---|---|---|
+| 0.3 | 2026-08-06 | **First build.** Steps 1–9 of §12 implemented, plus MCP. Three additions the build made necessary, each with an ADR: the **catalogue as a workspace reached through a read-only handle** (D11, ADR-0008), which resolves the tension between a pack being shared across tenants and §6 saying nothing crosses a workspace; **external and platform standards as distinct types** (D12, ADR-0009), because ISO's licence forbids holding the text while the Bbl's does not, and "is this the obligation or our reading of it" must not be a settable flag; and **effective dating with acceptance lapse on a material change** (D13, ADR-0010), which is the one real addition to the version model — accepted and *in force* are different questions. The console ships with the password grant rather than PKCE, and §7.1's transparent-SSO property therefore does not hold yet (ADR-0011). §9 rewritten to match what was built; §11 gains D11–D13 |
 | 0.2 | 2026-08-04 | **Authoring and rendering brought in scope** — the service is a full product with its own domain, console and SSO, not a headless registry. Drafts added as a mutable entity distinct from immutable versions (D3), which is what lets editing and an audit record coexist. Bodies are now authored, rendered, diffed and searched — but still never evaluated (D4), the one property preserved from v0.1. MCP gains draft writes and propose, keeping only the decision surface closed (D5). **Storage moved to MongoDB with bodies inline** and attachments content-addressed in object storage (D7); isolation reworked to database-per-workspace with the fail-closed argument (D6); redaction recorded as the single permitted mutation (D10). §3 authoring, §7 identity and SSO, and §8.4 on what MongoDB does not give us added. The wiki risk named explicitly in §10 |
 | 0.1 | 2026-08-04 | Initial architecture. Model derived from the overlap between adel and maestro. Configuration-driven types, links, gates and lifecycles. Ports with local defaults. Immutable supersede-only versions; facets separated from an opaque body; the service records decisions and never makes one; workspace isolation by binding |

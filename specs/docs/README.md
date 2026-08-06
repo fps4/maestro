@@ -29,9 +29,13 @@ Two planes: a **Docs** plane you read, and a **Delivery** plane you track.
 | [0005](design/decisions/0005-agents-may-author-never-decide.md) | Agents author and propose; only a named human decides; no decision surface on MCP |
 | [0006](design/decisions/0006-workspace-isolation-by-database.md) | Workspace isolation is database-per-workspace, bound once per request |
 | [0007](design/decisions/0007-mongodb-with-inline-bodies.md) | MongoDB, with bodies inline and blobs in object storage |
+| [0008](design/decisions/0008-the-catalogue-is-a-workspace.md) | The catalogue is a workspace, reached through a read-only handle |
+| [0009](design/decisions/0009-external-and-platform-standards-are-distinct-types.md) | External and platform standards are distinct types, not one type with a flag |
+| [0010](design/decisions/0010-effective-dating-and-acceptance-lapse.md) | Versions may be effective-dated, and a *material* change lapses an acceptance |
+| [0011](design/decisions/0011-password-grant-first-pkce-later.md) | The console ships with the password grant; PKCE is the follow-up |
 
-All seven are `status: proposed` — nothing is implemented, so they are still a design under review
-rather than a record of commitments made.
+All eleven are `status: proposed`. The first build exists, but nothing has run against real content
+yet, so they remain a design under review rather than a record of commitments made.
 
 ## Conventions
 

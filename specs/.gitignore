@@ -27,3 +27,7 @@ coverage/
 
 # OS
 .DS_Store
+
+# npm writes this on install; the lockfile is what we commit.
+api/.npmrc
+web/.npmrc

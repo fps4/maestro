@@ -294,12 +294,15 @@ describe('gates', () => {
     expect(artifact.body.artifact.accepted_ordinal).toBe(version.ordinal);
   });
 
-  it('refuses a decision naming an agent as accountable, and records the refusal', async () => {
+  it('refuses to let a caller name anyone but themselves as accountable', async () => {
+    // The stronger rule, and it closes the agent case as a consequence: `accountable` is resolved
+    // from the session, so an agent cannot be named there because *nobody* else can. Refused at the
+    // boundary, before the profile's kind rule is consulted.
     const version = await proposedCase('Agent accountable');
     await recordEvaluation(version.artifact, version.ordinal, version.digest);
     const agentPrincipal = await grantMembership(harness, harness.tenant, 'agt-case-shaper', ['author']);
 
-    const refused = await call<{ error: string; issues: Array<{ message: string }> }>(
+    const refused = await call<{ error: string; message: string }>(
       harness,
       'POST',
       `${base()}/gates/explore/decisions`,
@@ -318,16 +321,11 @@ describe('gates', () => {
         },
       },
     );
-    expect(refused.status).toBe(422);
-    expect(refused.body.error).toBe('attribution_refused');
-    expect(refused.body.issues[0]!.message).toMatch(/an agent can never be answerable/);
-
-    const handle = await harness.app.store.handle(harness.tenant);
-    const refusal = await handle.db.collection('outbox').findOne({ kind: 'DecisionRefused' });
-    expect(refusal).not.toBeNull();
+    expect(refused.status).toBe(403);
+    expect(refused.body.message).toMatch(/resolved from your session/);
   });
 
-  it('refuses a decision missing a field the profile requires', async () => {
+  it('refuses a decision missing a field the profile requires, and records the refusal', async () => {
     const version = await proposedCase('Missing seat');
     await recordEvaluation(version.artifact, version.ordinal, version.digest);
 
@@ -341,12 +339,18 @@ describe('gates', () => {
           artifact: version.artifact,
           ordinal: version.ordinal,
           outcome: 'approve',
-          attribution: { accountable: sponsor, acting: sponsor },
+          attribution: { seat: 'sponsor' },
         },
       },
     );
     expect(refused.status).toBe(422);
-    expect(refused.body.issues.map((i) => i.field)).toContain('seat');
+    expect(refused.body.issues.map((i) => i.field)).toContain('oversight_level');
+
+    // A control whose refusals are invisible is one nobody can audit, so the refusal reaches the
+    // record sink like every other state change.
+    const handle = await harness.app.store.handle(harness.tenant);
+    const refusal = await handle.db.collection('outbox').findOne({ kind: 'DecisionRefused' });
+    expect(refusal).not.toBeNull();
   });
 
   it('refuses a decision from someone who does not hold the gate’s role', async () => {

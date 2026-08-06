@@ -299,7 +299,8 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     ordinal: z.number().int().positive(),
     outcome: z.string(),
     reasoning: z.string().optional(),
-    attribution: z.record(z.string()).and(z.object({ accountable: z.string(), acting: z.string() })),
+    // `accountable` and `acting` are optional on the wire: the server fills them from the session.
+    attribution: z.record(z.string()).default({}),
     materiality: z.enum(['material', 'immaterial']).optional(),
   });
 
@@ -312,13 +313,28 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     const version = await svc.artifacts.getVersion(input.artifact, input.ordinal);
     const acceptances = await svc.acceptances.statesFor(version.catalogue_refs);
 
+    // `accountable` and `acting` default to the authenticated principal, and a caller cannot name
+    // someone else as accountable — that is the one field an attacker would most want to choose,
+    // and "who is answerable for this" is not a claim a client gets to make. Supplying your own id
+    // is permitted because it is what the default already is; naming anyone else is refused here
+    // rather than being caught later by the profile's kind rule, which would only stop an *agent*.
+    for (const field of ['accountable', 'acting'] as const) {
+      const supplied = input.attribution[field];
+      if (supplied && supplied !== ctx.principal.id) {
+        throw new Forbidden(
+          `\`${field}\` is resolved from your session and cannot be set to another principal. You are \`${ctx.principal.id}\`.`,
+        );
+      }
+    }
+    const attribution = { ...input.attribution, accountable: ctx.principal.id, acting: ctx.principal.id };
+
     // Load every principal the attribution names, so the check stays a pure function over data
     // rather than a function that reaches for a database mid-rule.
-    const named = Object.values(input.attribution).filter((v): v is string => typeof v === 'string');
+    const named = Object.values(attribution).filter((v): v is string => typeof v === 'string');
     const records = await deps.directory.getMany([...named, ctx.principal.id]);
     const directory = new Map<string, Principal>(records);
 
-    const decision = await svc.decisions.decide({ gate, ...input }, ctx.actor, {
+    const decision = await svc.decisions.decide({ gate, ...input, attribution }, ctx.actor, {
       decider: ctx.principal,
       roles: ctx.roles,
       routed: [],

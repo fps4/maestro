@@ -9,10 +9,14 @@
  * constraint sits at the point of consequence rather than spread across everything an agent touches.
  */
 
-import { Ajv, type ErrorObject, type ValidateFunction } from 'ajv';
-// Both packages are CommonWJS with `exports.default`, so TypeScript under NodeNext resolves a
-// default import to the module object rather than the function. Reaching through `.default` is
-// correct in both worlds: at runtime the function carries a self-referential `.default`.
+// Draft 2020-12, not Ajv's default draft-07. The facet schemas a workspace ships are authored by
+// people who will reach for the current draft, and "no schema with key or ref
+// https://json-schema.org/draft/2020-12/schema" is an unhelpful way to learn that.
+import { Ajv2020 } from 'ajv/dist/2020.js';
+import type { ErrorObject, ValidateFunction } from 'ajv';
+// ajv-formats is CommonJS with `exports.default`, so TypeScript under NodeNext resolves a default
+// import to the module object rather than the function. Reaching through `.default` is correct in
+// both worlds: at runtime the function carries a self-referential `.default`.
 import addFormatsModule from 'ajv-formats';
 import type { Facets, FacetProvenance, PrincipalId, ProvenanceMap } from './types.js';
 
@@ -46,11 +50,11 @@ export class FacetValidationError extends Error {
  * compile per request would make autosave the slowest thing in the service.
  */
 export class FacetValidator {
-  private readonly ajv: Ajv;
+  private readonly ajv: Ajv2020;
   private readonly compiled = new Map<string, ValidateFunction>();
 
   constructor() {
-    this.ajv = new Ajv({
+    this.ajv = new Ajv2020({
       allErrors: true,
       strict: false, // a workspace's schema is authored data; we validate against it, not it
       allowUnionTypes: true,

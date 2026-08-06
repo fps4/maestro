@@ -104,6 +104,19 @@ export function catalogueHandle(db: Db, workspace: string, kind: 'tenant' | 'cat
   return {
     kind: 'catalogue',
     workspace,
-    collection: <T extends Document>(name: string) => db.collection<T>(name) as ReadOnlyCollection<T>,
+    collection<T extends Document>(name: string): ReadOnlyCollection<T> {
+      // A *projection* of the collection, not a cast of it. A cast is a promise to the compiler
+      // that the next person can break with one `as`; this hands out an object that has no write
+      // method to reach. The boundary this guards is the one place a read is allowed to cross a
+      // workspace, so it is worth the five bound functions.
+      const source = db.collection<T>(name);
+      return {
+        find: source.find.bind(source),
+        findOne: source.findOne.bind(source),
+        countDocuments: source.countDocuments.bind(source),
+        distinct: source.distinct.bind(source),
+        aggregate: source.aggregate.bind(source),
+      } as ReadOnlyCollection<T>;
+    },
   };
 }

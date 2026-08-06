@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "intake_assessment",
+  "description": "Is this existing application ours to hold, and at what level? A different question from 'is it worth building', with different standards.",
+  "type": "object",
+  "required": ["application_name", "onboarding_level", "reconstructed_purpose", "personal_data_in_scope"],
+  "additionalProperties": false,
+  "properties": {
+    "application_name": { "type": "string", "minLength": 1 },
+    "onboarding_level": {
+      "enum": ["N0", "N1", "N2", "N3", "N4"],
+      "description": "How much of this system we take responsibility for. Below N2 the incumbent team keeps deploying."
+    },
+    "reconstructed_purpose": {
+      "type": "string",
+      "minLength": 10,
+      "description": "Recovered after the fact. Mark its provenance `reconstructed` — never present it as original."
+    },
+    "incumbent": { "type": "string" },
+    "personal_data_in_scope": { "type": "boolean" },
+    "consequence_class": { "enum": ["c1", "c2", "c3", "c4"] },
+    "known_gaps": { "type": "array", "items": { "type": "string" } }
+  }
+}

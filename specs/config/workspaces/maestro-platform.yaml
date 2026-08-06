@@ -1,0 +1,156 @@
+# The maestro delivery platform's own artifact chain (PS3 §2).
+#
+#   Opportunity ──▶ Business case ──▶ Specification
+#                        │                  │
+#                        └── pinned ────────┘
+#
+# Plus the intake assessment — the business case's brownfield twin, asking "is this ours to hold?"
+# rather than "is this worth building?" — and the pack binding, which records which standards this
+# tenant accepted and who accepted each.
+#
+# Nothing below is in the code. A fifth artifact class costs a definition, not a release.
+
+workspace: aannemer-x
+definition_version: 1
+kind: tenant
+title: Aannemer X
+
+types:
+  # No gate of its own: raising one is open to anyone authorised in the workspace, and the outcome
+  # is recorded on the business case that addresses it.
+  - id: opportunity
+    facet_schema: ./schemas/opportunity.json
+    body_format: markdown/v1
+    draft_expiry: 90d
+    classification_required: true
+    links: []
+
+  - id: business_case
+    facet_schema: ./schemas/business-case.json
+    body_format: markdown/v1
+    attachments:
+      max_size: 25MB
+      media_types: [image/png, image/jpeg, image/svg+xml, application/pdf]
+    draft_expiry: 90d
+    classification_required: true
+    catalogue_refs: true
+    links:
+      - { id: addresses, to: opportunity }
+
+  - id: specification
+    facet_schema: ./schemas/specification.json
+    body_format: markdown/v1
+    attachments:
+      max_size: 25MB
+      media_types: [image/png, image/jpeg, image/svg+xml, application/pdf]
+    draft_expiry: 90d
+    classification_required: true
+    catalogue_refs: true
+    links:
+      # The pin is what keeps the trail honest. An auditor reading a five-year-old specification
+      # sees the case as it read when someone accepted it, not as it was rewritten afterwards.
+      - { id: justified_by, to: business_case, pinned: true }
+      - { id: addresses, to: opportunity }
+
+  - id: intake_assessment
+    facet_schema: ./schemas/intake-assessment.json
+    body_format: markdown/v1
+    draft_expiry: 90d
+    classification_required: true
+    catalogue_refs: true
+    links: []
+
+  # The tenant's own record of which standards it accepted, who accepted each, and when. It lives
+  # here rather than in the catalogue because the catalogue is shared across tenants and may hold no
+  # tenant runtime data — and it hands over at exit as the tenant's property.
+  - id: pack_binding
+    facet_schema: ./schemas/pack-binding.json
+    body_format: markdown/v1
+    classification_required: false
+    catalogue_refs: true
+    links: []
+
+attribution_profiles:
+  - id: maestro_default
+    required: [accountable, acting, seat, oversight_level]
+    rules:
+      accountable: { must_resolve_to: principal, kind: human }
+      acting: { must_resolve_to: principal }
+    optional: [consequence_class]
+
+gates:
+  - id: explore
+    title: Explore
+    decides_on: business_case
+    owner: { resolver: role, role: sponsor }
+    outcomes: [approve, request_changes, decline]
+    reopens_on: request_changes
+    blocking: true
+    requires:
+      confirmed_facets: true
+      evaluations: [sufficiency]
+    separation_of_duties: exclude_creator
+    attribution_profile: maestro_default
+
+  - id: assess
+    title: Assess
+    decides_on: intake_assessment
+    owner: { resolver: role, role: sponsor }
+    outcomes: [approve, request_changes, decline]
+    reopens_on: request_changes
+    blocking: true
+    requires:
+      confirmed_facets: true
+      evaluations: [intake_sufficiency]
+    # No separation of duties declared. At this client the sponsor who raised the intake is the one
+    # who assesses it; the exemption is visible rather than assumed.
+    attribution_profile: maestro_default
+
+  - id: specification_gate
+    title: Specification
+    decides_on: specification
+    owner: { resolver: role, role: owner }
+    outcomes: [approve, request_changes, decline]
+    reopens_on: request_changes
+    blocking: true
+    requires:
+      confirmed_facets: true
+      evaluations: [conformance]
+      # A specification is what gets built, so a lapsed acceptance under it blocks here — unlike at
+      # Explore, where it is recorded and advisory.
+      catalogue_acceptances: true
+    separation_of_duties: exclude_creator
+    attribution_profile: maestro_default
+
+  - id: binding_gate
+    title: Standards binding
+    decides_on: pack_binding
+    owner: { resolver: role, role: workspace_admin }
+    outcomes: [approve, request_changes]
+    reopens_on: request_changes
+    blocking: true
+    requires:
+      confirmed_facets: true
+    attribution_profile: maestro_default
+
+lifecycle:
+  phases: [explore, prove, build, run, retired, closed]
+  initial: explore
+  transitions:
+    - { from: explore, to: prove, via_gate: explore, on: approve }
+    - { from: explore, to: closed, via_gate: explore, on: decline }
+    - { from: explore, to: explore, via_gate: explore, on: request_changes }
+    - { from: prove, to: build, via_gate: specification_gate, on: approve }
+    - { from: prove, to: prove, via_gate: specification_gate, on: request_changes }
+    - { from: explore, to: prove, via_gate: assess, on: approve }
+    - { from: explore, to: closed, via_gate: assess, on: decline }
+    - { from: build, to: run, via: propose }
+    - { from: run, to: retired, via: system }
+    # A descriptive specification rots the moment it is written, and expiry is set by a consumer's
+    # clock rather than by a person — so it needs a transition kind that is neither propose nor gate.
+    - { from: run, to: run, via: system }
+
+evaluators:
+  - { id: sufficiency, endpoint: "${EVALUATOR_BASE}/sufficiency", reads: facets }
+  - { id: intake_sufficiency, endpoint: "${EVALUATOR_BASE}/intake", reads: facets }
+  - { id: conformance, endpoint: "${EVALUATOR_BASE}/conformance", reads: facets }

@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "external_standard",
+  "description": "A standard someone else authors — ISO, NIST, a regulator. The body is our summary and our reading, never the licensed text unless the licence permits it.",
+  "type": "object",
+  "required": [
+    "standard_id",
+    "pack",
+    "pack_version",
+    "tier",
+    "authority_body",
+    "citation",
+    "licence_disposition",
+    "interpreting_party"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "standard_id": { "type": "string", "minLength": 1 },
+    "pack": { "type": "string" },
+    "pack_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "tier": { "enum": ["regulatory", "contractual", "product", "guidance"] },
+    "authority_body": {
+      "type": "string",
+      "description": "Who authored it: ISO/IEC, NIST, Rijksoverheid, CEN."
+    },
+    "citation": {
+      "type": "object",
+      "required": ["reference"],
+      "additionalProperties": false,
+      "properties": {
+        "reference": { "type": "string", "minLength": 1 },
+        "url": { "type": "string" },
+        "clause": { "type": "string" }
+      }
+    },
+    "licence_disposition": {
+      "enum": ["full_text_permitted", "summary_only", "reference_only"],
+      "description": "What we are permitted to hold. A human's determination, recorded — this service cannot adjudicate a licence, and an unreviewed ingest is a refused write rather than a discovered problem."
+    },
+    "interpreting_party": {
+      "type": "object",
+      "required": ["party", "arrangement"],
+      "additionalProperties": false,
+      "properties": {
+        "party": { "type": "string" },
+        "arrangement": {
+          "enum": ["A", "B"],
+          "description": "B is the target; A is what you actually have at the start. Recording it makes the gap a queryable count rather than a paragraph."
+        },
+        "attested": { "type": "boolean" }
+      }
+    },
+    "assertion": { "type": "string" },
+    "applies_when": { "type": "string" },
+    "severity": { "enum": ["blocking", "advisory"] },
+    "obligated_party": { "type": "string" },
+    "assurance_kind": { "enum": ["determines", "evidences", "records"] },
+    "evidence_required": { "type": "array", "items": { "type": "string" } },
+    "review_due": { "type": "string", "format": "date" }
+  }
+}

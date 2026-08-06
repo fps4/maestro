@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "construct",
+  "description": "A prompt or elicitation pattern an agent uses. Governed content that happens to be prose.",
+  "type": "object",
+  "required": ["construct_id", "pack", "pack_version", "purpose", "transfers"],
+  "additionalProperties": false,
+  "properties": {
+    "construct_id": { "type": "string", "pattern": "^ct-[a-z0-9-]+$" },
+    "pack": { "type": "string" },
+    "pack_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "purpose": { "type": "string", "minLength": 1 },
+    "carries_domain_terms": {
+      "type": "boolean",
+      "description": "A construct carrying a domain term is pack content; a domain-free one is platform content. The line is thin and the answer belongs on the record."
+    },
+    "transfers": {
+      "type": "boolean",
+      "description": "Whether this leaves with a tenant at exit. Know-how usually does not, and marking it here is what makes the export honest."
+    },
+    "oversight_ceiling": { "enum": ["O0", "O1", "O2", "O3", "O4"] }
+  }
+}

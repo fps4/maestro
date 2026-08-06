@@ -38,6 +38,8 @@ WORKDIR /web
 
 COPY --from=build --chown=node:node /web/.next/standalone ./
 COPY --from=build --chown=node:node /web/.next/static ./.next/static
+# `public/` must contain at least one tracked file, or git does not carry the directory and this
+# COPY fails in CI while succeeding on a developer's machine — where the empty directory exists.
 COPY --from=build --chown=node:node /web/public ./public
 
 USER node

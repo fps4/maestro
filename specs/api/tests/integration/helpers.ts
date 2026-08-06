@@ -23,12 +23,22 @@ export const CONFIG_DIR = resolve(here, '../../../config/workspaces');
 
 export const MONGO_URI = process.env.MONGO_URI ?? 'mongodb://127.0.0.1:27019/?directConnection=true';
 
-/** A distinct control database per test file, so files cannot see each other's workspaces. */
+/**
+ * A distinct control database per test file, so files cannot see each other's workspaces.
+ *
+ * Mongo credentials are read from the environment rather than hard-coded, because CI runs against
+ * an authenticated instance and a developer usually does not. Omitting them here would mean the
+ * suite passes locally and fails in CI with "requires authentication" — a difference between the
+ * two environments that has nothing to do with the code under test.
+ */
 export function testConfig(suffix: string): Config {
   return loadConfig({
     SPECS_ENV: 'ci',
     NODE_ENV: 'test',
     MONGO_URI,
+    ...(process.env.MONGO_USER ? { MONGO_USER: process.env.MONGO_USER } : {}),
+    ...(process.env.MONGO_PASSWORD ? { MONGO_PASSWORD: process.env.MONGO_PASSWORD } : {}),
+    ...(process.env.MONGO_AUTH_SOURCE ? { MONGO_AUTH_SOURCE: process.env.MONGO_AUTH_SOURCE } : {}),
     MONGO_CONTROL_DB: `test_control_${suffix}`,
     MONGO_DB_PREFIX: `test_${suffix}`,
     AUTH_MODE: 'dev',

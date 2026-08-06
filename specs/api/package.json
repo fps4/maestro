@@ -18,6 +18,7 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "workspace:apply": "tsx src/cli/apply-workspace.ts",
+    "workspace:validate": "tsx src/cli/validate-workspaces.ts",
     "workspace:seed": "tsx src/cli/seed.ts"
   },
   "dependencies": {

@@ -1,0 +1,26 @@
+# gitleaks configuration for skills-coach.
+#
+# The DoD gate runs `gitleaks detect --no-git --source=/repo --config=/repo/.gitleaks.toml`
+# inside a purpose-built image, so the scan works on the containerized CI runner.
+
+title = "skills-coach"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Paths and values that are documentation or fixtures, never real secrets"
+
+paths = [
+  '''package-lock\.json''',
+  '''(^|/)dist/''',
+  '''(^|/)\.next/''',
+]
+
+regexTarget = "match"
+regexes = [
+  # Placeholder values used in docs, .env.base and tests.
+  '''(?i)(change-?me|replace-?me|your-[a-z-]*-here|example\.com|localhost)''',
+  # The dev-mode stub principal in api/src/auth — no credential, just a subject string.
+  '''dev-learner@example\.invalid''',
+]

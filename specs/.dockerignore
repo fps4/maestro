@@ -1,0 +1,16 @@
+# Keep the build context small — it is STREAMED to the Docker daemon (the CI runner
+# talks to the host socket, so nothing is bind-mounted).
+.git
+node_modules
+**/node_modules
+**/dist
+**/.next
+**/*.tsbuildinfo
+.cache
+coverage
+config/ds1/.env
+.env
+.env.local
+*.md
+!README.md
+.DS_Store

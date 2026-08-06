@@ -417,14 +417,12 @@ export function errorHandler(error: Error, _request: FastifyRequest, reply: Fast
   if (error instanceof Forbidden) return reply.code(403).send({ error: 'forbidden', message: error.message });
   if (error instanceof NotFound) return reply.code(404).send({ error: 'not_found', message: error.message });
   if (error instanceof StaleRevision) {
-    return reply
-      .code(409)
-      .send({
-        error: 'stale_revision',
-        message: error.message,
-        expected: error.expected,
-        actual: error.actual,
-      });
+    return reply.code(409).send({
+      error: 'stale_revision',
+      message: error.message,
+      expected: error.expected,
+      actual: error.actual,
+    });
   }
   if (error instanceof FacetValidationError) {
     return reply.code(422).send({ error: 'facets_invalid', message: error.message, issues: error.issues });

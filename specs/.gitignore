@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.next/
+*.tsbuildinfo
+
+# Environment / secrets — only config/ds1/.env.base is committed
+.env
+.env.local
+config/ds1/.env
+
+# A workspace definition applied to a real deployment is tenant configuration, not product.
+# Only the two example definitions ship; see config/workspaces/README.md.
+config/workspaces/*
+!config/workspaces/README.md
+!config/workspaces/maestro-platform.yaml
+!config/workspaces/maestro-sdlc.yaml
+!config/workspaces/catalogue.yaml
+!config/workspaces/schemas/
+
+# Tooling caches
+.cache/
+coverage/
+.vitest/
+
+# OS
+.DS_Store

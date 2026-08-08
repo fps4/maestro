@@ -1,17 +1,18 @@
 # PS3 — Specification Service — Service Design
 
-**Status:** Draft v0.4 — for refinement
-**Companions:** `conceptual-design.md` (v1.0) is authoritative for *what* and *why*; `technical-design.md` (v1.1) for build order and substrate; `ps2-record-spine.md` (v0.3) for the substrate this service projects from. Precedence runs in that order and this document is wrong where it conflicts.
+**Status:** Draft v0.5 — for refinement
+**Companions:** `conceptual-design.md` (v1.1) is authoritative for *what* and *why*; `technical-design.md` (v1.3) for build order and substrate; `ps2-record-spine.md` (v0.3) for the substrate this service projects from; **`platform-standards.md` (v0.7) for the build standards the body is written against — new in v0.5, and it is the first version of this document with a standard binding its own artifact rather than the applications it describes.** Precedence runs in that order and this document is wrong where it conflicts.
 **Realised as:** the service **`specs-service`**, in the repository **`../mstr-specs`** — adopted, and one of the two repositories T53 places *outside* the maestro monorepo, because the platform consumes rather than builds it. That repository owns its own internals and its ADRs; this document is authoritative for what maestro requires of it.
 **Naming, fixed in v0.4:** the service and its repository have different names and this document used three. The `Repo:` line said `mstr-specs`, the `Realised as:` line two rows below said `../specs-service`, and only the first resolves on disk. **`specs-service` is the service; `mstr-specs` is the repository.** Body references say `specs-service` where they mean the service and `../mstr-specs` where they mean the checkout — never the other way round, and never a path that does not exist.
 **Scope:** The artifact model — opportunity, business case, specification, intake assessment, tenant pack binding — with drafts, versioning, linking, diff, lineage, and the proposal semantics of P13. **Including the gate**: T-D closed in v0.2 and PS4 is a bounded context inside this service, not a separate one (§7.1, S15).
+**Note on numbering, new in v0.5:** bare §-references are to the **conceptual design** unless the section exists in this document. **v0.5 added §4.2 here, and the conceptual design's §4.2 is the specification plane** — a collision across twelve existing references, so every one of them now names the conceptual design explicitly. This is the defect `platform-standards.md` v0.4 fixed for its own §7.3, arriving on the section this document cites most.
 **The constraint that shapes everything below:** conceptual open question **A**, the specification's internal representation, is unresolved and gates real generation. §3 of the technical design says the demo path is deliberately arranged so A can stay open. **This design has to make that true rather than assume it** — see §4.
 
 ---
 
 ## 1. What PS3 is
 
-D13 makes the specification service *"the centre of the product"* — a platform service with API and MCP interfaces rather than an internal store, because §4.2 wants the gate to be a property of the service rather than of any one client. That is what makes external agent access safe by construction.
+D13 makes the specification service *"the centre of the product"* — a platform service with API and MCP interfaces rather than an internal store, because conceptual §4.2 wants the gate to be a property of the service rather than of any one client. That is what makes external agent access safe by construction.
 
 Concretely, PS3 holds the chain of record:
 
@@ -21,11 +22,11 @@ Opportunity ──▶ Business case ──▶ Specification ──▶ (Applicati
    PS3             PS3                PS3               PS13                 PS12
 ```
 
-Every link traceable in both directions (§4.2): an auditor asks *why does this application exist* and reaches a business case; a sponsor asks *what happened to my idea* and reaches a running system or a recorded decline.
+Every link traceable in both directions (conceptual §4.2): an auditor asks *why does this application exist* and reaches a business case; a sponsor asks *what happened to my idea* and reaches a running system or a recorded decline.
 
 ### 1.1 PS3 holds no system of record
 
-**Every write is an append to PS2, and PS3's store is a projection** (S1). This is the single most important structural fact about the service and the easiest to erode: the moment PS3 has a table that is authoritative for something, the chain of record has two homes and §4.2's monotonic-immutable guarantee becomes a convention.
+**Every write is an append to PS2, and PS3's store is a projection** (S1). This is the single most important structural fact about the service and the easiest to erode: the moment PS3 has a table that is authoritative for something, the chain of record has two homes and conceptual §4.2's monotonic-immutable guarantee becomes a convention.
 
 | Where a thing lives | What |
 |---|---|
@@ -121,18 +122,18 @@ Version ── immutable ──▶  no update operation exists
 Accepted ──▶ pinned links freeze to it
 ```
 
-**Why this is not a convenience.** Facets are extracted by an agent and confirmed by a human (S4), and confirmation is a human act on a diff. Without a draft, every extraction pass and every correction is a proposed version, so the chain of record fills with authoring noise and the *"what changed and who accepted it"* question (§4.2) is answered by a hundred rows nobody decided on. **A draft is what keeps versioning meaningful, and its absence in v0.1 was a defect.**
+**Why this is not a convenience.** Facets are extracted by an agent and confirmed by a human (S4), and confirmation is a human act on a diff. Without a draft, every extraction pass and every correction is a proposed version, so the chain of record fills with authoring noise and the *"what changed and who accepted it"* question (conceptual §4.2) is answered by a hundred rows nobody decided on. **A draft is what keeps versioning meaningful, and its absence in v0.1 was a defect.**
 
 **Contributors accumulate on the draft and carry onto the version.** The case-shaping agent and the confirming human are both on the record, which is what S4's provenance needs at the artifact level rather than only per facet.
 
 **Abandoned drafts expire and the expiry is recorded**, on the same argument as S12 for opportunities: silence is not an outcome (P11).
 
-**Versions are monotonic, immutable, supersede-only.** Accepted versions are never edited (§4.2). There is no update operation anywhere in the API.
+**Versions are monotonic, immutable, supersede-only.** Accepted versions are never edited (conceptual §4.2). There is no update operation anywhere in the API.
 
 | State | Means | Set by |
 |---|---|---|
 | `proposed` | Created by any write, from any interface (P13) | PS3 |
-| `accepted` | A gate decided (§4.2) | **PS4 only** |
+| `accepted` | A gate decided (conceptual §4.2) | **PS4 only** |
 | `superseded` | A later version of the same lineage was accepted | PS3, on acceptance |
 | `rejected` | A gate declined | **PS4 only** |
 | `withdrawn` | The proposer retracted before a decision | PS3 |
@@ -173,8 +174,10 @@ business_case:
     declared_outcome:      { source: extracted, by: agt-case-shaper-3, confirmed_by: usr-j-dekker }
     personal_data_in_scope: { source: declared, by: usr-p-visser }
 
-  # body — whatever A turns out to be. Opaque to PS3 except for digest and diff.
-  body_format:   cnl/v0            # controlled natural language, structured model, or hybrid
+  # body — whatever A turns out to be. Opaque to PS3 except for digest, diff, and
+  # the requirement index of §4.2. Prose-only is no longer among A's candidates.
+  body_format:   ears/v0           # the CNL is named (V32); a structured model with an
+                                   # EARS projection remains available, and A stays open
   body_ref:      ps7://business-case/bc-4417@7
   body_digest:   sha256:9f2c…
 ```
@@ -192,16 +195,43 @@ business_case:
 - **Mechanically scrubbable.** §7.2 makes publication an export with a hard scrubbing gate, and §5.2 puts *published specifications contain no tenant-identifying content* in Tier 1. A representation whose tenant-identifying content cannot be found mechanically cannot be published, which removes the marketplace.
 - **Diffable to a non-technical owner.** §19.1 says the property worth preserving is requirement-to-artifact traceability, so a non-technical owner can confirm *was my intent built?* A body diff that only a developer can read is a failure of the representation, not of PS3.
 
+**As of v0.5 the two constraints have done work rather than waited.** `platform-standards.md` §4.4 walks them against the three candidates and finds that **they are jointly satisfiable by exactly one shape**: prose meets the second and fails the first, because tenant-identifying content can be anywhere in it; a bare structured model meets the first and fails the second. **A controlled natural language meets both**, which is why v0.1 listed it first and why nothing until now said which one. §4.2 names it. **This does not close A** — the stored body may still be a structured model with the CNL as its rendered projection, and that remains the better answer if the composition plane wants a tree rather than sentences — but the prose-only option is eliminated, and that is the first thing this document has said about A that narrows it instead of deferring it.
+
+### 4.2 The body is EARS, and a requirement is an object
+
+*New in v0.5, adopting `platform-standards.md` **V32** and **V33**.*
+
+**EARS — Easy Approach to Requirements Syntax — is the notation for the behavioural body**, at that document's §4.1 proportional levels: unparsed lines are permitted and counted at low consequence, forbidden at medium and above. Five patterns and nothing else — ubiquitous, state-driven, event-driven, optional-feature, unwanted-behaviour — with a generic form of *`<precondition>` `<trigger>` the `<system>` shall `<response>`*.
+
+**What this changes for PS3 is smaller than it looks, and that is the argument for it.** The body stays opaque to this service except for digest and diff, exactly as S3 requires; what is added is that PS3 now holds a **requirement index** over it — an ordered set of statement identities with their pattern, and nothing about their meaning. PS3 does not parse, does not evaluate, and does not judge quality. The parse is the composition plane's and the count is PS5's, in the CI conformance job (technical design §3.5).
+
+**A requirement is an addressable object** (V33). It is versioned with the specification containing it, and it is the far end of the trace edge §19.1 has always named and never had:
+
+```
+requirement  req-4417-spec-012 @ bc-4417-spec@3
+  pattern:    event_driven
+  provenance: { source: extracted, by: agt-case-shaper-3, confirmed_by: usr-j-dekker }
+  exercised_by: [ golden-case-88 ]        # arrives with the suite
+  satisfied_by: [ … ]                     # arrives with the composition plane
+```
+
+**Provenance is S4's, unchanged and deliberately so.** A statement is extracted by the case-shaping seat at its O4 ceiling and confirmed by a human on a diff; extraction is not binding so an agent may do it, and only confirmed statements reach a gate, so nothing binding is model-inferred (P3). `reconstructed` (S5) is the value a descriptive specification's statements carry — which is **S-J**, because whether EARS binds a descriptive specification at all is conceptual open **I** reached from this side.
+
+**Two things this buys that v0.4 could not do.** A **requirement diff** — a statement appearing, a trigger changing, a response lost — is a typed change rather than a text hunk, which is a partial answer to **S-C** for the part of the body that is EARS. And a **golden case derives from an event-driven statement** rather than being authored beside it, because the trigger and the response are already in named slots: §19's direction 6 stops being a manual derivation with a monitored coverage gap and becomes the ratio of statements with a case to statements without.
+
+**What EARS does not do, carried here rather than left in the standards document.** It constrains form. A pattern-conformant statement can be unnecessary, wrong, untestable, or a restatement of the one above it, and **a parse pass must never be reported as a quality result** — that is §14.11's laundering, and it is the same failure `assurance_kind` exists upstream to prevent. The non-functional half stays with the facets and ISO 25010: *the system shall be maintainable* is pattern-conformant and worthless. **EARS governs the body; 25010 governs the facets**, which is §4's existing division read one layer down.
+
 ---
 
 ## 5. Diff and lineage
 
-Both are first-class operations, because *what changed and who accepted it* is the primary audit question (§4.2).
+Both are first-class operations, because *what changed and who accepted it* is the primary audit question (conceptual §4.2).
 
 | Operation | Over | Availability |
 |---|---|---|
 | **Facet diff** | Typed, structural | Now, representation-independent |
-| **Body diff** | Pluggable per `body_format`; text differ is the default | Now, improving with A |
+| **Requirement diff** | Typed — a statement added, removed, re-patterned, or with a changed trigger or response | *(New in v0.5, §4.2.)* With the requirement index. **Partial answer to S-C** |
+| **Body diff** | Pluggable per `body_format`; text differ is the default for whatever is not EARS | Now, improving with A |
 | **Link diff** | Added, removed, repointed | Now |
 | **Lineage — backward** | Specification → pinned case → opportunity | Now |
 | **Lineage — forward** | Opportunity → cases → specifications → deployments (PS13) → conformance (PS12) | Forward edges arrive with those services |
@@ -247,9 +277,9 @@ Downstream, expiry is not cosmetic: a conformance assessment resting on an expir
 
 ### 7.1 T-D closes: PS4 is a bounded context inside PS3, not a service (S15)
 
-*New in v0.2.* T26 recorded the split as **a departure from §4.2 that v0.3 of the technical design did not flag as one**, and provisionally resolved T-D *against* it. Three independent supports now agree and none argues the other way:
+*New in v0.2.* T26 recorded the split as **a departure from conceptual §4.2 that v0.3 of the technical design did not flag as one**, and provisionally resolved T-D *against* it. Three independent supports now agree and none argues the other way:
 
-- **§4.2 is authoritative and places the gate inside the specification service** — *"the gate becomes a property of the service rather than of any one client"* — which is the property that makes external agent access over MCP safe. Under the precedence rule the conceptual design wins.
+- **conceptual §4.2 is authoritative and places the gate inside the specification service** — *"the gate becomes a property of the service rather than of any one client"* — which is the property that makes external agent access over MCP safe. Under the precedence rule the conceptual design wins.
 - **T26 already reached that conclusion** and left the split needing to argue its way out. It has not.
 - **`specs-service` holds gates and decisions in the service**, as declared configuration with owners, required evaluations, outcomes and separation-of-duties per gate. The service maestro is adopting made the same call from its own two consumers — maestro v1 and this rebuild (T42).
 
@@ -271,7 +301,7 @@ Downstream, expiry is not cosmetic: a conformance assessment resting on an expir
 
 **What does not fold in is the resolution of ceilings and oversight levels.** Those are read from PS11 and PS1 at decision time (§12.5, I6) and are inputs to the gate, not part of it. W8's rule holds — one resolver, and it is not two.
 
-**The one thing the fold costs, stated rather than discovered:** §4.2's guarantee is now a guarantee about a service maestro does not own the roadmap of. That is the ordinary price of adoption and it is the same price PS1 pays for `identity-service`; the defence is the same too — the record sink means PS2 stays authoritative, so a divergence is detectable rather than silent.
+**The one thing the fold costs, stated rather than discovered:** conceptual §4.2's guarantee is now a guarantee about a service maestro does not own the roadmap of. That is the ordinary price of adoption and it is the same price PS1 pays for `identity-service`; the defence is the same too — the record sink means PS2 stays authoritative, so a divergence is detectable rather than silent.
 
 ---
 
@@ -313,10 +343,11 @@ Per T17: UI, API, MCP — with P13's constraint that every write proposes.
 | 2 | Facet schema and provenance | A business case is created with facets confirmed by a named human, and `extracted` is distinguishable from `declared` and `reconstructed` in a query |
 | 3 | Business case ↔ specification link and the pin | A specification accepted today still reports the case *as it read at acceptance* after the case is superseded twice |
 | 4 | Diff and lineage | An owner is shown what changed between two versions without reading the body format, and reaches the opportunity from the specification in one call |
+| **4a** | **Requirement index and requirement diff** (§4.2) | **A named requirement is addressable across two versions; a changed trigger renders as a typed change and not as a text hunk; the unparsed count is reported per version and is queryable** |
 | 5 | Descriptive class, expiry, intake assessment | A descriptive specification expires on schedule, and every conformance output built on it is visibly downgraded |
 | 6 | Opportunity register, duplicate detection, portfolio projection | A duplicate is surfaced at raise time; an opportunity expires and the expiry is recorded and delivered |
 
-Steps 1–4 are the first wave. Step 5 arrives with PS12 and with the platform onboarding itself (D39) — **the platform's own services are the first descriptive specifications in the system**, so the class is exercised immediately rather than first meeting reality on a client's estate.
+Steps 1–4 are the first wave. **4a is numbered rather than inserted** because it depends on nothing in step 5 and blocks nothing in it: the index is a projection over a body PS3 already stores, and its gate is the one place the EARS adoption becomes visible rather than asserted. Step 5 arrives with PS12 and with the platform onboarding itself (D39) — **the platform's own services are the first descriptive specifications in the system**, so the class is exercised immediately rather than first meeting reality on a client's estate.
 
 ---
 
@@ -325,6 +356,7 @@ Steps 1–4 are the first wave. Step 5 arrives with PS12 and with the platform o
 | Failure | Detection | Response |
 |---|---|---|
 | **Facet–body drift** | Confirmation shows both diffs side by side; periodic sampled review above O2 | A facet change is a new version. Unconfirmed extraction never reaches a gate |
+| **A parse pass read as a quality result** | Nothing detects it in the artifact; it is a reporting defect (§4.2) | The unparsed count is published as a count and never as a verdict, and the claim is graded as *syntax* on the standards ladder. §14.11's laundering, in the one place this service could commit it |
 | Pin repointed | Immutability enforced at append; PS2's chain makes a rewrite detectable | Hard failure — the audit chain is the product |
 | A body format that cannot be scrubbed | Publication gate | Blocks publication, not authoring. §4.1 says decide it in A rather than discover it in Phase 5 |
 | Descriptive specification silently rots | `verified_at` age vs interval | `expired`, and every dependent claim downgraded (§6.3) |
@@ -337,7 +369,7 @@ Steps 1–4 are the first wave. Step 5 arrives with PS12 and with the platform o
 
 | # | Decision | Rationale |
 |---|---|---|
-| S1 | **PS3 holds no system of record; every write appends to PS2 and PS3's store is a rebuildable projection** | Two homes for the chain of record makes §4.2's monotonic-immutable guarantee a convention. Rebuild is a build gate, not an aspiration |
+| S1 | **PS3 holds no system of record; every write appends to PS2 and PS3's store is a rebuildable projection** | Two homes for the chain of record makes conceptual §4.2's monotonic-immutable guarantee a convention. Rebuild is a build gate, not an aspiration |
 | S2 | **PS3 exposes no state-mutation API; only PS4 accepts, rejects, or expires a version** | P13 is a property only if acceptance exists in one place. With PS3 and PS4 in one deployable (T26) the boundary must be enforced at the module interface |
 | S3 | **Envelope, facets, and body are three layers; only the body is open question A** | Lets PS5 be built and demonstrated against a stable typed schema while the representation stays undecided, and lets the body format change without invalidating a record |
 | S4 | **Facets are extracted by an agent, confirmed by a human, and carry provenance; only confirmed facets are evaluated** | Extraction is not binding so an agent may do it (§3.3's O4 ceiling); sufficiency evaluation is, so nothing binding is model-inferred (P3) |
@@ -351,9 +383,11 @@ Steps 1–4 are the first wave. Step 5 arrives with PS12 and with the platform o
 | S12 | **Opportunities expire by default, and expiry is a recorded outcome** | §6 calls a stale register a defect, and P11 applies to neglect as much as to refusal |
 | S13 | **A mutable draft is a distinct entity from an immutable version; nothing may cite a draft** | *(v0.2, adopting `specs-service` ADR-0003.)* Facets are extracted by an agent and confirmed by a human on a diff (S4). Without a draft each pass is a proposed version, and §4.2's *what changed and who accepted it* is answered by rows nobody decided on. Contributors accumulate on the draft and carry onto the version |
 | S14 | **A version carries a classification validated at `propose`, with the vocabulary from PS11; erasure is redaction in place, not relocation of the body** | *(v0.2.)* T25's *goal* is that GDPR erasure never meets PS2's append-only substrate, and `specs-service`'s redaction achieves it — the digest deliberately mismatches and the event explains why. What T25 also needs and redaction does not supply is the classification: §2.4 calls an unclassified write *unclassifiable*, and a business case names people by construction (§5.1) |
-| S15 | **PS4 is a bounded context inside PS3, not a separate service. T-D closes against the split** | §4.2 places the gate inside the specification service and is authoritative; T26 already resolved provisionally the same way; and `specs-service` holds gates in the service, declared as configuration. Three supports, none against |
+| S15 | **PS4 is a bounded context inside PS3, not a separate service. T-D closes against the split** | conceptual §4.2 places the gate inside the specification service and is authoritative; T26 already resolved provisionally the same way; and `specs-service` holds gates in the service, declared as configuration. Three supports, none against |
 | S16 | **Artifact types, links, gates, lifecycles and attribution profiles are workspace configuration, not code** | *(v0.2, adopting ADR-0001.)* §16's rule — core carries zero domain knowledge — is satisfied structurally rather than by discipline, and a fifth artifact class costs a definition rather than a release |
 | S17 | **The tenant pack binding is a fifth artifact type, declared in configuration** | It is versioned, gated, diffable, lineage-bearing, and hands over at exit, which is this service's shape exactly — and S16 makes it a definition change. **Closes C-A** in `uc1-nl-construction.md`, where T29 had already ruled PS11 out for holding tenant runtime data |
+| S18 | **The behavioural body is written in EARS at the proportional levels of `platform-standards.md` §4.1; PS3 holds a requirement index over it and neither parses nor evaluates** | *(v0.5, adopting **V32**.)* §4.1's two constraints on A are jointly satisfied by exactly one shape and a CNL is it — prose fails scrubbability, a bare structured model fails the non-technical diff. Naming the CNL narrows A without closing it, and it stays consistent with **S3**: the parse belongs to the composition plane and the count to PS5, so the body remains opaque to this service |
+| S19 | **A requirement is an addressable object, versioned with its specification, and it is the unit every trace edge lands on** | *(v0.5, adopting **V33**.)* §19.1 has named requirement-to-artifact traceability as the property worth preserving since v0.3 while the body was *opaque except for digest and diff* — an edge from a versioned artifact to a blob. **S18 without this buys readability and no traceability**, and it is what makes a golden case derivable from a statement rather than authored beside it (§19 direction 6) |
 
 ---
 
@@ -370,9 +404,14 @@ Steps 1–4 are the first wave. Step 5 arrives with PS12 and with the platform o
 - **S-F.** **Whether a facet schema versions within a type or forces a new type** (gap **P3**). `specs-service` architecture §4 makes breaking facet changes create a new *type*; S-A versions the schema in PS11 and sufficiency standards demonstrably evolve. A new type is a new lineage, so every link and every pin to the old one breaks. **This blocks S-A** and it is that service's own open **C**.
 - **S-G.** **Whether a `via: system` lifecycle transition exists** (gap **P2**). S9 needs PS12 to set `expired`, and declared transitions are `propose` or a gate decision. Their open **E** asks it from the other side.
 - **S-H.** **Where the maestro↔`specs-service` identifier mapping lives** (gap **P5**) — PS1's principal registry as a second binding kind, or the `workspaceFor(tenant)` adapter. T30's argument applies unchanged and the answer should be the same shape.
-- **S-I.** **Whether the pack binding's acceptances are facets or a body** (S17). Per-standard and per-project acceptances are a repeating structure, and facets are what a gate reads (ADR-0004) — so they must be facets, which makes the facet schema unusually large. If that is a problem, it is a problem with facets rather than with the binding.
+- **S-I.** **Whether the pack binding's acceptances are facets or a body** (S17). Per-standard and per-project acceptances are a repeating structure, and facets are what a gate reads (ADR-0004) — so they must be facets, which makes the facet schema unusually large. If that is a problem, it is a problem with facets rather than with the binding. **v0.5 makes this the second instance rather than a one-off**, because an EARS clause set is the same shape and much larger — see S-K.
 
-*Inherited and blocking:* conceptual **A** (representation — §4 makes it deferrable, not answered), conceptual **B** (business case format — S-A), conceptual **O** (the user interface — §9 answers the first wave only). ***Closed in v0.2:*** **T-D** — PS4 is a bounded context, not a service (S15).
+*Opened in v0.5 by the EARS adoption (§4.2):*
+
+- **S-J.** **Whether EARS binds a descriptive specification, or only a generative one.** A descriptive specification is a claim *about* code that already runs, so its statements are reverse-engineered and carry `reconstructed` provenance (S5) — usable, and not the same assurance as a confirmed intent. This is **conceptual open question I** — *does a descriptive specification share the representation of a generative one* — reached from the notation side, and the two answers should be one answer. It also decides whether §6.3's expiry downgrades a *statement* or only the artifact containing it.
+- **S-K.** **Whether the requirement index is facets or body.** A clause set is a repeating typed structure and facets are what a gate reads, which argues facets — and would make the facet schema very large indeed. **S-I asks this about a smaller artifact and the recurrence is the finding**: the question is not really about either artifact but about whether *facets* means *what PS5 evaluates* or *what is small*. Answer it once for both, and note that S-B — whether facets live inline in PS2 or as a PS7 payload — inherits whatever the answer is, on a much larger volume than it was scoped against.
+
+*Inherited and blocking:* conceptual **A** (representation — §4 makes it deferrable, and §4.1 now **narrows** it for the first time without answering it), conceptual **B** (business case format — S-A), conceptual **I** (descriptive versus generative representation — S-J is it from the notation side), conceptual **O** (the user interface — §9 answers the first wave only). ***Closed in v0.2:*** **T-D** — PS4 is a bounded context, not a service (S15).
 
 ---
 
@@ -380,6 +419,7 @@ Steps 1–4 are the first wave. Step 5 arrives with PS12 and with the platform o
 
 | Version | Date | Change |
 |---|---|---|
+| 0.5 | 2026-08-08 | **§4.2 added — the body gets a notation, and it is the first constraint any version of this document has placed on open question A** (**S18**, **S19**, adopting `platform-standards.md` **V32** and **V33**). §4.1 has stated two constraints on A since v0.1 — *mechanically scrubbable* and *diffable to a non-technical owner* — and v0.5 walks them against the three candidates rather than restating them: **prose fails the first, a bare structured model fails the second, and a controlled natural language is the only shape satisfying both.** v0.1 listed a CNL first and named none; **EARS is the CNL**, and `body_format` moves from `cnl/v0` to `ears/v0`. **A is narrowed, not closed** — a structured model with an EARS projection remains available and is still the better answer if the composition plane wants a tree. **S3 survives intact and that was the test**: PS3 holds a *requirement index* — statement identity and pattern, nothing about meaning — while the parse belongs to the composition plane and the count to PS5 in the CI conformance job (technical §3.5), so the body stays opaque to this service exactly as before. **S19 is the half without which the adoption is decorative**: §19.1 has named requirement-to-artifact traceability as the property worth preserving since v0.3 while the body was *opaque except for digest and diff* — an edge running from a versioned artifact to a blob — so a requirement becomes an **addressable object** versioned with its specification. **Two capabilities follow that v0.4 could not offer.** A **requirement diff** joins §5 as a typed operation, which is a partial answer to **S-C** for whatever part of the body is EARS. And a golden case is **derived** from an event-driven statement rather than authored beside it, because trigger and response are already in named slots — turning §19's direction 6 from a manual derivation with a monitored coverage gap into a queryable ratio, and giving §14.4's N4 flip its first definition of a *complete* suite. §11 gains a failure mode with no detector — **a parse pass reported as a quality result**, which is §14.11's laundering in the one place this service could commit it — and §10 gains step **4a**. **S-J and S-K opened**, both of which are existing questions arriving from a new side: S-J is conceptual **I**, and S-K is **S-I** on a much bigger artifact, which makes the recurrence the finding rather than the question. Companion versions updated, and `platform-standards.md` added to them — the first standards document to bind this service's *own* artifact rather than the applications it describes. **One consequence of the new section number was not optional**: the conceptual design's §4.2 is the specification plane and this document cited it bare **twelve** times, so all twelve now name it explicitly and the header carries the rule — the collision `platform-standards.md` v0.4 fixed for its own §7.3, on the section this document leans on hardest |
 | 0.4 | 2026-08-06 | **Naming fixed, and the defect was three names for one thing inside one header block.** The `Repo:` line said `mstr-specs`, the `Realised as:` line two rows below said `../specs-service`, and only the first resolves on disk — so this document has been pointing at a path that does not exist since v0.2, in the line whose entire job is to say where the thing is. Settled: **`specs-service` is the service, `mstr-specs` is the repository**, body references use whichever they mean, and the `Repo:` line is dropped rather than corrected because `Realised as:` now carries both. **T53 recorded**: this is one of the two repositories placed *outside* the maestro monorepo, on the ground that the platform consumes rather than builds it — which is the same fact §1.2's adoption argument already rests on, now stated as a rule rather than as a circumstance. Companion versions corrected to conceptual v1.0, technical v1.1 and PS2 v0.3. No gap, ADR assessment, decision, or open item changed |
 | 0.2 | 2026-08-05 | **`specs-service` assessed and adopted as PS3's realisation** (§1.2), on the PS1 precedent. Its model was derived from maestro v1 *and* this rebuild, so the generic core is their overlap rather than a single-consumer extraction *(qualified at v0.3 by T42 upstream: two iterations of one product, and PS7 §1.3's split-out trigger stays open)*, and eight of its concepts match this design point for point — facets with the same three provenance values, the pin, the record sink as S1's projection rule, the evaluator port as PS5's pure-evaluator posture, `exclude_creator` as D36, and database-per-workspace as T28's fail-closed argument. **Two additions taken from it.** A **mutable draft distinct from an immutable version** (S13, ADR-0003) — v0.1 had versions only, which would have made every extraction pass a proposed version and filled the chain of record with authoring noise; §3 rewritten. And **types, links, gates, lifecycles and attribution profiles as workspace configuration** (S16, ADR-0001), which satisfies §16 structurally rather than by discipline. **T-D closed against the split** (S15, §7.1): §4.2 places the gate inside the specification service and is authoritative, T26 already resolved provisionally the same way, and `specs-service` holds gates in the service — three supports, none against, so PS4 becomes a bounded context and the cost of adopting someone else's roadmap is stated. **The pack binding lands here as a fifth artifact type** (S17), closing **C-A** in the construction model, where T29 had already excluded PS11 for holding tenant runtime data. §1.3 records six gaps, of which **P1 is the sharpest**: ADR-0007 stores bodies inline with **no classification concept at all**, while T25 routes them to PS7 — resolved not by relocating the body, since redaction already satisfies T25's actual goal, but by **classification at `propose`** with PS11's vocabulary (S14). S-F to S-I opened, two of which are that service's own open questions reached from maestro's side |
 | 0.1 | 2026-08-03 | Initial design. PS3 established as a projection over PS2 with no system of record (S1) and no state-mutation surface (S2). **Three-layer artifact — envelope, facets, body — as the mechanism that lets open question A stay open** (S3), with facets extracted by agent and confirmed by human (S4) and `reconstructed` as a first-class provenance value (S5). Business-case pin frozen at acceptance (S6). Descriptive and generative modelled as distinct types with the N4 flip as a new artifact (S7–S8); `expired` as a real state (S9). Intake assessment added as a fourth artifact class (S10), unmodelled through technical design v0.4. Facet-level duplicate detection (S11) and default opportunity expiry (S12). Two constraints on A stated: mechanically scrubbable, and diffable to a non-technical owner. First-wave UI scoped as a partial answer to conceptual open question O. S-A to S-E opened |

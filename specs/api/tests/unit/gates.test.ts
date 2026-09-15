@@ -9,6 +9,7 @@ const gate: GateDeclaration = {
   decides_on: 'business_case',
   owner: { resolver: 'role', role: 'sponsor' },
   outcomes: ['approve', 'request_changes', 'decline'],
+  outcome_labels: {},
   reopens_on: 'request_changes',
   blocking: true,
   requires: { confirmed_facets: true, evaluations: ['sufficiency_v2'], catalogue_acceptances: false },
@@ -173,6 +174,7 @@ const profile: AttributionProfile = {
     acting: { must_resolve_to: 'principal' },
   },
   optional: ['seat', 'oversight_level'],
+  field_labels: {},
 };
 
 const directory = new Map([

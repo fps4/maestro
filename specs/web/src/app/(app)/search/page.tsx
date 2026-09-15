@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { search } from '@/lib/api';
+import { fetchLabels, search } from '@/lib/api';
+import { stateLabel, typeLabel } from '@/lib/labels';
 import { Chip, Empty, Mono, Notice, PageTitle, Sealed, relativeDate } from '@/components/atoms';
 
 export const dynamic = 'force-dynamic';
@@ -13,7 +14,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
   const { q } = await searchParams;
-  const results = q ? await search(q).catch(() => []) : [];
+  const [results, labels] = await Promise.all([q ? search(q).catch(() => []) : [], fetchLabels()]);
 
   return (
     <>
@@ -67,8 +68,8 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                   >
                     {version.artifact}@{version.ordinal}
                   </Link>
-                  <Chip state={version.state}>{version.state}</Chip>
-                  <span className="text-2xs text-faint">{version.type.replace(/_/g, ' ')}</span>
+                  <Chip state={version.state}>{stateLabel(version.state)}</Chip>
+                  <span className="text-2xs text-faint">{typeLabel(labels, version.type)}</span>
                 </div>
                 <b className="text-sm">{version.title}</b>
               </div>

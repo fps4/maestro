@@ -33,8 +33,9 @@ Two planes: a **Docs** plane you read, and a **Delivery** plane you track.
 | [0009](design/decisions/0009-external-and-platform-standards-are-distinct-types.md) | External and platform standards are distinct types, not one type with a flag |
 | [0010](design/decisions/0010-effective-dating-and-acceptance-lapse.md) | Versions may be effective-dated, and a *material* change lapses an acceptance |
 | [0011](design/decisions/0011-password-grant-first-pkce-later.md) | The console ships with the password grant; PKCE is the follow-up |
+| [0012](design/decisions/0012-labels-not-identifiers.md) | Every identifier a workspace declares has a label, and no surface shows the identifier |
 
-All eleven are `status: proposed`. The first build exists, but nothing has run against real content
+All twelve are `status: proposed`. The first build exists, but nothing has run against real content
 yet, so they remain a design under review rather than a record of commitments made.
 
 ## Conventions

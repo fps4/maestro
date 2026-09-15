@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { fetchStandards } from '@/lib/api';
+import { humanise } from '@/lib/labels';
 import { Card, Chip, Empty, Eyebrow, Mono, Notice, PageTitle, Scroller, Td, Th } from '@/components/atoms';
 
 export const dynamic = 'force-dynamic';
@@ -117,13 +118,13 @@ function Section({
                           : 'expired'
                     }
                   >
-                    {standard.force.replace(/_/g, ' ')}
+                    {humanise(standard.force)}
                   </Chip>
                 </Td>
                 <Td className="text-2xs text-faint">
                   {standard.authority === 'ours'
                     ? 'full text'
-                    : (standard.licence_disposition ?? 'disposition not recorded').replace(/_/g, ' ')}
+                    : humanise(standard.licence_disposition ?? 'disposition not recorded')}
                 </Td>
               </tr>
             ))}

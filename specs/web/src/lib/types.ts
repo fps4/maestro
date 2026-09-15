@@ -126,6 +126,10 @@ export interface Requirement {
 
 export interface GateView {
   gate: string;
+  title: string;
+  description?: string;
+  decides_on: string;
+  type_title: string;
   artifact: string;
   ordinal: number;
   requirements: Requirement[];
@@ -133,7 +137,13 @@ export interface GateView {
   may_decide: boolean;
   may_decide_reason: string;
   outcomes: string[];
-  attribution_profile: { id: string; required: string[]; optional: string[] };
+  outcome_labels: Record<string, string>;
+  attribution_profile: {
+    id: string;
+    required: string[];
+    optional: string[];
+    field_labels: Record<string, string>;
+  };
 }
 
 export interface FacetChange {
@@ -221,21 +231,25 @@ export interface Acceptance {
 
 export interface TypeDeclaration {
   id: string;
+  title?: string;
+  description?: string;
   facet_schema: string;
   body_format: string;
   effective_dating: boolean;
   classification_required: boolean;
   catalogue_refs: boolean;
   draft_expiry?: string;
-  links: Array<{ id: string; to: string; pinned: boolean }>;
+  links: Array<{ id: string; to: string; pinned: boolean; label?: string }>;
 }
 
 export interface GateDeclaration {
   id: string;
   title?: string;
+  description?: string;
   decides_on: string;
   owner: Record<string, string>;
   outcomes: string[];
+  outcome_labels: Record<string, string>;
   reopens_on?: string;
   requires: { confirmed_facets: boolean; evaluations: string[]; catalogue_acceptances: boolean };
   separation_of_duties?: string;
@@ -250,10 +264,28 @@ export interface WorkspaceDefinition {
   title?: string;
   types: TypeDeclaration[];
   gates: GateDeclaration[];
-  attribution_profiles: Array<{ id: string; required: string[]; optional: string[] }>;
+  attribution_profiles: Array<{
+    id: string;
+    required: string[];
+    optional: string[];
+    field_labels: Record<string, string>;
+  }>;
   lifecycle: {
     phases: string[];
+    phase_labels: Record<string, string>;
     transitions: Array<{ from: string; to: string; via?: string; via_gate?: string; on?: string }>;
   };
   evaluators: Array<{ id: string; endpoint: string }>;
+}
+
+/**
+ * Every identifier the definition declares, as the word a reader sees for it. Computed by the api
+ * from the definition, with the humanised id wherever the definition gave no label.
+ */
+export interface Labels {
+  types: Record<string, { title: string; description?: string }>;
+  gates: Record<string, { title: string; description?: string; outcomes: Record<string, string> }>;
+  phases: Record<string, string>;
+  links: Record<string, string>;
+  attribution: Record<string, string>;
 }

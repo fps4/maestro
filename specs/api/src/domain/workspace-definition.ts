@@ -57,6 +57,8 @@ const linkDeclaration = z.object({
    * acceptance and freezes; everything else points at a lineage and follows it.
    */
   pinned: z.boolean().default(false),
+  /** What a reader sees for this edge — "Justified by", not `justified_by`. */
+  label: z.string().optional(),
   description: z.string().optional(),
 });
 
@@ -68,6 +70,8 @@ const attachmentPolicy = z.object({
 const typeDeclaration = z.object({
   id: identifier,
   title: z.string().optional(),
+  /** One plain-language line: what an artifact of this type is *for*. Shown wherever the type is named. */
+  description: z.string().optional(),
   facet_schema: z.string(),
   body_format: z.enum(['markdown/v1', 'text/v1']).default('markdown/v1'),
   attachments: attachmentPolicy.optional(),
@@ -102,9 +106,17 @@ export type OwnerResolver = z.infer<typeof ownerResolver>;
 const gateDeclaration = z.object({
   id: identifier,
   title: z.string().optional(),
+  /** One plain-language line: what a decider at this gate is being asked. */
+  description: z.string().optional(),
   decides_on: identifier,
   owner: ownerResolver,
   outcomes: z.array(identifier).min(1),
+  /**
+   * What each outcome is called on the button a person presses. The outcome id is what the record
+   * carries; the label is what the person read. `request_changes` and "Ask for changes" are the same
+   * outcome, and only one of them belongs on a screen.
+   */
+  outcome_labels: z.record(z.string()).default({}),
   /** Which outcome, if any, reopens a draft carrying the reviewer's reasoning. */
   reopens_on: identifier.optional(),
   blocking: z.boolean().default(true),
@@ -150,6 +162,8 @@ export type Transition = z.infer<typeof transition>;
 
 const lifecycle = z.object({
   phases: z.array(identifier).min(1),
+  /** What each phase is called to a reader — "Exploring", not `explore`. */
+  phase_labels: z.record(z.string()).default({}),
   initial: identifier.optional(),
   transitions: z.array(transition),
 });
@@ -164,6 +178,8 @@ const attributionProfile = z.object({
   required: z.array(identifier).min(1),
   rules: z.record(attributionRule).default({}),
   optional: z.array(identifier).default([]),
+  /** What each attribution field is called on a form — "Oversight level", not `oversight_level`. */
+  field_labels: z.record(z.string()).default({}),
 });
 
 export type AttributionProfile = z.infer<typeof attributionProfile>;
@@ -260,7 +276,18 @@ export const workspaceDefinitionSchema = z
           fail(['gates', i, 'requires', 'evaluations', j], `undeclared evaluator \`${ev}\``);
         }
       });
+      // A label for an outcome the gate cannot produce is a typo, and a typo here means a button
+      // that says "Approve" over an outcome called `aprove` — caught at apply, not at the gate.
+      for (const outcome of Object.keys(gate.outcome_labels)) {
+        if (!gate.outcomes.includes(outcome)) {
+          fail(['gates', i, 'outcome_labels', outcome], `\`${outcome}\` is not one of this gate's outcomes`);
+        }
+      }
     });
+
+    for (const phase of Object.keys(def.lifecycle.phase_labels)) {
+      if (!phaseIds.has(phase)) fail(['lifecycle', 'phase_labels', phase], `undeclared phase \`${phase}\``);
+    }
 
     def.lifecycle.transitions.forEach((t, i) => {
       if (!phaseIds.has(t.from))
@@ -287,6 +314,15 @@ export const workspaceDefinitionSchema = z
     // Every attribution profile must name a human somewhere. A profile where an agent could occupy
     // every required field is a profile under which nobody is answerable (ADR-0005).
     def.attribution_profiles.forEach((profile, i) => {
+      const fields = new Set([...profile.required, ...profile.optional]);
+      for (const field of Object.keys(profile.field_labels)) {
+        if (!fields.has(field)) {
+          fail(
+            ['attribution_profiles', i, 'field_labels', field],
+            `\`${field}\` is not a field of this profile`,
+          );
+        }
+      }
       const namesAHuman = profile.required.some((field) => profile.rules[field]?.kind === 'human');
       if (!namesAHuman) {
         fail(

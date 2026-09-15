@@ -26,6 +26,7 @@ import { freezePins } from '../domain/links.js';
 import { phaseAfterGate } from '../domain/lifecycle.js';
 import { nextState } from '../domain/versioning.js';
 import { gateIn, profileIn, typeIn } from '../domain/workspace-definition.js';
+import { labelsFor } from '../domain/labels.js';
 import type {
   Artifact,
   Attribution,
@@ -41,6 +42,11 @@ import type { LoadedWorkspace } from './workspaces.js';
 
 export interface GateView {
   gate: string;
+  /** What the gate is called to a reader, and what it asks — from the definition, never an id. */
+  title: string;
+  description?: string;
+  decides_on: string;
+  type_title: string;
   artifact: string;
   ordinal: number;
   requirements: Requirement[];
@@ -48,7 +54,14 @@ export interface GateView {
   may_decide: boolean;
   may_decide_reason: string;
   outcomes: string[];
-  attribution_profile: { id: string; required: string[]; optional: string[] };
+  /** Outcome id → the word on the button. The record carries the id; the person read the label. */
+  outcome_labels: Record<string, string>;
+  attribution_profile: {
+    id: string;
+    required: string[];
+    optional: string[];
+    field_labels: Record<string, string>;
+  };
 }
 
 export interface DecideInput {
@@ -144,9 +157,15 @@ export class DecisionService {
     });
 
     const profile = profileIn(this.workspace.definition, gate.attribution_profile)!;
+    const labels = labelsFor(this.workspace.definition);
+    const gateLabel = labels.gates[gate.id]!;
 
     return {
       gate: gate.id,
+      title: gateLabel.title,
+      ...(gateLabel.description ? { description: gateLabel.description } : {}),
+      decides_on: gate.decides_on,
+      type_title: labels.types[gate.decides_on]?.title ?? gate.decides_on,
       artifact: artifactId,
       ordinal,
       requirements,
@@ -154,7 +173,15 @@ export class DecisionService {
       may_decide: verdict.allowed,
       may_decide_reason: verdict.reason,
       outcomes: gate.outcomes,
-      attribution_profile: { id: profile.id, required: profile.required, optional: profile.optional },
+      outcome_labels: gateLabel.outcomes,
+      attribution_profile: {
+        id: profile.id,
+        required: profile.required,
+        optional: profile.optional,
+        field_labels: Object.fromEntries(
+          [...profile.required, ...profile.optional].map((f) => [f, labels.attribution[f] ?? f]),
+        ),
+      },
     };
   }
 

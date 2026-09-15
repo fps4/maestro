@@ -15,7 +15,7 @@ related:
 
 # specs-service — architecture
 
-**Status:** Draft v0.4
+**Status:** Draft v0.5
 **Scope:** The whole product. Model, authoring, rendering, configuration, ports, isolation,
 interfaces, storage, build order.
 **Shape:** A full end-to-end service with its own domain, its own console, and SSO through
@@ -316,6 +316,12 @@ attribution_profiles: [ … ]
 *type*, not a new version of one — history cannot be migrated, so it must stay readable under the
 schema it was written against.
 
+**Every identifier is declared once and labelled beside it** (D14, ADR-0012). `title` and `description`
+on types and gates, `outcome_labels` on a gate, `phase_labels` on the lifecycle, `label` on a link,
+`field_labels` on an attribution profile. The record carries the identifier; the console shows the
+label; the api returns the complete set with a humanised fallback so no screen is ever forced back
+to `request_changes`.
+
 ---
 
 ## 5. Ports — why this runs alone
@@ -529,6 +535,7 @@ a gated artifact are out of scope, and a proposal to relax that is a strategy ch
 | D11 | The catalogue is a workspace, reached read-only; a tenant carries a reference, never a link | [ADR-0008](decisions/0008-the-catalogue-is-a-workspace.md) |
 | D12 | External and platform standards are distinct types; licence disposition is a required facet | [ADR-0009](decisions/0009-external-and-platform-standards-are-distinct-types.md) |
 | D13 | Versions may be effective-dated; only a *material* change lapses an acceptance | [ADR-0010](decisions/0010-effective-dating-and-acceptance-lapse.md) |
+| D14 | Every identifier a workspace declares has a label, and no surface shows the identifier | [ADR-0012](decisions/0012-labels-not-identifiers.md) |
 
 ---
 
@@ -573,6 +580,7 @@ Steps 1–7 are the product. Everything after makes it complete.
 
 | Version | Date | Change |
 |---|---|---|
+| 0.5 | 2026-09-15 | **Labels beside identifiers** (D14, ADR-0012). The definition gains `description` on types and gates, `outcome_labels`, `phase_labels`, link `label` and attribution `field_labels`; the api returns the complete label set with a humanised fallback; the console renders labels and never an identifier a workspace could have named. The record is untouched. This is the first of the changes that turn the console from an auditor's surface into one a sponsor can use — the decision page and the decider's packet build on the descriptions this adds |
 | 0.4 | 2026-09-15 | **Consumer vocabulary aligned with the platform it serves.** The repository is now `maestro-specs` (was `mstr-specs`), and the two consumers are named as the platform names them: *maestro* is the governed application platform (`../maestro`, conceptual D44) and *maestro v1* its retired first iteration, the agentic delivery platform. Until now this repository called the first *adel* and the second *maestro* — so after the rename it used its own name for the wrong product. Swapped throughout the docs, ADRs 0001/0004/0005/0006, the glossary and the example workspace; the example workspace id is `maestro-v1-core`. Console wordmark, page title, MCP `serverInfo.name` and the npm package names follow the repository. **The deployed identifiers do not** — compose project, container names, `AUTH_AUDIENCE`, the identity client ids and the bucket still read `mstr-specs`, because changing them is a coordinated deploy with an `identity-service` seed on the other side. README Quick Start rewritten against the tree that exists (`make up`, ports 8020/8021, `AUTH_MODE`). No model, port, or decision changed |
 | 0.3 | 2026-08-06 | **First build.** Steps 1–9 of §12 implemented, plus MCP. Three additions the build made necessary, each with an ADR: the **catalogue as a workspace reached through a read-only handle** (D11, ADR-0008), which resolves the tension between a pack being shared across tenants and §6 saying nothing crosses a workspace; **external and platform standards as distinct types** (D12, ADR-0009), because ISO's licence forbids holding the text while the Bbl's does not, and "is this the obligation or our reading of it" must not be a settable flag; and **effective dating with acceptance lapse on a material change** (D13, ADR-0010), which is the one real addition to the version model — accepted and *in force* are different questions. The console ships with the password grant rather than PKCE, and §7.1's transparent-SSO property therefore does not hold yet (ADR-0011). §9 rewritten to match what was built; §11 gains D11–D13 |
 | 0.2 | 2026-08-04 | **Authoring and rendering brought in scope** — the service is a full product with its own domain, console and SSO, not a headless registry. Drafts added as a mutable entity distinct from immutable versions (D3), which is what lets editing and an audit record coexist. Bodies are now authored, rendered, diffed and searched — but still never evaluated (D4), the one property preserved from v0.1. MCP gains draft writes and propose, keeping only the decision surface closed (D5). **Storage moved to MongoDB with bodies inline** and attachments content-addressed in object storage (D7); isolation reworked to database-per-workspace with the fail-closed argument (D6); redaction recorded as the single permitted mutation (D10). §3 authoring, §7 identity and SSO, and §8.4 on what MongoDB does not give us added. The wiki risk named explicitly in §10 |

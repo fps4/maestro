@@ -19,6 +19,8 @@ types:
   # satisfying it, how to satisfy it cheaply. That is the part an agent needs and a citation cannot
   # give.
   - id: platform_standard
+    title: Platform standard
+    description: A standard we hold. The text is the obligation and carries the know-how.
     facet_schema: ./schemas/platform-standard.json
     body_format: markdown/v1
     effective_dating: true
@@ -29,22 +31,26 @@ types:
   # what we are permitted to hold. ISO forbids redistribution; the Dutch Bbl and NIST SP 800-53 do
   # not. The field is a human's determination, recorded — this service cannot adjudicate a licence.
   - id: external_standard
+    title: External standard
+    description: Our summary and reading of a standard someone else owns. Never the obligation itself.
     facet_schema: ./schemas/external-standard.json
     body_format: markdown/v1
     effective_dating: true
     classification_required: false
     links:
-      - { id: interprets, to: external_standard }
+      - { id: interprets, to: external_standard, label: Interprets }
 
   # Prompts and elicitation patterns. Versioned and gated here for the same reason standards are:
   # a prompt carrying domain knowledge is governed content that happens to be prose.
   - id: construct
+    title: Construct
+    description: A prompt or elicitation pattern that carries domain knowledge, versioned like a standard.
     facet_schema: ./schemas/construct.json
     body_format: markdown/v1
     effective_dating: false
     classification_required: false
     links:
-      - { id: supports, to: platform_standard }
+      - { id: supports, to: platform_standard, label: Supports }
 
 attribution_profiles:
   - id: default
@@ -53,6 +59,11 @@ attribution_profiles:
       accountable: { must_resolve_to: principal, kind: human }
       acting: { must_resolve_to: principal }
     optional: [seat, oversight_level]
+    field_labels:
+      accountable: Answerable for this decision
+      acting: Who recorded it
+      seat: Seat
+      oversight_level: Oversight level
 
 gates:
   # The publication gate classifies its own change as material or immaterial, and a material one
@@ -60,10 +71,12 @@ gates:
   # fact that something changed would lapse acceptances on a corrected typo, which is why it is a
   # decision a person records rather than a diff the service reads.
   - id: publication
+    description: Does this standard say what we hold everyone to, and is this change material?
     title: Publish a standard
     decides_on: platform_standard
     owner: { resolver: role, role: standards_owner }
     outcomes: [publish, request_changes, withdraw]
+    outcome_labels: { publish: Publish, request_changes: Ask for changes, withdraw: Withdraw }
     reopens_on: request_changes
     blocking: true
     requires:
@@ -73,10 +86,12 @@ gates:
     records_materiality: true
 
   - id: external_publication
+    description: Is this an honest summary of the external standard, and is the change material?
     title: Publish an external standard summary
     decides_on: external_standard
     owner: { resolver: role, role: standards_owner }
     outcomes: [publish, request_changes, withdraw]
+    outcome_labels: { publish: Publish, request_changes: Ask for changes, withdraw: Withdraw }
     reopens_on: request_changes
     blocking: true
     requires:
@@ -86,10 +101,12 @@ gates:
     records_materiality: true
 
   - id: construct_publication
+    description: Is this construct fit to be used?
     title: Publish a construct
     decides_on: construct
     owner: { resolver: role, role: standards_owner }
     outcomes: [publish, request_changes, withdraw]
+    outcome_labels: { publish: Publish, request_changes: Ask for changes, withdraw: Withdraw }
     reopens_on: request_changes
     blocking: true
     requires:
@@ -102,6 +119,12 @@ gates:
 
 lifecycle:
   phases: [drafting, in_review, published, superseded, withdrawn]
+  phase_labels:
+    drafting: Drafting
+    in_review: In review
+    published: Published
+    superseded: Superseded
+    withdrawn: Withdrawn
   initial: drafting
   transitions:
     - { from: drafting, to: in_review, via: propose }

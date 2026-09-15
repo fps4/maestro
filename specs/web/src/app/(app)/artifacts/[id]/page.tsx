@@ -2,6 +2,15 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { fetchAcceptances, fetchArtifact, fetchDefinition, fetchDrafts } from '@/lib/api';
 import {
+  NO_LABELS,
+  gateLabel,
+  linkLabel,
+  outcomeLabel,
+  phaseLabel,
+  stateLabel,
+  typeLabel,
+} from '@/lib/labels';
+import {
   Button,
   Card,
   Chip,
@@ -16,7 +25,7 @@ import {
   relativeDate,
   shortDigest,
 } from '@/components/atoms';
-import type { Acceptance, Version } from '@/lib/types';
+import type { Acceptance, Labels, Version } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -45,6 +54,7 @@ export default async function ArtifactPage({ params }: { params: Promise<{ id: s
     fetchDefinition().catch(() => null),
   ]);
 
+  const labels = definition?.labels ?? NO_LABELS;
   const openDraft = drafts.find((d) => d.artifact === artifact.id);
   const latest = versions[0];
   const accepted = versions.find((v) => v.state === 'accepted');
@@ -57,13 +67,13 @@ export default async function ArtifactPage({ params }: { params: Promise<{ id: s
     <>
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
-          <Eyebrow>{artifact.type.replace(/_/g, ' ')} · lineage</Eyebrow>
+          <Eyebrow>{typeLabel(labels, artifact.type)} · lineage</Eyebrow>
           <PageTitle>{artifact.title}</PageTitle>
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
             <Mono>{artifact.id}</Mono>
             <span className="text-faint">·</span>
             <span>
-              phase <b>{artifact.phase.replace(/_/g, ' ')}</b>
+              phase <b>{phaseLabel(labels, artifact.phase)}</b>
             </span>
             {subject ? (
               <>
@@ -89,7 +99,7 @@ export default async function ArtifactPage({ params }: { params: Promise<{ id: s
           ) : null}
           {gate && latest?.state === 'proposed' ? (
             <Button href={`/gates/${gate.id}/${artifact.id}/${latest.ordinal}`} variant="primary" size="sm">
-              Open the {gate.title ?? gate.id} gate
+              Decide: {gateLabel(labels, gate.id)}
             </Button>
           ) : null}
         </div>
@@ -106,6 +116,7 @@ export default async function ArtifactPage({ params }: { params: Promise<{ id: s
                 artifact={artifact.id}
                 current={version.ordinal === subject?.ordinal}
                 decision={decisions.find((d) => d.ordinal === version.ordinal)}
+                labels={labels}
               />
             ))}
           </div>
@@ -115,7 +126,7 @@ export default async function ArtifactPage({ params }: { params: Promise<{ id: s
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-2">
-                    <Chip state="draft">draft · rev {openDraft.revision}</Chip>
+                    <Chip state="draft">Draft · rev {openDraft.revision}</Chip>
                     {openDraft.based_on ? (
                       <span className="text-2xs text-faint">based on @{openDraft.based_on}</span>
                     ) : null}
@@ -136,7 +147,7 @@ export default async function ArtifactPage({ params }: { params: Promise<{ id: s
         </div>
 
         <div className="flex flex-col gap-4">
-          {subject ? <LinksCard version={subject} pinnedLinkType={pinnedLinkType} /> : null}
+          {subject ? <LinksCard version={subject} pinnedLinkType={pinnedLinkType} labels={labels} /> : null}
           {subject ? <FacetsCard version={subject} /> : null}
           {subject ? <StandardsCard version={subject} acceptances={acceptances} /> : null}
           {subject?.classification ? (
@@ -161,11 +172,13 @@ function VersionRow({
   artifact,
   current,
   decision,
+  labels,
 }: {
   version: Version;
   artifact: string;
   current: boolean;
-  decision?: { outcome: string; reasoning?: string; decided_by: string };
+  decision?: { gate: string; outcome: string; reasoning?: string; decided_by: string };
+  labels: Labels;
 }) {
   return (
     <Sealed
@@ -176,7 +189,7 @@ function VersionRow({
       <span className="font-mono text-sm font-semibold tabular">@{version.ordinal}</span>
       <div className="flex flex-col gap-0.5">
         <div className="flex flex-wrap items-center gap-2">
-          <Chip state={version.state}>{version.state}</Chip>
+          <Chip state={version.state}>{stateLabel(version.state)}</Chip>
           <span className="font-mono text-2xs text-faint">{shortDigest(version.digest)}</span>
         </div>
         <span className="text-2xs text-muted">
@@ -187,7 +200,7 @@ function VersionRow({
         </span>
         {decision?.reasoning ? (
           <span className="text-2xs text-faint">
-            {decision.outcome} — &ldquo;{decision.reasoning}&rdquo;
+            {outcomeLabel(labels, decision.gate, decision.outcome)} — &ldquo;{decision.reasoning}&rdquo;
           </span>
         ) : null}
         <Link
@@ -202,7 +215,15 @@ function VersionRow({
   );
 }
 
-function LinksCard({ version, pinnedLinkType }: { version: Version; pinnedLinkType?: string }) {
+function LinksCard({
+  version,
+  pinnedLinkType,
+  labels,
+}: {
+  version: Version;
+  pinnedLinkType?: string;
+  labels: Labels;
+}) {
   if (version.links.length === 0) {
     return (
       <Card>
@@ -220,9 +241,7 @@ function LinksCard({ version, pinnedLinkType }: { version: Version; pinnedLinkTy
           return (
             <div key={`${link.type}-${link.target}`} className="flex flex-col gap-0.5">
               <div className="flex items-center gap-1.5">
-                <span className="font-mono text-2xs uppercase tracking-[0.05em] text-faint">
-                  {link.type} →
-                </span>
+                <span className="text-2xs text-faint">{linkLabel(labels, link.type)} →</span>
                 {pinned ? <Chip state="pin">pinned</Chip> : null}
               </div>
               <Link href={`/artifacts/${link.target}`} className="text-sm underline-offset-2 hover:underline">

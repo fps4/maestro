@@ -18,8 +18,10 @@ export function DecideForm({
   artifact,
   ordinal,
   outcomes,
+  outcomeLabels,
   required,
   optional,
+  fieldLabels,
   acceptedOrdinal,
   hasPin,
 }: {
@@ -28,8 +30,11 @@ export function DecideForm({
   artifact: string;
   ordinal: number;
   outcomes: string[];
+  /** Outcome id → the word on the button. The record carries the id; the person reads the label. */
+  outcomeLabels: Record<string, string>;
   required: string[];
   optional: string[];
+  fieldLabels: Record<string, string>;
   acceptedOrdinal?: number;
   hasPin: boolean;
 }) {
@@ -99,7 +104,7 @@ export function DecideForm({
               }`}
             />
             <span className="flex flex-col gap-px">
-              <b>{option.replace(/_/g, ' ')}</b>
+              <b>{outcomeLabels[option] ?? option}</b>
               <span className="text-2xs text-muted">
                 {consequence(option, ordinal, acceptedOrdinal, hasPin)}
               </span>
@@ -117,8 +122,8 @@ export function DecideForm({
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
             {attributionFields.map((field) => (
               <label key={field} className="flex flex-col gap-1">
-                <span className="font-mono text-2xs uppercase tracking-[0.05em] text-faint">
-                  {field}
+                <span className="text-2xs text-faint">
+                  {fieldLabels[field] ?? field}
                   {required.includes(field) ? ' *' : ''}
                 </span>
                 <input

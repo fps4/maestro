@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { fetchAcceptances, fetchRegister } from '@/lib/api';
+import { fetchAcceptances, fetchLabels, fetchRegister } from '@/lib/api';
+import { phaseLabel, stateLabel, typeLabel } from '@/lib/labels';
 import {
   Button,
   Chip,
@@ -12,7 +13,7 @@ import {
   Tile,
   relativeDate,
 } from '@/components/atoms';
-import type { Acceptance, RegisterRow } from '@/lib/types';
+import type { Acceptance, Labels, RegisterRow } from '@/lib/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,9 +28,10 @@ export const dynamic = 'force-dynamic';
  * to the artifact.
  */
 export default async function RegisterPage() {
-  const [register, acceptances] = await Promise.all([
+  const [register, acceptances, labels] = await Promise.all([
     fetchRegister(),
     fetchAcceptances().catch((): Acceptance[] => []),
+    fetchLabels(),
   ]);
 
   const inFlight = register.filter((r) => !['closed', 'retired'].includes(r.phase));
@@ -83,7 +85,7 @@ export default async function RegisterPage() {
             </thead>
             <tbody>
               {register.map((row) => (
-                <Row key={row.id} row={row} />
+                <Row key={row.id} row={row} labels={labels} />
               ))}
             </tbody>
           </table>
@@ -98,7 +100,7 @@ export default async function RegisterPage() {
   );
 }
 
-function Row({ row }: { row: RegisterRow }) {
+function Row({ row, labels }: { row: RegisterRow; labels: Labels }) {
   return (
     <tr className="hover:bg-surface-2">
       <Td>
@@ -107,14 +109,14 @@ function Row({ row }: { row: RegisterRow }) {
         </Link>
         <span className="block font-mono text-2xs text-faint">{row.id}</span>
       </Td>
-      <Td className="text-sm text-muted">{row.type.replace(/_/g, ' ')}</Td>
-      <Td className="text-sm">{row.phase.replace(/_/g, ' ')}</Td>
+      <Td className="text-sm text-muted">{typeLabel(labels, row.type)}</Td>
+      <Td className="text-sm">{phaseLabel(labels, row.phase)}</Td>
       <Td>
         <div className="flex flex-wrap items-center gap-1.5">
-          {row.latest_state ? <Chip state={row.latest_state}>{row.latest_state}</Chip> : null}
+          {row.latest_state ? <Chip state={row.latest_state}>{stateLabel(row.latest_state)}</Chip> : null}
           {row.open_draft ? (
             <Link href={`/drafts/${row.open_draft}`}>
-              <Chip state="draft">draft open</Chip>
+              <Chip state="draft">Draft open</Chip>
             </Link>
           ) : null}
         </div>

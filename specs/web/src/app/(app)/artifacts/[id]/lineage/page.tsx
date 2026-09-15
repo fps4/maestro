@@ -1,5 +1,7 @@
 import Link from 'next/link';
-import { fetchLineage } from '@/lib/api';
+import { fetchLabels, fetchLineage } from '@/lib/api';
+import { linkLabel, phaseLabel, typeLabel } from '@/lib/labels';
+import type { Labels } from '@/lib/types';
 import { Card, Empty, Eyebrow, Mono, PageTitle } from '@/components/atoms';
 
 export const dynamic = 'force-dynamic';
@@ -13,7 +15,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function LineagePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const lineage = await fetchLineage(id);
+  const [lineage, labels] = await Promise.all([fetchLineage(id), fetchLabels()]);
 
   const byId = new Map(lineage.nodes.map((n) => [n.artifact, n]));
   const outgoing = lineage.edges.filter((e) => e.from === id);
@@ -46,7 +48,13 @@ export default async function LineagePage({ params }: { params: Promise<{ id: st
             ) : (
               <div className="flex flex-col gap-2.5">
                 {outgoing.map((edge) => (
-                  <Edge key={`${edge.type}-${edge.to}`} edge={edge} node={byId.get(edge.to)} direction="to" />
+                  <Edge
+                    key={`${edge.type}-${edge.to}`}
+                    edge={edge}
+                    node={byId.get(edge.to)}
+                    direction="to"
+                    labels={labels}
+                  />
                 ))}
               </div>
             )}
@@ -69,6 +77,7 @@ export default async function LineagePage({ params }: { params: Promise<{ id: st
                     edge={edge}
                     node={byId.get(edge.from)}
                     direction="from"
+                    labels={labels}
                   />
                 ))}
               </div>
@@ -92,10 +101,12 @@ function Edge({
   edge,
   node,
   direction,
+  labels,
 }: {
   edge: { type: string; pinned: boolean; ordinal?: number; resolution: string };
   node?: { artifact: string; title: string; type: string; phase: string };
   direction: 'to' | 'from';
+  labels: Labels;
 }) {
   const style = edge.pinned
     ? 'border-l-2 border-accent'
@@ -107,7 +118,7 @@ function Edge({
     <div className={`flex flex-col gap-0.5 pl-3 ${style}`}>
       <div className="flex flex-wrap items-center gap-2">
         <span className="font-mono text-2xs uppercase tracking-[0.05em] text-faint">
-          {direction === 'to' ? `${edge.type} →` : `← ${edge.type}`}
+          {direction === 'to' ? `${linkLabel(labels, edge.type)} →` : `← ${linkLabel(labels, edge.type)}`}
         </span>
         {edge.pinned ? (
           <span className="font-mono text-2xs font-semibold text-accent">
@@ -122,7 +133,7 @@ function Edge({
       ) : null}
       <span className="text-2xs text-faint">
         <Mono>{node?.artifact ?? '—'}</Mono>
-        {node ? ` · ${node.type.replace(/_/g, ' ')} · ${node.phase}` : ''}
+        {node ? ` · ${typeLabel(labels, node.type)} · ${phaseLabel(labels, node.phase)}` : ''}
       </span>
       {edge.pinned ? (
         <span className="text-2xs text-accent-ink">

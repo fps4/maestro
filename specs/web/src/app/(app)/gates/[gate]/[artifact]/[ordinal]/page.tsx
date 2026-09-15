@@ -11,6 +11,7 @@ import {
   SectionTitle,
   shortDigest,
 } from '@/components/atoms';
+import { stateLabel } from '@/lib/labels';
 import { DecideForm } from './decide-form';
 
 export const dynamic = 'force-dynamic';
@@ -50,13 +51,15 @@ export default async function DecidePage({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <Eyebrow>
-            gate · {view.gate} · decides on {version.type.replace(/_/g, ' ')}
+            {view.title} · decides on a {view.type_title.toLowerCase()}
           </Eyebrow>
-          <PageTitle>
-            Decide on {artifact} @{n}
-          </PageTitle>
+          <PageTitle>{version.title}</PageTitle>
           <p className="text-sm text-muted">
-            {version.title} · proposed {new Date(version.proposed_at).toLocaleDateString('en-GB')} by{' '}
+            {view.description ? <>{view.description} · </> : null}
+            <Mono>
+              {artifact}@{n}
+            </Mono>{' '}
+            proposed {new Date(version.proposed_at).toLocaleDateString('en-GB')} by{' '}
             <Mono>{version.proposed_by}</Mono>
           </p>
         </div>
@@ -135,8 +138,10 @@ export default async function DecidePage({
               artifact={artifact}
               ordinal={n}
               outcomes={view.outcomes}
+              outcomeLabels={view.outcome_labels}
               required={view.attribution_profile.required}
               optional={view.attribution_profile.optional}
+              fieldLabels={view.attribution_profile.field_labels}
               acceptedOrdinal={record.accepted_ordinal}
               hasPin={version.links.some((l) => l.pinned_to === null || l.pinned_to === undefined)}
             />
@@ -154,7 +159,7 @@ export default async function DecidePage({
                 [
                   'state',
                   <Chip key="s" state={version.state}>
-                    {version.state}
+                    {stateLabel(version.state)}
                   </Chip>,
                 ],
                 ['digest', <Mono key="d">{shortDigest(version.digest)}</Mono>],

@@ -9,12 +9,14 @@ import 'server-only';
  */
 
 import { currentToken, currentWorkspace } from './auth';
+import { NO_LABELS } from './labels';
 import type {
   Acceptance,
   Artifact,
   Decision,
   Draft,
   GateView,
+  Labels,
   Lineage,
   RegisterRow,
   StandardSummary,
@@ -63,8 +65,24 @@ export async function fetchRegister(): Promise<RegisterRow[]> {
 export async function fetchDefinition(): Promise<{
   definition: WorkspaceDefinition;
   record: { id: string; kind: string; title?: string; definition_version: number };
+  labels: Labels;
 }> {
   return get(`/v1/workspaces/${await ws()}/definition`);
+}
+
+/**
+ * The words for this workspace's identifiers.
+ *
+ * Never throws: a page that cannot load the definition still renders words, humanised from the ids,
+ * rather than failing on the one thing a reader needs least.
+ */
+export async function fetchLabels(): Promise<Labels> {
+  try {
+    const { labels } = await fetchDefinition();
+    return labels;
+  } catch {
+    return NO_LABELS;
+  }
 }
 
 export async function fetchArtifact(id: string): Promise<{

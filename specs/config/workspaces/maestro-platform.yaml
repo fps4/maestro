@@ -19,6 +19,8 @@ types:
   # No gate of its own: raising one is open to anyone authorised in the workspace, and the outcome
   # is recorded on the business case that addresses it.
   - id: opportunity
+    title: Opportunity
+    description: Something worth looking at. Raising one commits nobody to anything.
     facet_schema: ./schemas/opportunity.json
     body_format: markdown/v1
     draft_expiry: 90d
@@ -26,6 +28,8 @@ types:
     links: []
 
   - id: business_case
+    title: Business case
+    description: Is it worth solving, and do we know enough to say so?
     facet_schema: ./schemas/business-case.json
     body_format: markdown/v1
     attachments:
@@ -35,9 +39,11 @@ types:
     classification_required: true
     catalogue_refs: true
     links:
-      - { id: addresses, to: opportunity }
+      - { id: addresses, to: opportunity, label: Addresses the opportunity }
 
   - id: specification
+    title: Specification
+    description: What exactly gets built, and what it must satisfy.
     facet_schema: ./schemas/specification.json
     body_format: markdown/v1
     attachments:
@@ -49,10 +55,12 @@ types:
     links:
       # The pin is what keeps the trail honest. An auditor reading a five-year-old specification
       # sees the case as it read when someone accepted it, not as it was rewritten afterwards.
-      - { id: justified_by, to: business_case, pinned: true }
-      - { id: addresses, to: opportunity }
+      - { id: justified_by, to: business_case, pinned: true, label: Justified by the business case }
+      - { id: addresses, to: opportunity, label: Addresses the opportunity }
 
   - id: intake_assessment
+    title: Intake assessment
+    description: For something that already exists — is this ours to hold, and at what level?
     facet_schema: ./schemas/intake-assessment.json
     body_format: markdown/v1
     draft_expiry: 90d
@@ -64,6 +72,8 @@ types:
   # here rather than in the catalogue because the catalogue is shared across tenants and may hold no
   # tenant runtime data — and it hands over at exit as the tenant's property.
   - id: pack_binding
+    title: Standards binding
+    description: Which standards this workspace has accepted, who accepted each, and when.
     facet_schema: ./schemas/pack-binding.json
     body_format: markdown/v1
     classification_required: false
@@ -77,13 +87,21 @@ attribution_profiles:
       accountable: { must_resolve_to: principal, kind: human }
       acting: { must_resolve_to: principal }
     optional: [consequence_class]
+    field_labels:
+      accountable: Answerable for this decision
+      acting: Who recorded it
+      seat: Seat
+      oversight_level: Oversight level
+      consequence_class: Consequence class
 
 gates:
   - id: explore
     title: Explore
+    description: Is this worth taking further, and does the case say enough to know?
     decides_on: business_case
     owner: { resolver: role, role: sponsor }
     outcomes: [approve, request_changes, decline]
+    outcome_labels: { approve: Approve, request_changes: Ask for changes, decline: Decline }
     reopens_on: request_changes
     blocking: true
     requires:
@@ -94,9 +112,11 @@ gates:
 
   - id: assess
     title: Assess
+    description: Should we take this existing application on, at the level the assessment proposes?
     decides_on: intake_assessment
     owner: { resolver: role, role: sponsor }
     outcomes: [approve, request_changes, decline]
+    outcome_labels: { approve: Take it on, request_changes: Ask for changes, decline: Decline }
     reopens_on: request_changes
     blocking: true
     requires:
@@ -108,9 +128,11 @@ gates:
 
   - id: specification_gate
     title: Specification
+    description: Is this exactly what should be built? Approving it is what gets built.
     decides_on: specification
     owner: { resolver: role, role: owner }
     outcomes: [approve, request_changes, decline]
+    outcome_labels: { approve: Approve for build, request_changes: Ask for changes, decline: Decline }
     reopens_on: request_changes
     blocking: true
     requires:
@@ -124,9 +146,11 @@ gates:
 
   - id: binding_gate
     title: Standards binding
+    description: Does this workspace accept these standards, as read?
     decides_on: pack_binding
     owner: { resolver: role, role: workspace_admin }
     outcomes: [approve, request_changes]
+    outcome_labels: { approve: Accept the binding, request_changes: Ask for changes }
     reopens_on: request_changes
     blocking: true
     requires:
@@ -135,6 +159,13 @@ gates:
 
 lifecycle:
   phases: [explore, prove, build, run, retired, closed]
+  phase_labels:
+    explore: Exploring
+    prove: Proving
+    build: Building
+    run: Running
+    retired: Retired
+    closed: Closed
   initial: explore
   transitions:
     - { from: explore, to: prove, via_gate: explore, on: approve }

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { fetchVersion } from '@/lib/api';
+import { fetchLabels, fetchVersion } from '@/lib/api';
+import { stateLabel, typeLabel } from '@/lib/labels';
 import {
   Card,
   Chip,
@@ -33,12 +34,13 @@ export default async function VersionPage({ params }: { params: Promise<{ id: st
     notFound();
   }
   const { version, rendered } = data;
+  const labels = await fetchLabels();
 
   return (
     <>
       <Sealed className="flex flex-col gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <Chip state={version.state}>{version.state}</Chip>
+          <Chip state={version.state}>{stateLabel(version.state)}</Chip>
           <span className="font-mono text-2xs text-faint">
             @{version.ordinal} · {shortDigest(version.digest)}
           </span>
@@ -47,7 +49,7 @@ export default async function VersionPage({ params }: { params: Promise<{ id: st
           ) : null}
         </div>
         <Eyebrow>
-          {version.type.replace(/_/g, ' ')} ·{' '}
+          {typeLabel(labels, version.type)} ·{' '}
           <Link href={`/artifacts/${id}`} className="underline underline-offset-2">
             {id}
           </Link>

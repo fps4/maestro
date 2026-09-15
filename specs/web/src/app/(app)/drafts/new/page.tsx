@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation';
 import { fetchDefinition } from '@/lib/api';
 import { currentWorkspace } from '@/lib/auth';
 import { Button, Card, Eyebrow, Mono, Notice, PageTitle } from '@/components/atoms';
+import { typeDescription, typeLabel } from '@/lib/labels';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,7 +14,7 @@ export const dynamic = 'force-dynamic';
  */
 export default async function NewDraftPage() {
   const workspace = await currentWorkspace();
-  const { definition } = await fetchDefinition();
+  const { definition, labels } = await fetchDefinition();
 
   async function create(formData: FormData) {
     'use server';
@@ -47,10 +48,19 @@ export default async function NewDraftPage() {
             >
               {definition.types.map((type) => (
                 <option key={type.id} value={type.id}>
-                  {type.id.replace(/_/g, ' ')}
+                  {typeLabel(labels, type.id)}
                 </option>
               ))}
             </select>
+            <span className="text-2xs text-muted">
+              {definition.types
+                .map((type) => {
+                  const description = typeDescription(labels, type.id);
+                  return description ? `${typeLabel(labels, type.id)}: ${description}` : null;
+                })
+                .filter(Boolean)
+                .join(' · ')}
+            </span>
           </label>
 
           <label className="flex flex-col gap-1">

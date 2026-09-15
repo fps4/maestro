@@ -13,13 +13,20 @@ definition_version: 3            # stamped on every version written under it; hi
 # ---------------------------------------------------------------------------
 # Artifact types
 # ---------------------------------------------------------------------------
+# Every `id` below is what the RECORD carries. Every `title`, `label` and `description` is what a
+# PERSON reads. A screen shows the second and never the first; where a definition gives no label the
+# id is humanised (`request_changes` → "Request changes"), so a raw identifier never reaches a reader.
 types:
   - id: charter
+    title: Charter
+    description: Why this product exists and what it is for.
     facet_schema: ./schemas/charter.json
     body_format: markdown/v1
     links: []
 
   - id: functional_spec
+    title: Functional specification
+    description: What the software must do, as acceptance criteria a reviewer can check.
     # AC-N and NFR-N live here, not in the body. A gate may require these; it may never
     # require anything about the body (ADR-0004).
     facet_schema: ./schemas/functional-spec.json
@@ -29,8 +36,8 @@ types:
       media_types: [image/png, image/jpeg, image/svg+xml, application/pdf]
     draft_expiry: 90d                              # abandoned drafts are expired and recorded
     links:
-      - { id: derives_from, to: charter }
-      - { id: addresses,    to: work_item, pinned: true }   # frozen to a version at acceptance
+      - { id: derives_from, to: charter,   label: Derives from the charter }
+      - { id: addresses,    to: work_item, label: Addresses, pinned: true }   # frozen to a version at acceptance
 
   - id: technical_design
     facet_schema: ./schemas/technical-design.json
@@ -57,15 +64,19 @@ attribution_profiles:
       accountable: { must_resolve_to: principal, kind: human }
       acting:      { must_resolve_to: principal }
     optional: [risk_tier]        # maestro populates `seat` and `oversight_level` here instead
+    field_labels: { accountable: Answerable for this decision, acting: Who recorded it, risk_tier: Risk tier }
 
 # ---------------------------------------------------------------------------
 # Gates
 # ---------------------------------------------------------------------------
 gates:
   - id: functional
+    title: Functional review
+    description: Does this say what the software must do, precisely enough to build and test?
     decides_on: functional_spec
     owner:    { resolver: routing_table, table: ./reviewers.yaml, key: functional_reviewer }
     outcomes: [approve, request_changes, reject]
+    outcome_labels: { approve: Approve, request_changes: Ask for changes, reject: Reject }
     blocking: true
     requires:
       confirmed_facets: true     # agent-extracted facets cannot reach a gate unconfirmed
@@ -95,6 +106,7 @@ gates:
 # ---------------------------------------------------------------------------
 lifecycle:
   phases: [drafting, in_review, approved, in_delivery, merged, superseded]
+  phase_labels: { drafting: Drafting, in_review: In review, approved: Approved, in_delivery: In delivery, merged: Merged, superseded: Superseded }
   transitions:
     - { from: drafting,    to: in_review,   via: propose }
     - { from: in_review,   to: approved,    via_gate: functional }

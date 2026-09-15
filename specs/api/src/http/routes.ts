@@ -22,6 +22,7 @@ import { FacetValidationError } from '../domain/facets.js';
 import { PinRefused } from '../domain/links.js';
 import { IllegalStateChange, ProposalRefused, StaleRevision } from '../domain/versioning.js';
 import { DefinitionError } from '../domain/workspace-definition.js';
+import { labelsFor } from '../domain/labels.js';
 import { ArtifactService, NotFound, Refused } from '../services/artifacts.js';
 import { AcceptanceService, CatalogueReader } from '../services/catalogue.js';
 import { DecisionService } from '../services/decisions.js';
@@ -137,6 +138,8 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
       record: ctx.workspace.record,
       definition: ctx.workspace.definition,
       facet_schemas: ctx.workspace.facet_schemas,
+      // Every identifier the definition declares, as the word a reader should see for it.
+      labels: labelsFor(ctx.workspace.definition),
     };
   });
 

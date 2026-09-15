@@ -15,7 +15,7 @@ related:
 
 # specs-service — architecture
 
-**Status:** Draft v0.5
+**Status:** Draft v0.6
 **Scope:** The whole product. Model, authoring, rendering, configuration, ports, isolation,
 interfaces, storage, build order.
 **Shape:** A full end-to-end service with its own domain, its own console, and SSO through
@@ -216,6 +216,10 @@ gates:
 A **decision** is immutable, attributed, and carries every evaluation result in force at the time.
 The service resolves who *may* decide and refuses everyone else. It never decides (ADR-0005).
 
+**Which outcome accepts is declared** — `accepts_on: publish` — or taken as `approve` / `accept` when
+the gate lists one; a gate for which neither resolves is refused at apply (ADR-0013). The service
+does not know what "publish" means, and must not.
+
 `separation_of_duties: exclude_proposer` refuses a decision from the principal who proposed the
 version. It is declared per gate because small organisations legitimately cannot honour it — in which
 case the exemption is visible rather than assumed.
@@ -284,7 +288,16 @@ kind `agent`. What they cannot do is decide (ADR-0005). Two consequences:
   exposes reads, draft writes, and propose. It exposes **no decision endpoint**, and no MCP tool can
   reach one.
 
-### 3.4 Search
+### 3.4 The decision page, and the decider's packet
+
+The page a person decides on is built from one call, `GET /gates/:gate/:artifact/:ordinal/packet`,
+in plain language and in reading order: what the gate asks, what the artifact is, what changed since
+the last version anyone decided on, what the checks found, what each outcome would do, whether this
+principal may decide, and what was decided before (ADR-0013). The same object is the
+`decision_packet` MCP tool, so an agent explaining a decision reads what the sponsor reads — and,
+like everything on MCP, it carries no way to decide.
+
+### 3.5 Search
 
 Bodies and facets are indexed per workspace. MongoDB text indexes cover v1; the index lives in the
 workspace's own database, so search cannot cross the boundary by construction (§6).
@@ -536,6 +549,7 @@ a gated artifact are out of scope, and a proposal to relax that is a strategy ch
 | D12 | External and platform standards are distinct types; licence disposition is a required facet | [ADR-0009](decisions/0009-external-and-platform-standards-are-distinct-types.md) |
 | D13 | Versions may be effective-dated; only a *material* change lapses an acceptance | [ADR-0010](decisions/0010-effective-dating-and-acceptance-lapse.md) |
 | D14 | Every identifier a workspace declares has a label, and no surface shows the identifier | [ADR-0012](decisions/0012-labels-not-identifiers.md) |
+| D15 | The decision page is the product; the decider's packet is one call shared by console and MCP; the accepting outcome is declared | [ADR-0013](decisions/0013-the-decision-page-is-the-product.md) |
 
 ---
 
@@ -580,6 +594,7 @@ Steps 1–7 are the product. Everything after makes it complete.
 
 | Version | Date | Change |
 |---|---|---|
+| 0.6 | 2026-09-15 | **The decision page is the product** (D15, ADR-0013). One column, one call: the decider's packet returns what the gate asks, the document, the facts with their schema labels, what changed since the last *decided* version, the checks with findings, what each outcome would do (computed from the definition and stored state, with a refusal flagged before it happens), who may decide, and the history. The same object is the `decision_packet` MCP tool. The console's client-side `consequence()` is deleted. **The accepting outcome becomes declarative** (`accepts_on`), which fixes a latent defect: the catalogue's `publish` outcome would have recorded a standard as `rejected`. `gate-view.ts` extracted so the MCP import graph provably never reaches `DecisionService`, now enforced by lint. §2.7 and §3.4 added |
 | 0.5 | 2026-09-15 | **Labels beside identifiers** (D14, ADR-0012). The definition gains `description` on types and gates, `outcome_labels`, `phase_labels`, link `label` and attribution `field_labels`; the api returns the complete label set with a humanised fallback; the console renders labels and never an identifier a workspace could have named. The record is untouched. This is the first of the changes that turn the console from an auditor's surface into one a sponsor can use — the decision page and the decider's packet build on the descriptions this adds |
 | 0.4 | 2026-09-15 | **Consumer vocabulary aligned with the platform it serves.** The repository is now `maestro-specs` (was `mstr-specs`), and the two consumers are named as the platform names them: *maestro* is the governed application platform (`../maestro`, conceptual D44) and *maestro v1* its retired first iteration, the agentic delivery platform. Until now this repository called the first *adel* and the second *maestro* — so after the rename it used its own name for the wrong product. Swapped throughout the docs, ADRs 0001/0004/0005/0006, the glossary and the example workspace; the example workspace id is `maestro-v1-core`. Console wordmark, page title, MCP `serverInfo.name` and the npm package names follow the repository. **The deployed identifiers do not** — compose project, container names, `AUTH_AUDIENCE`, the identity client ids and the bucket still read `mstr-specs`, because changing them is a coordinated deploy with an `identity-service` seed on the other side. README Quick Start rewritten against the tree that exists (`make up`, ports 8020/8021, `AUTH_MODE`). No model, port, or decision changed |
 | 0.3 | 2026-08-06 | **First build.** Steps 1–9 of §12 implemented, plus MCP. Three additions the build made necessary, each with an ADR: the **catalogue as a workspace reached through a read-only handle** (D11, ADR-0008), which resolves the tension between a pack being shared across tenants and §6 saying nothing crosses a workspace; **external and platform standards as distinct types** (D12, ADR-0009), because ISO's licence forbids holding the text while the Bbl's does not, and "is this the obligation or our reading of it" must not be a settable flag; and **effective dating with acceptance lapse on a material change** (D13, ADR-0010), which is the one real addition to the version model — accepted and *in force* are different questions. The console ships with the password grant rather than PKCE, and §7.1's transparent-SSO property therefore does not hold yet (ADR-0011). §9 rewritten to match what was built; §11 gains D11–D13 |

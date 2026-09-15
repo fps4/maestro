@@ -77,6 +77,7 @@ gates:
     owner: { resolver: role, role: standards_owner }
     outcomes: [publish, request_changes, withdraw]
     outcome_labels: { publish: Publish, request_changes: Ask for changes, withdraw: Withdraw }
+    accepts_on: publish
     reopens_on: request_changes
     blocking: true
     requires:
@@ -92,6 +93,7 @@ gates:
     owner: { resolver: role, role: standards_owner }
     outcomes: [publish, request_changes, withdraw]
     outcome_labels: { publish: Publish, request_changes: Ask for changes, withdraw: Withdraw }
+    accepts_on: publish
     reopens_on: request_changes
     blocking: true
     requires:
@@ -107,6 +109,7 @@ gates:
     owner: { resolver: role, role: standards_owner }
     outcomes: [publish, request_changes, withdraw]
     outcome_labels: { publish: Publish, request_changes: Ask for changes, withdraw: Withdraw }
+    accepts_on: publish
     reopens_on: request_changes
     blocking: true
     requires:

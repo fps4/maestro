@@ -163,4 +163,14 @@ describe('the code itself', () => {
     expect(config).toMatch(/importNames: \['MongoClient', 'Db'\]/);
     expect(config).toMatch(/src\/services\/\*\*\/\*\.ts/);
   });
+
+  it('keeps DecisionService unreachable from MCP by lint, not by comment', async () => {
+    // ADR-0005's "no decision surface on MCP" is structural only while nothing on the MCP import
+    // graph can reach the one module that decides. The rule names the graph's leaves explicitly.
+    const config = await readFile(resolve(CONFIG_DIR, '../../api/eslint.config.js'), 'utf8');
+    expect(config).toMatch(
+      /files: \['src\/mcp\/\*\*\/\*\.ts', 'src\/services\/packet\.ts', 'src\/services\/gate-view\.ts'\]/,
+    );
+    expect(config).toMatch(/\*\*\/services\/decisions/);
+  });
 });

@@ -55,4 +55,24 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // ADR-0005: there is no decision surface on MCP. The guarantee is structural — nothing under
+    // `mcp/`, and nothing `mcp/` imports from `services/`, imports the one module that can decide.
+    // `packet.ts` reads the gate through `gate-view.ts` for exactly this reason.
+    files: ['src/mcp/**/*.ts', 'src/services/packet.ts', 'src/services/gate-view.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['**/services/decisions', '**/services/decisions.js'],
+              message:
+                'MCP has no decision surface (ADR-0005). Read a gate through services/gate-view.ts; DecisionService is reachable only from http/.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 );

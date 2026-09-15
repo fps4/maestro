@@ -13,7 +13,8 @@
 
 import MarkdownIt from 'markdown-it';
 import sanitizeHtml from 'sanitize-html';
-import type { AttachmentRef, Body } from '../domain/types.js';
+import type { AttachmentRef, Body, Version } from '../domain/types.js';
+import type { UrlSigner } from './attachments.js';
 
 const md = new MarkdownIt({ html: false, linkify: true, breaks: false });
 
@@ -109,6 +110,25 @@ export function renderBody(
 
   const html = sanitizeHtml(md.render(withUrls), ALLOWED);
   return { format: body.format, html, unresolved: [...new Set(unresolved)] };
+}
+
+/**
+ * Render a version's body with its attachments resolved.
+ *
+ * URLs are signed first, then rendering runs synchronously over the result — so an image is either
+ * resolved for every reader or resolved for none, never resolved on the second attempt. With no
+ * signer (no object storage configured, or a surface that cannot hand out URLs) references are left
+ * as written and reported as unresolved.
+ */
+export async function renderVersion(
+  version: Pick<Version, 'body' | 'attachments'>,
+  signUrls: UrlSigner | undefined,
+): Promise<RenderedBody> {
+  const urls = signUrls ? await signUrls(version.attachments.map((a) => a.key)) : new Map<string, string>();
+  return renderBody(version.body, version.attachments, (attachmentId) => {
+    const attachment = version.attachments.find((a) => a.id === attachmentId);
+    return attachment ? urls.get(attachment.key) : undefined;
+  });
 }
 
 /** Plain text, for search snippets and for a format we do not know how to render. */

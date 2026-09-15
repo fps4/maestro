@@ -3,8 +3,10 @@
  *
  * **Agents author; they never decide** (ADR-0005). MCP exposes reads, draft writes and propose, and
  * **no decision surface at all**. That is not a filter applied to a general tool list: there is no
- * tool here that reaches a decision, and `DecisionService` is not imported by this module or its
- * transport. A capability that does not exist cannot be granted by mistake.
+ * tool here that reaches a decision, and `DecisionService` is not imported by this module, its
+ * transport, or anything they import — a lint rule refuses the import, and the decider's packet
+ * reads a gate through `gate-view.ts` for that reason. A capability that does not exist cannot be
+ * granted by mistake.
  *
  * Two consequences follow, and the first is the point. **Agent authority can be generous** — draft
  * freely, extract facets, propose — because the constraint sits at the point of consequence rather
@@ -17,6 +19,7 @@ import { z } from 'zod';
 import { ArtifactService } from '../services/artifacts.js';
 import { AcceptanceService, CatalogueReader } from '../services/catalogue.js';
 import { LineageService } from '../services/lineage.js';
+import { PacketService } from '../services/packet.js';
 import { excerpt } from '../services/render.js';
 import type { RequestContext } from '../auth/context.js';
 import type { ProvenanceMap } from '../domain/types.js';
@@ -36,6 +39,9 @@ const services = (ctx: RequestContext) => {
     lineage: new LineageService(ctx.handle, ctx.workspace),
     catalogue,
     acceptances: new AcceptanceService(ctx.handle, catalogue),
+    // No URL signer over MCP: an attachment reference is reported as unresolved rather than handed
+    // to an agent as a signed URL it has no business forwarding.
+    packets: new PacketService(ctx.handle, ctx.workspace, undefined),
   };
 };
 
@@ -118,6 +124,31 @@ export const TOOLS: McpTool[] = [
           state: r.state,
           excerpt: excerpt(r.body ?? { format: 'text/v1', content: '' }),
         })),
+      };
+    },
+  },
+  {
+    name: 'decision_packet',
+    title: 'Read what a decider is being asked',
+    description:
+      'Everything a person needs to decide at a gate, in one call and in plain language: what the artifact is, what changed since the last decision, what the checks found, what each outcome would do, who may decide and why, and the decisions already taken. Use it to explain a pending decision to the human accountable for it, or to draft their reasoning. It contains no way to decide, and there is none on MCP.',
+    inputSchema: z.object({ gate: z.string(), artifact: z.string(), ordinal: z.number().int().positive() }),
+    async handler(ctx, input) {
+      const { gate, artifact, ordinal } = z
+        .object({ gate: z.string(), artifact: z.string(), ordinal: z.number().int().positive() })
+        .parse(input);
+      const svc = services(ctx);
+      const version = await svc.artifacts.getVersion(artifact, ordinal);
+      const acceptances = await svc.acceptances.statesFor(version.catalogue_refs);
+      return {
+        packet: await svc.packets.build(gate, artifact, ordinal, {
+          decider: ctx.principal,
+          roles: ctx.roles,
+          routed: [],
+          assigned: ctx.gates,
+          directory: new Map(),
+          acceptances,
+        }),
       };
     },
   },

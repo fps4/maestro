@@ -117,6 +117,13 @@ const gateDeclaration = z.object({
    * outcome, and only one of them belongs on a screen.
    */
   outcome_labels: z.record(z.string()).default({}),
+  /**
+   * Which outcome accepts the version. Resolved by `acceptingOutcome()`: declared here, or
+   * `approve` / `accept` when the gate lists one of those. A gate whose outcomes are `publish`,
+   * `request_changes`, `withdraw` must say `accepts_on: publish`, because the alternative is the
+   * service knowing what "publish" means — the vocabulary leak ADR-0001 exists to prevent.
+   */
+  accepts_on: identifier.optional(),
   /** Which outcome, if any, reopens a draft carrying the reviewer's reasoning. */
   reopens_on: identifier.optional(),
   blocking: z.boolean().default(true),
@@ -271,6 +278,20 @@ export const workspaceDefinitionSchema = z
       if (gate.reopens_on && !gate.outcomes.includes(gate.reopens_on)) {
         fail(['gates', i, 'reopens_on'], `\`${gate.reopens_on}\` is not one of this gate's outcomes`);
       }
+      if (gate.accepts_on && !gate.outcomes.includes(gate.accepts_on)) {
+        fail(['gates', i, 'accepts_on'], `\`${gate.accepts_on}\` is not one of this gate's outcomes`);
+      }
+      // A gate that can never accept is a gate nothing gets through. Refused at apply rather than
+      // discovered when a publication decision leaves the standard `rejected`.
+      if (!acceptingOutcome(gate)) {
+        fail(
+          ['gates', i, 'accepts_on'],
+          `gate \`${gate.id}\` has no accepting outcome: none of ${gate.outcomes.join(', ')} is \`approve\` or \`accept\`, and \`accepts_on\` is not declared`,
+        );
+      }
+      if (gate.accepts_on && gate.reopens_on && gate.accepts_on === gate.reopens_on) {
+        fail(['gates', i, 'accepts_on'], `\`${gate.accepts_on}\` cannot both accept and reopen`);
+      }
       gate.requires.evaluations.forEach((ev, j) => {
         if (!evaluatorIds.has(ev)) {
           fail(['gates', i, 'requires', 'evaluations', j], `undeclared evaluator \`${ev}\``);
@@ -376,6 +397,18 @@ export function gateIn(def: WorkspaceDefinition, id: string): GateDeclaration | 
 
 export function profileIn(def: WorkspaceDefinition, id: string): AttributionProfile | undefined {
   return def.attribution_profiles.find((p) => p.id === id);
+}
+
+/**
+ * The outcome that accepts a version at this gate.
+ *
+ * Declared as `accepts_on`, or the conventional `approve` / `accept` when the gate lists one. This is
+ * the only place that convention is spelled out; the validator guarantees it resolves for every
+ * committed gate, so callers may treat the result as present.
+ */
+export function acceptingOutcome(gate: Pick<GateDeclaration, 'outcomes' | 'accepts_on'>): string | undefined {
+  if (gate.accepts_on) return gate.accepts_on;
+  return gate.outcomes.find((o) => o === 'approve' || o === 'accept');
 }
 
 export function gatesDecidingOn(def: WorkspaceDefinition, type: string): GateDeclaration[] {

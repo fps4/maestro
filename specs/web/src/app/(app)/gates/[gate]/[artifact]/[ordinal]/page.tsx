@@ -1,33 +1,32 @@
-import { fetchArtifact, fetchGateView, fetchVersion } from '@/lib/api';
+import Link from 'next/link';
+import { fetchPacket } from '@/lib/api';
 import { currentWorkspace } from '@/lib/auth';
 import {
   Card,
-  Chip,
   Eyebrow,
-  KeyValue,
   Mono,
   Notice,
   PageTitle,
+  Rendered,
   SectionTitle,
   shortDigest,
 } from '@/components/atoms';
-import { stateLabel } from '@/lib/labels';
+import type { DecisionPacket } from '@/lib/types';
 import { DecideForm } from './decide-form';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * The decision screen.
+ * The decision page — the product, for the person who has to decide.
  *
- * **Requirements before outcomes.** You cannot reach the outcome controls without passing the
- * gate's declared checks — an unmet requirement is a hard stop with a reason, never a greyed button
- * with no explanation.
+ * One column, one call, plain language, in the order a sponsor on a phone reads it: what am I being
+ * asked, what is this, what changed since I last looked, what did the checks find, what happens if I
+ * press each button — and then the buttons. Everything on the page comes from the decider's packet,
+ * which is the same object an agent reads over MCP, so what the sponsor sees and what their
+ * assistant explains cannot drift apart.
  *
- * **Each outcome states its consequence.** Approve says what becomes superseded and what freezes. A
- * decision with invisible effects is one nobody can take responsibly.
- *
- * **Attribution is shown, not collected.** `accountable` is resolved and locked to a human
- * principal, and the rule is visible at the moment it matters rather than in a document.
+ * Identifiers appear only where they are the point: the digest and the ordinal, in the footer, for
+ * the record.
  */
 export default async function DecidePage({
   params,
@@ -36,159 +35,305 @@ export default async function DecidePage({
 }) {
   const { gate, artifact, ordinal } = await params;
   const n = Number(ordinal);
-
   const workspace = await currentWorkspace();
-  const [view, { version }, { artifact: record }] = await Promise.all([
-    fetchGateView(gate, artifact, n),
-    fetchVersion(artifact, n),
-    fetchArtifact(artifact),
-  ]);
+  const packet = await fetchPacket(gate, artifact, n);
 
-  const blocking = view.requirements.filter((r) => r.blocking && !r.satisfied);
+  const blocking = packet.checks.filter((c) => c.blocking && !c.satisfied);
+  const unconfirmed = packet.facets.filter((f) => !f.confirmed);
+  const typeWord = packet.gate.type_title.toLowerCase();
 
   return (
-    <>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <Eyebrow>
-            {view.title} · decides on a {view.type_title.toLowerCase()}
-          </Eyebrow>
-          <PageTitle>{version.title}</PageTitle>
-          <p className="text-sm text-muted">
-            {view.description ? <>{view.description} · </> : null}
-            <Mono>
-              {artifact}@{n}
-            </Mono>{' '}
-            proposed {new Date(version.proposed_at).toLocaleDateString('en-GB')} by{' '}
-            <Mono>{version.proposed_by}</Mono>
+    <div className="mx-auto flex w-full max-w-3xl flex-col gap-6">
+      <header className="flex flex-col gap-2">
+        <Eyebrow>{packet.gate.title}</Eyebrow>
+        <PageTitle>{packet.subject.title}</PageTitle>
+        {packet.gate.description ? (
+          <p className="m-0 text-base text-ink">
+            <b>You are being asked:</b> {packet.gate.description}
           </p>
-        </div>
-        <div className="flex gap-2">
-          <a
-            href={`/artifacts/${artifact}/versions/${n}`}
-            className="rounded border border-rule-strong bg-surface px-2.5 py-0.5 text-xs hover:bg-surface-2"
-          >
-            Read @{n}
-          </a>
-          {n > 1 ? (
-            <a
-              href={`/artifacts/${artifact}/diff?from=${n - 1}&to=${n}`}
-              className="rounded border border-rule-strong bg-surface px-2.5 py-0.5 text-xs hover:bg-surface-2"
-            >
-              Diff @{n - 1} → @{n}
-            </a>
-          ) : null}
-        </div>
-      </div>
+        ) : null}
+        <p className="m-0 text-sm text-muted">
+          A {typeWord}, version {n}, proposed{' '}
+          {new Date(packet.subject.proposed_at).toLocaleDateString('en-GB', {
+            day: 'numeric',
+            month: 'long',
+            year: 'numeric',
+          })}{' '}
+          by <Mono>{packet.subject.proposed_by}</Mono>
+          {packet.subject.contributors.some((c) => c.kind === 'agent')
+            ? ', with an agent contributing to the draft'
+            : ''}
+          . Currently <b>{packet.subject.phase_label.toLowerCase()}</b>.
+        </p>
+      </header>
 
-      <div className="grid grid-cols-1 items-start gap-5 lg:grid-cols-[minmax(0,1.75fr),minmax(0,1fr)]">
-        <div className="flex flex-col gap-5">
-          <Card>
-            <SectionTitle>Before this gate opens</SectionTitle>
-            <div>
-              {view.requirements.map((requirement) => (
-                <div
-                  key={requirement.id}
-                  className="flex items-start gap-2.5 border-b border-rule py-2 text-xs last:border-b-0"
-                >
-                  <span
-                    className={`w-3.5 flex-none font-mono text-xs font-bold ${
-                      requirement.satisfied
-                        ? 'text-accent'
-                        : requirement.blocking
-                          ? 'text-critical'
-                          : 'text-warning'
-                    }`}
-                  >
-                    {requirement.satisfied ? '✓' : requirement.blocking ? '×' : '!'}
-                  </span>
-                  <div className="flex flex-col gap-px">
-                    <b
-                      className={
-                        requirement.satisfied ? '' : requirement.blocking ? 'text-critical' : 'text-warning'
-                      }
-                    >
-                      {requirement.title}
-                      {!requirement.blocking && !requirement.satisfied ? ' — advisory, not blocking' : ''}
-                    </b>
-                    <span className="text-2xs text-faint">{requirement.detail}</span>
-                  </div>
-                </div>
-              ))}
-              {view.requirements.length === 0 ? (
-                <p className="m-0 py-2 text-xs text-muted">
-                  This gate declares no requirements. The decision is a judgement, recorded.
-                </p>
+      <section className="flex flex-col gap-3">
+        <SectionTitle>What this is</SectionTitle>
+        {packet.gate.type_description ? (
+          <p className="m-0 text-sm text-muted">
+            A {typeWord}: {packet.gate.type_description}
+          </p>
+        ) : null}
+        <Rendered html={packet.document.html} />
+        {packet.facets.length > 0 ? <Facets facets={packet.facets} /> : null}
+        {unconfirmed.length > 0 ? (
+          <Notice tone="warn" title="Some of this was filled in by an agent and nobody has confirmed it yet.">
+            {unconfirmed.map((f) => f.label).join(', ')}. An unconfirmed value cannot pass a gate; the author
+            needs to confirm it before you can decide.
+          </Notice>
+        ) : null}
+      </section>
+
+      {packet.since ? (
+        <section className="flex flex-col gap-3">
+          <SectionTitle>What changed since version {packet.since.ordinal}</SectionTitle>
+          <Since since={packet.since} artifact={artifact} ordinal={n} />
+        </section>
+      ) : (
+        <section className="flex flex-col gap-1">
+          <SectionTitle>What changed</SectionTitle>
+          <p className="m-0 text-sm text-muted">
+            This is the first time anyone is asked to decide on this {typeWord}. There is nothing to compare
+            it with yet.
+          </p>
+        </section>
+      )}
+
+      <section className="flex flex-col gap-3">
+        <SectionTitle>What the checks found</SectionTitle>
+        {packet.checks.length === 0 ? (
+          <p className="m-0 text-sm text-muted">
+            This gate runs no checks. The decision is your judgement, and it is recorded as such.
+          </p>
+        ) : (
+          <Checks checks={packet.checks} />
+        )}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <SectionTitle>What happens if you…</SectionTitle>
+        <div className="flex flex-col gap-2">
+          {packet.decider.outcomes.map((outcome) => (
+            <Card key={outcome.outcome} className="gap-1.5">
+              <b className="text-sm">{outcome.label}</b>
+              <ul className="m-0 flex list-disc flex-col gap-0.5 pl-5 text-sm text-muted">
+                {outcome.effects.map((effect) => (
+                  <li key={effect}>{effect}</li>
+                ))}
+              </ul>
+              {outcome.blocked ? (
+                <Notice tone="warn" title="This would be refused right now.">
+                  {outcome.blocked}
+                </Notice>
               ) : null}
-            </div>
-          </Card>
+            </Card>
+          ))}
+        </div>
+      </section>
 
-          {!view.may_decide ? (
-            <Notice tone="hard" title="You cannot decide at this gate.">
-              {view.may_decide_reason}
-            </Notice>
-          ) : blocking.length > 0 ? (
-            <Notice tone="hard" title="This gate is not open.">
-              {blocking.map((r) => `${r.title} — ${r.detail}`).join('; ')}
-            </Notice>
-          ) : (
+      <section className="flex flex-col gap-3">
+        <SectionTitle>Your decision</SectionTitle>
+        {!packet.decider.may_decide ? (
+          <Notice tone="hard" title="This decision is not yours to take.">
+            {packet.decider.reason}
+          </Notice>
+        ) : blocking.length > 0 ? (
+          <Notice tone="hard" title="This cannot be decided yet.">
+            {blocking.map((c) => `${c.title}: ${c.detail}`).join(' · ')}
+          </Notice>
+        ) : (
+          <>
+            <p className="m-0 text-sm text-muted">{packet.decider.reason}</p>
             <DecideForm
               workspace={workspace}
-              gate={view.gate}
+              gate={packet.gate.id}
               artifact={artifact}
               ordinal={n}
-              outcomes={view.outcomes}
-              outcomeLabels={view.outcome_labels}
-              required={view.attribution_profile.required}
-              optional={view.attribution_profile.optional}
-              fieldLabels={view.attribution_profile.field_labels}
-              acceptedOrdinal={record.accepted_ordinal}
-              hasPin={version.links.some((l) => l.pinned_to === null || l.pinned_to === undefined)}
+              outcomes={packet.decider.outcomes}
+              required={packet.decider.attribution.required}
+              optional={packet.decider.attribution.optional}
+              fieldLabels={packet.decider.attribution.field_labels}
             />
-          )}
-        </div>
+          </>
+        )}
+      </section>
 
-        <div className="flex flex-col gap-4">
-          <Card>
-            <SectionTitle>
-              What is being decided <span className="font-normal text-faint">— by digest</span>
-            </SectionTitle>
-            <KeyValue
-              rows={[
-                ['version', <Mono key="v">{`${artifact}@${n}`}</Mono>],
-                [
-                  'state',
-                  <Chip key="s" state={version.state}>
-                    {stateLabel(version.state)}
-                  </Chip>,
-                ],
-                ['digest', <Mono key="d">{shortDigest(version.digest)}</Mono>],
-                ['definition', <Mono key="def">v{version.definition_version}</Mono>],
-              ]}
-            />
-            <p className="m-0 text-2xs text-faint">
-              The decision records this digest. A verdict or an approval reached against different bytes is
-              not about this version.
-            </p>
-          </Card>
+      {packet.history.length > 0 ? (
+        <section className="flex flex-col gap-3">
+          <SectionTitle>Decided before</SectionTitle>
+          <div className="flex flex-col gap-2">
+            {packet.history.map((entry) => (
+              <div key={`${entry.ordinal}-${entry.decided_at}`} className="flex flex-col gap-0.5 text-sm">
+                <span>
+                  <b>{entry.outcome_label}</b> on version {entry.ordinal} at {entry.gate_title},{' '}
+                  {new Date(entry.decided_at).toLocaleDateString('en-GB')} by <Mono>{entry.decided_by}</Mono>
+                </span>
+                {entry.reasoning ? <span className="text-muted">&ldquo;{entry.reasoning}&rdquo;</span> : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
-          <Card>
-            <SectionTitle>
-              Attribution{' '}
-              <span className="font-normal text-faint font-mono">{view.attribution_profile.id}</span>
-            </SectionTitle>
-            <p className="m-0 text-2xs text-faint">
-              <b>accountable</b> must resolve to a principal of kind <Mono>human</Mono>. A decision naming an
-              agent there is a refused write, and the refusal is itself recorded.
-            </p>
-          </Card>
-
-          <Notice tone="ok" title="This decision is immutable once recorded.">
-            It carries the digest of @{n}, every evaluation in force, and your attribution. There is no edit
-            and no delete.
-          </Notice>
-        </div>
-      </div>
-    </>
+      <footer className="flex flex-col gap-1 border-t border-rule pt-4 text-2xs text-faint">
+        <span>
+          For the record: <Mono>{artifact}</Mono> version {n}, digest{' '}
+          <Mono>{shortDigest(packet.subject.digest)}</Mono>. Your decision is recorded against this exact
+          content and cannot be edited or deleted afterwards. You are recorded as answerable for it.
+        </span>
+        <span className="flex flex-wrap gap-3">
+          <Link href={`/artifacts/${artifact}/versions/${n}`} className="underline">
+            Read the full version
+          </Link>
+          {packet.since ? (
+            <Link
+              href={`/artifacts/${artifact}/diff?from=${packet.since.ordinal}&to=${n}`}
+              className="underline"
+            >
+              See every changed line
+            </Link>
+          ) : null}
+          <Link href={`/artifacts/${artifact}`} className="underline">
+            All versions
+          </Link>
+        </span>
+      </footer>
+    </div>
   );
+}
+
+function Facets({ facets }: { facets: DecisionPacket['facets'] }) {
+  return (
+    <Card flat className="gap-2">
+      <span className="text-2xs uppercase tracking-[0.05em] text-faint">The facts the checks read</span>
+      <dl className="m-0 grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-[minmax(0,1fr),minmax(0,2fr)]">
+        {facets.map((facet) => (
+          <div key={facet.field} className="contents">
+            <dt className="text-sm font-medium">
+              {facet.label}
+              {facet.description ? (
+                <span className="block text-2xs font-normal text-faint">{facet.description}</span>
+              ) : null}
+            </dt>
+            <dd className="m-0 text-sm text-muted">
+              {summarise(facet.value)}
+              {!facet.confirmed ? <span className="ml-1 text-warning">· not yet confirmed</span> : null}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </Card>
+  );
+}
+
+function Since({
+  since,
+  artifact,
+  ordinal,
+}: {
+  since: NonNullable<DecisionPacket['since']>;
+  artifact: string;
+  ordinal: number;
+}) {
+  const nothing =
+    since.facets.length === 0 &&
+    since.body.unchanged &&
+    since.links.added.length === 0 &&
+    since.links.removed.length === 0 &&
+    since.links.repointed.length === 0;
+  return (
+    <Card className="gap-2 text-sm">
+      {since.outcome ? (
+        <p className="m-0 text-muted">
+          Version {since.ordinal} was decided <b>{since.outcome.label.toLowerCase()}</b>
+          {since.decided_at ? ` on ${new Date(since.decided_at).toLocaleDateString('en-GB')}` : ''}.
+        </p>
+      ) : null}
+      {nothing ? (
+        <p className="m-0">Nothing has changed. This is the same content, proposed again.</p>
+      ) : (
+        <>
+          {since.facets.length > 0 ? (
+            <ul className="m-0 flex list-disc flex-col gap-1 pl-5">
+              {since.facets.map((change) => (
+                <li key={change.field}>
+                  <b>{change.label}</b>{' '}
+                  {change.kind === 'added'
+                    ? `is new: ${summarise(change.after)}`
+                    : change.kind === 'removed'
+                      ? `was removed (was ${summarise(change.before)})`
+                      : `changed from ${summarise(change.before)} to ${summarise(change.after)}`}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {!since.body.unchanged ? (
+            <p className="m-0 text-muted">
+              The text changed: {since.body.added_lines} line{since.body.added_lines === 1 ? '' : 's'} added,{' '}
+              {since.body.removed_lines} removed.{' '}
+              <Link
+                href={`/artifacts/${artifact}/diff?from=${since.ordinal}&to=${ordinal}`}
+                className="underline"
+              >
+                See every changed line
+              </Link>
+              .
+            </p>
+          ) : null}
+        </>
+      )}
+    </Card>
+  );
+}
+
+function Checks({ checks }: { checks: DecisionPacket['checks'] }) {
+  return (
+    <div className="flex flex-col gap-2">
+      {checks.map((check) => (
+        <div key={check.id} className="flex items-start gap-2.5 text-sm">
+          <span
+            className={`mt-0.5 w-4 flex-none text-center font-mono font-bold ${
+              check.satisfied ? 'text-accent' : check.blocking ? 'text-critical' : 'text-warning'
+            }`}
+            aria-label={check.satisfied ? 'passed' : check.blocking ? 'failed' : 'advisory'}
+          >
+            {check.satisfied ? '✓' : check.blocking ? '×' : '!'}
+          </span>
+          <div className="flex flex-col gap-0.5">
+            <b className={check.satisfied ? '' : check.blocking ? 'text-critical' : 'text-warning'}>
+              {check.title}
+              {!check.blocking && !check.satisfied ? ' (advisory)' : ''}
+            </b>
+            <span className="text-muted">{check.detail}</span>
+            {check.findings?.length ? (
+              <ul className="m-0 flex list-disc flex-col gap-0.5 pl-5 text-muted">
+                {check.findings.map((finding, i) => (
+                  <li key={i}>
+                    {finding.outcome === 'met'
+                      ? 'Met'
+                      : finding.outcome === 'unmet'
+                        ? 'Not met'
+                        : 'Not applicable'}
+                    {finding.standard ? ` — ${finding.standard}` : ''}
+                    {finding.detail ? `: ${finding.detail}` : ''}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function summarise(value: unknown): string {
+  if (value === null || value === undefined) return '—';
+  if (typeof value === 'boolean') return value ? 'yes' : 'no';
+  if (typeof value === 'string' || typeof value === 'number') return String(value);
+  if (Array.isArray(value)) return `${value.length} item${value.length === 1 ? '' : 's'}`;
+  const entries = Object.entries(value as Record<string, unknown>);
+  return entries
+    .map(([k, v]) => `${k.replace(/_/g, ' ')}: ${typeof v === 'object' ? '…' : String(v)}`)
+    .join(', ');
 }

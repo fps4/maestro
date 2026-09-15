@@ -14,19 +14,12 @@ import { ARTIFACTS, DECISIONS, DRAFTS, EVALUATIONS, VERSIONS } from '../db/colle
 import { emit } from '../db/outbox.js';
 import type { WorkspaceHandle } from '../db/handle.js';
 import { assertAttribution, checkAttribution } from '../domain/attribution.js';
-import {
-  gateIsOpen,
-  gateRequirements,
-  mayDecide,
-  type AcceptanceState,
-  type Requirement,
-} from '../domain/gates.js';
+import { gateIsOpen, gateRequirements, mayDecide } from '../domain/gates.js';
 import { mintDecisionId, mintDraftId } from '../domain/ids.js';
 import { freezePins } from '../domain/links.js';
 import { phaseAfterGate } from '../domain/lifecycle.js';
 import { nextState } from '../domain/versioning.js';
-import { gateIn, profileIn, typeIn } from '../domain/workspace-definition.js';
-import { labelsFor } from '../domain/labels.js';
+import { acceptingOutcome, gateIn, profileIn, typeIn } from '../domain/workspace-definition.js';
 import type {
   Artifact,
   Attribution,
@@ -34,35 +27,13 @@ import type {
   Draft,
   EvaluationResult,
   Materiality,
-  Principal,
   Version,
 } from '../domain/types.js';
 import { NotFound, Refused, type Actor } from './artifacts.js';
+import { GateViewService, type DecisionContext, type GateView } from './gate-view.js';
 import type { LoadedWorkspace } from './workspaces.js';
 
-export interface GateView {
-  gate: string;
-  /** What the gate is called to a reader, and what it asks — from the definition, never an id. */
-  title: string;
-  description?: string;
-  decides_on: string;
-  type_title: string;
-  artifact: string;
-  ordinal: number;
-  requirements: Requirement[];
-  open: boolean;
-  may_decide: boolean;
-  may_decide_reason: string;
-  outcomes: string[];
-  /** Outcome id → the word on the button. The record carries the id; the person read the label. */
-  outcome_labels: Record<string, string>;
-  attribution_profile: {
-    id: string;
-    required: string[];
-    optional: string[];
-    field_labels: Record<string, string>;
-  };
-}
+export type { DecisionContext, GateView } from './gate-view.js';
 
 export interface DecideInput {
   gate: string;
@@ -73,16 +44,6 @@ export interface DecideInput {
   attribution: Attribution;
   /** Required when the gate declares `records_materiality` — a publication gate (ADR-0010). */
   materiality?: Materiality;
-}
-
-export interface DecisionContext {
-  decider: Principal;
-  roles: string[];
-  routed: string[];
-  assigned: string[];
-  /** Principals a decision names, pre-loaded so the attribution check stays a pure function. */
-  directory: Map<string, Principal>;
-  acceptances: AcceptanceState[];
 }
 
 export class DecisionService {
@@ -121,68 +82,14 @@ export class DecisionService {
     return first?.proposed_by ?? '';
   }
 
-  /** Everything the console needs to render the decision screen, before anything is decided. */
+  /** Everything the console needs to render the decision screen. Read-only; lives in `gate-view.ts`. */
   async view(
     gateId: string,
     artifactId: string,
     ordinal: number,
     context: DecisionContext,
   ): Promise<GateView> {
-    const gate = this.gateOrThrow(gateId);
-    const { version, evaluations } = await this.load(artifactId, ordinal);
-
-    if (version.type !== gate.decides_on) {
-      throw new Refused(
-        `\`${gate.id}\` decides on \`${gate.decides_on}\`, and \`${artifactId}\` is a \`${version.type}\`.`,
-      );
-    }
-
-    const requirements = gateRequirements({
-      gate,
-      facets: version.facets,
-      provenance: version.provenance,
-      evaluations,
-      subject_digest: version.digest,
-      acceptances: context.acceptances,
-    });
-
-    const verdict = mayDecide({
-      gate,
-      decider: context.decider,
-      roles: context.roles,
-      routed: context.routed,
-      assigned: context.assigned,
-      proposed_by: version.proposed_by,
-      created_by: await this.creatorOf(artifactId),
-    });
-
-    const profile = profileIn(this.workspace.definition, gate.attribution_profile)!;
-    const labels = labelsFor(this.workspace.definition);
-    const gateLabel = labels.gates[gate.id]!;
-
-    return {
-      gate: gate.id,
-      title: gateLabel.title,
-      ...(gateLabel.description ? { description: gateLabel.description } : {}),
-      decides_on: gate.decides_on,
-      type_title: labels.types[gate.decides_on]?.title ?? gate.decides_on,
-      artifact: artifactId,
-      ordinal,
-      requirements,
-      open: gateIsOpen(requirements),
-      may_decide: verdict.allowed,
-      may_decide_reason: verdict.reason,
-      outcomes: gate.outcomes,
-      outcome_labels: gateLabel.outcomes,
-      attribution_profile: {
-        id: profile.id,
-        required: profile.required,
-        optional: profile.optional,
-        field_labels: Object.fromEntries(
-          [...profile.required, ...profile.optional].map((f) => [f, labels.attribution[f] ?? f]),
-        ),
-      },
-    };
+    return new GateViewService(this.handle, this.workspace).view(gateId, artifactId, ordinal, context);
   }
 
   /**
@@ -250,7 +157,7 @@ export class DecisionService {
       );
     }
 
-    const accepted = input.outcome === 'approve' || input.outcome === 'accept';
+    const accepted = acceptingOutcome(gate) === input.outcome;
     const reopens = gate.reopens_on === input.outcome;
     const now = new Date().toISOString();
 

@@ -2,15 +2,16 @@
 
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Button, Notice, SectionTitle } from '@/components/atoms';
+import { Button, Notice } from '@/components/atoms';
+import type { OutcomeConsequence } from '@/lib/types';
 
 /**
  * The outcome control.
  *
- * Each option states its consequence in the option itself, because a decision whose effects are
- * invisible is one nobody can take responsibly. The reasoning box is not optional decoration: it is
- * carried onto the decision permanently, and it is what a reader five years from now has instead of
- * the conversation you are having now.
+ * Each option carries the effects the api computed for it, so what the button says it will do is
+ * what the service will do — the console no longer guesses from the outcome's name. The reasoning
+ * box is not optional decoration: it is carried onto the decision permanently, and it is what a
+ * reader five years from now has instead of the conversation you are having now.
  */
 export function DecideForm({
   workspace,
@@ -18,34 +19,28 @@ export function DecideForm({
   artifact,
   ordinal,
   outcomes,
-  outcomeLabels,
   required,
   optional,
   fieldLabels,
-  acceptedOrdinal,
-  hasPin,
 }: {
   workspace: string;
   gate: string;
   artifact: string;
   ordinal: number;
-  outcomes: string[];
-  /** Outcome id → the word on the button. The record carries the id; the person reads the label. */
-  outcomeLabels: Record<string, string>;
+  outcomes: OutcomeConsequence[];
   required: string[];
   optional: string[];
   fieldLabels: Record<string, string>;
-  acceptedOrdinal?: number;
-  hasPin: boolean;
 }) {
   const router = useRouter();
-  const [outcome, setOutcome] = useState(outcomes[0] ?? '');
+  const [outcome, setOutcome] = useState(outcomes.find((o) => !o.blocked)?.outcome ?? '');
   const [reasoning, setReasoning] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const attributionFields = [...required, ...optional].filter((f) => f !== 'accountable' && f !== 'acting');
+  const chosen = outcomes.find((o) => o.outcome === outcome);
 
   async function submit() {
     setBusy(true);
@@ -81,74 +76,71 @@ export function DecideForm({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-2.5">
-        <SectionTitle>Outcome</SectionTitle>
+      <div className="flex flex-col gap-2" role="radiogroup" aria-label="Outcome">
         {outcomes.map((option) => (
           <label
-            key={option}
-            className={`flex cursor-pointer items-start gap-2.5 rounded border p-3 text-sm ${
-              outcome === option ? 'border-accent bg-accent-soft' : 'border-rule'
+            key={option.outcome}
+            className={`flex items-start gap-3 rounded border p-3 text-sm ${
+              option.blocked
+                ? 'cursor-not-allowed border-rule opacity-60'
+                : outcome === option.outcome
+                  ? 'cursor-pointer border-accent bg-accent-soft'
+                  : 'cursor-pointer border-rule'
             }`}
           >
             <input
               type="radio"
               name="outcome"
-              value={option}
-              checked={outcome === option}
-              onChange={() => setOutcome(option)}
+              value={option.outcome}
+              checked={outcome === option.outcome}
+              disabled={Boolean(option.blocked)}
+              onChange={() => setOutcome(option.outcome)}
               className="sr-only"
             />
             <span
-              className={`mt-1 h-3 w-3 flex-none rounded-full border ${
-                outcome === option ? 'border-4 border-accent' : 'border-rule-strong'
+              className={`mt-1 h-3.5 w-3.5 flex-none rounded-full border ${
+                outcome === option.outcome ? 'border-4 border-accent' : 'border-rule-strong'
               }`}
+              aria-hidden
             />
-            <span className="flex flex-col gap-px">
-              <b>{outcomeLabels[option] ?? option}</b>
-              <span className="text-2xs text-muted">
-                {consequence(option, ordinal, acceptedOrdinal, hasPin)}
-              </span>
+            <span className="flex flex-col gap-0.5">
+              <b className="text-base">{option.label}</b>
+              <span className="text-2xs text-muted">{option.blocked ?? option.effects[0]}</span>
             </span>
           </label>
         ))}
       </div>
 
       {attributionFields.length > 0 ? (
-        <div className="flex flex-col gap-2">
-          <SectionTitle>
-            Attribution{' '}
-            <span className="font-normal text-faint">— required by this gate&rsquo;s profile</span>
-          </SectionTitle>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-            {attributionFields.map((field) => (
-              <label key={field} className="flex flex-col gap-1">
-                <span className="text-2xs text-faint">
-                  {fieldLabels[field] ?? field}
-                  {required.includes(field) ? ' *' : ''}
-                </span>
-                <input
-                  value={fields[field] ?? ''}
-                  onChange={(e) => setFields({ ...fields, [field]: e.target.value })}
-                  className="rounded border border-rule-strong bg-surface px-2.5 py-1.5 text-sm"
-                />
-              </label>
-            ))}
-          </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {attributionFields.map((field) => (
+            <label key={field} className="flex flex-col gap-1">
+              <span className="text-2xs text-faint">
+                {fieldLabels[field] ?? field}
+                {required.includes(field) ? ' *' : ''}
+              </span>
+              <input
+                value={fields[field] ?? ''}
+                onChange={(e) => setFields({ ...fields, [field]: e.target.value })}
+                className="rounded border border-rule-strong bg-surface px-2.5 py-2 text-base sm:text-sm"
+              />
+            </label>
+          ))}
         </div>
       ) : null}
 
-      <div className="flex flex-col gap-1.5">
-        <SectionTitle>
-          Reasoning <span className="font-normal text-faint">— carried onto the decision, permanently</span>
-        </SectionTitle>
+      <label className="flex flex-col gap-1">
+        <span className="text-2xs text-faint">
+          Why — one or two sentences, kept with the decision permanently
+        </span>
         <textarea
           rows={3}
           value={reasoning}
           onChange={(e) => setReasoning(e.target.value)}
-          className="w-full rounded border border-rule-strong bg-surface px-2.5 py-2 text-sm"
-          placeholder="What made this the right call, in one or two sentences."
+          className="w-full rounded border border-rule-strong bg-surface px-2.5 py-2 text-base sm:text-sm"
+          placeholder="What made this the right call."
         />
-      </div>
+      </label>
 
       {error ? (
         <Notice tone="hard" title="The decision was refused, and the refusal is on the record.">
@@ -156,27 +148,14 @@ export function DecideForm({
         </Notice>
       ) : null}
 
-      <Button variant="primary" onClick={submit} disabled={busy || !outcome} className="w-full py-2">
-        {busy ? 'Recording…' : 'Record decision'}
+      <Button
+        variant="primary"
+        onClick={submit}
+        disabled={busy || !chosen || Boolean(chosen.blocked)}
+        className="w-full py-3 text-base"
+      >
+        {busy ? 'Recording…' : chosen ? `${chosen.label} — record my decision` : 'Record decision'}
       </Button>
     </div>
   );
-}
-
-function consequence(
-  outcome: string,
-  ordinal: number,
-  acceptedOrdinal: number | undefined,
-  hasPin: boolean,
-): string {
-  if (outcome === 'approve' || outcome === 'accept' || outcome === 'publish') {
-    const supersedes =
-      acceptedOrdinal && acceptedOrdinal !== ordinal ? `, @${acceptedOrdinal} becomes superseded` : '';
-    const pin = hasPin ? ', and any pinned link freezes to what is accepted now' : '';
-    return `@${ordinal} becomes accepted${supersedes}, the phase moves on${pin}.`;
-  }
-  if (outcome === 'request_changes') {
-    return `Opens a new draft based on @${ordinal} carrying your reasoning. @${ordinal} stays in the record — the loop is visible, not erased.`;
-  }
-  return `@${ordinal} is refused and stays in the record. Silence is not an outcome, so the refusal is recorded with your reasoning.`;
 }

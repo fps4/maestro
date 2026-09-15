@@ -14,6 +14,7 @@ import type {
   Acceptance,
   Artifact,
   Decision,
+  DecisionPacket,
   Draft,
   GateView,
   Labels,
@@ -128,6 +129,14 @@ export async function fetchGateView(gate: string, artifact: string, ordinal: num
     `/v1/workspaces/${await ws()}/gates/${gate}/${artifact}/${ordinal}`,
   );
   return view;
+}
+
+/** The decider's packet — the whole decision screen in one call, in plain language. */
+export async function fetchPacket(gate: string, artifact: string, ordinal: number): Promise<DecisionPacket> {
+  const { packet } = await get<{ packet: DecisionPacket }>(
+    `/v1/workspaces/${await ws()}/gates/${gate}/${artifact}/${ordinal}/packet`,
+  );
+  return packet;
 }
 
 export async function fetchStandards(): Promise<StandardSummary[]> {

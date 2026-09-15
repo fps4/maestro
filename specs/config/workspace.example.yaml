@@ -77,6 +77,8 @@ gates:
     owner:    { resolver: routing_table, table: ./reviewers.yaml, key: functional_reviewer }
     outcomes: [approve, request_changes, reject]
     outcome_labels: { approve: Approve, request_changes: Ask for changes, reject: Reject }
+    # `approve` accepts by convention. A gate whose accepting outcome is called anything else must
+    # say so — `accepts_on: publish` — because the service does not know what "publish" means.
     blocking: true
     requires:
       confirmed_facets: true     # agent-extracted facets cannot reach a gate unconfirmed

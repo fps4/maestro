@@ -27,10 +27,11 @@ import { ArtifactService, NotFound, Refused } from '../services/artifacts.js';
 import { AcceptanceService, CatalogueReader } from '../services/catalogue.js';
 import { DecisionService } from '../services/decisions.js';
 import { LineageService } from '../services/lineage.js';
+import { PacketService } from '../services/packet.js';
 import { PrincipalDirectory } from '../services/principals.js';
-import { renderBody } from '../services/render.js';
+import { renderVersion } from '../services/render.js';
 import type { UrlSigner } from '../services/attachments.js';
-import type { EvaluationResult, Principal, Version } from '../domain/types.js';
+import type { EvaluationResult, Principal } from '../domain/types.js';
 import type { Config } from '../config.js';
 
 export interface RouteDeps extends ContextDeps {
@@ -38,20 +39,6 @@ export interface RouteDeps extends ContextDeps {
   verifier: TokenVerifier;
   /** Signs short-lived URLs for attachment keys. Absent when no object storage is configured. */
   signUrls?: UrlSigner;
-}
-
-/**
- * Render a version's body with its attachments resolved.
- *
- * URLs are signed first, then rendering runs synchronously over the result — so an image is either
- * resolved for every reader or resolved for none, never resolved on the second attempt.
- */
-async function renderVersion(version: Version, signUrls: UrlSigner | undefined) {
-  const urls = signUrls ? await signUrls(version.attachments.map((a) => a.key)) : new Map<string, string>();
-  return renderBody(version.body, version.attachments, (attachmentId) => {
-    const attachment = version.attachments.find((a) => a.id === attachmentId);
-    return attachment ? urls.get(attachment.key) : undefined;
-  });
 }
 
 const body = z.object({ format: z.string(), content: z.string() });
@@ -287,6 +274,30 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     const acceptances = await svc.acceptances.statesFor(version.catalogue_refs);
     return {
       view: await svc.decisions.view(gate, id, ordinal, {
+        decider: ctx.principal,
+        roles: ctx.roles,
+        routed: [],
+        assigned: ctx.gates,
+        directory: new Map(),
+        acceptances,
+      }),
+    };
+  });
+
+  /**
+   * The decider's packet: everything a person needs to decide, in one call and in plain language.
+   * The same object reaches the console and MCP, so an agent explaining a decision to a sponsor is
+   * reading what the sponsor's screen reads.
+   */
+  app.get('/v1/workspaces/:ws/gates/:gate/:id/:ordinal/packet', async (request) => {
+    const { ws: workspace, gate, id, ordinal } = gateParams.parse(request.params);
+    const ctx = await context(request, workspace);
+    const svc = services(ctx);
+    const version = await svc.artifacts.getVersion(id, ordinal);
+    const acceptances = await svc.acceptances.statesFor(version.catalogue_refs);
+    const packets = new PacketService(ctx.handle, ctx.workspace, deps.signUrls);
+    return {
+      packet: await packets.build(gate, id, ordinal, {
         decider: ctx.principal,
         roles: ctx.roles,
         routed: [],

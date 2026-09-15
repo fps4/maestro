@@ -11,6 +11,7 @@ import {
   Notice,
   PageTitle,
   Provenance,
+  Rendered,
   Sealed,
   SectionTitle,
   shortDigest,
@@ -70,13 +71,7 @@ export default async function VersionPage({ params }: { params: Promise<{ id: st
             </Notice>
           ) : null}
 
-          {/* Rendered server-side against a strict allow-list. Never `dangerouslySetInnerHTML` over
-              raw authored content — bodies are written by humans and agents and read by other people
-              in the same workspace. */}
-          <article
-            className="max-w-none rounded border border-rule-strong bg-surface px-4 py-3 text-sm leading-[1.65] [&_a]:underline [&_code]:font-mono [&_code]:text-xs [&_h2]:mb-1 [&_h2]:mt-4 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:mt-3 [&_h3]:font-semibold [&_li]:ml-5 [&_ol]:mb-2 [&_ol]:list-decimal [&_p]:mb-2 [&_table]:w-full [&_td]:border-b [&_td]:border-rule [&_td]:py-1 [&_th]:border-b [&_th]:border-rule-strong [&_th]:py-1 [&_th]:text-left [&_ul]:mb-2 [&_ul]:list-disc"
-            dangerouslySetInnerHTML={{ __html: rendered?.html ?? '' }}
-          />
+          <Rendered html={rendered?.html ?? ''} />
         </div>
 
         <div className="flex flex-col gap-4">

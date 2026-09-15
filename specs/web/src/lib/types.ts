@@ -146,6 +146,83 @@ export interface GateView {
   };
 }
 
+export interface OutcomeConsequence {
+  outcome: string;
+  label: string;
+  accepts: boolean;
+  reopens: boolean;
+  effects: string[];
+  blocked?: string;
+}
+
+/** Everything a person needs to decide, in one call and in plain language. Built by the api. */
+export interface DecisionPacket {
+  gate: {
+    id: string;
+    title: string;
+    description?: string;
+    decides_on: string;
+    type_title: string;
+    type_description?: string;
+  };
+  subject: {
+    artifact: string;
+    ordinal: number;
+    title: string;
+    state: VersionState;
+    digest: string;
+    phase: string;
+    phase_label: string;
+    proposed_by: string;
+    proposed_at: string;
+    contributors: Contributor[];
+  };
+  document: { format: string; html: string; markdown: string; unresolved: string[] };
+  facets: Array<{
+    field: string;
+    label: string;
+    description?: string;
+    value: unknown;
+    source: 'declared' | 'extracted' | 'reconstructed' | 'unattributed';
+    confirmed: boolean;
+  }>;
+  since: null | {
+    ordinal: number;
+    state: VersionState;
+    decided_at?: string;
+    outcome?: { id: string; label: string };
+    facets: Array<FacetChange & { label: string }>;
+    links: { added: Link[]; removed: Link[]; repointed: Array<{ type: string; before: Link; after: Link }> };
+    body: { unchanged: boolean; added_lines: number; removed_lines: number };
+  };
+  checks: Array<
+    Requirement & {
+      findings?: Array<{
+        standard?: string;
+        outcome: 'met' | 'unmet' | 'not_applicable' | 'unsupported';
+        detail?: string;
+      }>;
+    }
+  >;
+  open: boolean;
+  decider: {
+    may_decide: boolean;
+    reason: string;
+    outcomes: OutcomeConsequence[];
+    attribution: { required: string[]; optional: string[]; field_labels: Record<string, string> };
+  };
+  history: Array<{
+    ordinal: number;
+    gate: string;
+    gate_title: string;
+    outcome: string;
+    outcome_label: string;
+    decided_by: string;
+    decided_at: string;
+    reasoning?: string;
+  }>;
+}
+
 export interface FacetChange {
   field: string;
   kind: 'added' | 'removed' | 'changed';

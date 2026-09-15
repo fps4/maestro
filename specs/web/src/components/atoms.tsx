@@ -171,6 +171,25 @@ export function Notice({
   );
 }
 
+/**
+ * A body rendered server-side against a strict allow-list.
+ *
+ * The only place `dangerouslySetInnerHTML` is used, and only over html the api sanitised. Bodies
+ * are written by humans and agents and read by other people in the same workspace; raw authored
+ * content never reaches this element.
+ */
+export function Rendered({ html, className }: { html: string; className?: string }) {
+  return (
+    <article
+      className={cn(
+        'max-w-none rounded border border-rule-strong bg-surface px-4 py-3 text-sm leading-[1.65] [&_a]:underline [&_code]:font-mono [&_code]:text-xs [&_h2]:mb-1 [&_h2]:mt-4 [&_h2]:text-base [&_h2]:font-semibold [&_h3]:mb-1 [&_h3]:mt-3 [&_h3]:font-semibold [&_li]:ml-5 [&_ol]:mb-2 [&_ol]:list-decimal [&_p]:mb-2 [&_table]:w-full [&_td]:border-b [&_td]:border-rule [&_td]:py-1 [&_th]:border-b [&_th]:border-rule-strong [&_th]:py-1 [&_th]:text-left [&_ul]:mb-2 [&_ul]:list-disc',
+        className,
+      )}
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
+}
+
 export function KeyValue({ rows }: { rows: Array<[ReactNode, ReactNode]> }) {
   return (
     <dl className="grid grid-cols-[auto,1fr] items-baseline gap-x-3.5 gap-y-1 text-xs">

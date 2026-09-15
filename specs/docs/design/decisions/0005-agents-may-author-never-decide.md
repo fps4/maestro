@@ -11,8 +11,8 @@ related:
 
 ## Context
 
-Both known consumers state the same rule in their own words. maestro: *"agents propose, humans
-dispose"* — an agent produces artifacts, runs the gates, reports status, and never decides one. adel:
+Both known consumers state the same rule in their own words. maestro v1: *"agents propose, humans
+dispose"* — an agent produces artifacts, runs the gates, reports status, and never decides one. maestro:
 a named human is accountable for every governed decision, and agents cannot hold accountability.
 
 Both enforce it in their own application logic today. That is where such rules erode — the

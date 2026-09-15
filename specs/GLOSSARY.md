@@ -1,9 +1,11 @@
 # Glossary
 
 The service ships no domain vocabulary (ADR-0001). These are the generic terms and what each maps to
-in the two consumers that shaped the model.
+in the two consumers that shaped the model. *maestro* is the governed application platform designed in
+`../maestro`; *maestro v1* is its retired first iteration, an agentic delivery platform, kept as the
+second consumer. (Until 2026-09-15 these columns read *adel* and *maestro*.)
 
-| Term | Means | adel | maestro |
+| Term | Means | maestro | maestro v1 |
 |---|---|---|---|
 | **Workspace** | The confidentiality and ownership boundary. Owns its definitions and everything inside. Nothing crosses one | A tenant | The organisation |
 | **Artifact** | A lineage of a declared type, with a stable id | A business case, a specification | A functional spec, a technical design |
@@ -34,15 +36,15 @@ in the two consumers that shaped the model.
 The question a new consumer gets wrong: *what must never leak, and what must be queryable together?*
 
 Cross-workspace queries do not exist (ADR-0006), so the workspace has to sit **above everything you
-need to see at once**. adel answers "tenant" because its portfolio queries across every application
-within one. maestro answers "the organisation" because a charter is shared across products — mapping
+need to see at once**. maestro answers "tenant" because its portfolio queries across every application
+within one. maestro v1 answers "the organisation" because a charter is shared across products — mapping
 a workspace to a product would make that link impossible.
 
 ## Vocabulary across services
 
 Three services meet in a consumer's code, and two rules keep them from fusing.
 
-| Concept | specs-service | adel | identity-service |
+| Concept | specs-service | maestro | identity-service |
 |---|---|---|---|
 | Confidentiality boundary | **Workspace** | Tenant | *none* — ADR-0018 removed it |
 | Physical instance | *not modelled* | Deployment (a choice, not an entity) | Deployment = realm |
@@ -67,5 +69,5 @@ wiki, which §10 of the architecture names as the failure mode to guard against.
 **Approval workflow.** The service holds gates and decisions; it does not route, escalate or remind.
 That is orchestration and belongs to the consumer.
 
-**Tenant.** Too specific. A workspace is a tenant only in a multi-tenant consumer; in maestro it is
+**Tenant.** Too specific. A workspace is a tenant only in a multi-tenant consumer; in maestro v1 it is
 an organisation, and one word meaning two things is worse than a neutral one.

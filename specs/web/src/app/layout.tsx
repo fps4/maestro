@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
-  title: 'mstr-specs',
+  title: 'maestro-specs',
   description:
     'A governed specification service — specifications, standards, and the bindings that connect them.',
 };

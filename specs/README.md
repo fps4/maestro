@@ -19,8 +19,14 @@ Two consumers shaped the model, and the generic core is their overlap:
 
 | | Artifacts | Gates |
 |---|---|---|
-| **adel** (governed delivery platform) | Opportunity → Business case → Specification; Intake assessment | Explore, Assess, specification, release |
-| **maestro** (agentic delivery platform) | Charter → Functional spec → Technical design + tasks | Functional, technical design, technical merge |
+| **maestro** (governed application platform) | Opportunity → Business case → Specification; Intake assessment | Explore, Assess, specification, release |
+| **maestro v1** (agentic delivery platform, retired) | Charter → Functional spec → Technical design + tasks | Functional, technical design, technical merge |
+
+**Naming.** *maestro* is the governed application platform whose design lives in
+[`../maestro`](../maestro). *maestro v1* is the first iteration of that project — an agentic delivery
+platform, retired, its code being deleted — and it stays here because it is the second consumer that
+shaped the model. Earlier revisions of this repository called the first *adel* and the second
+*maestro*; that vocabulary is gone.
 
 Neither vocabulary is in the code. **Artifact types, links, gates and lifecycles are configuration**
 ([ADR-0001](docs/design/decisions/0001-artifact-types-are-configuration.md)) — a workspace declares
@@ -59,7 +65,7 @@ a real editor and a trustworthy approval live in one service
 ## Project Layout
 
 ```
-mstr-specs/
+maestro-specs/
  ├── api/              # REST API + MCP server. domain/ is pure; a lint rule keeps it that way
  ├── web/              # The console (Next.js) — author, review, decide, read the standards
  ├── config/
@@ -72,7 +78,7 @@ mstr-specs/
 ## Core model
 
 ```
-Workspace                  the confidentiality boundary. adel maps a tenant; maestro its organisation
+Workspace                  the confidentiality boundary. maestro maps a tenant; maestro v1 its organisation
   └── Artifact             a lineage, of a declared type
         ├── Draft          mutable. Where authoring happens
         └── Version        immutable snapshot of a draft
@@ -86,26 +92,31 @@ Gate → Decision            immutable, attributed to a named human. The service
 ## Quick Start
 
 Requires a **MongoDB replica set** — the transactional outbox needs multi-document transactions, so a
-standalone `mongod` is not supported, including in development.
+standalone `mongod` is not supported, including in development. The compose stack provides one.
 
-1. Copy `service/.env.example` to `.env`:
-   - `MONGO_URI`, `MONGO_CONTROL_DB`
-   - `OIDC_ISSUER`, `OIDC_AUDIENCE`, `OIDC_JWKS_URI` — your `identity-service` deployment
-   - `S3_ENDPOINT`, `S3_BUCKET` — MinIO locally
-   - `RECORD_SINK` — `local` (default) or `kafka`
-2. Register the service as an Application in `identity-service`, with the role catalogue
-   (`author`, `reviewer`, `workspace_admin`, `auditor`), redirect URIs for the console's domain, and
-   a client-credentials principal for agents.
-3. Apply a workspace definition:
-   ```bash
-   npm run workspace:apply -- config/workspace.yaml
-   ```
-4. Run:
-   ```bash
-   docker compose -f docker/compose.yaml -f docker/compose.dev.yaml up --build
-   ```
+```bash
+make up        # mongo replica set, MinIO, api, web — api on :8020, console on :8021
+make apply     # load config/workspaces/catalogue.yaml and maestro-platform.yaml
+make test      # after `make mongo`
+```
 
-Service on `PORT` (default `7310`), console on `3010`. Health at `GET /health`.
+`make help` lists the rest. Configuration is environment only — `api/src/config.ts` is the schema and
+every value has a local default:
+
+- `AUTH_MODE` — `dev` (default, no identity provider needed) or `jwks`, with `AUTH_JWKS_URL`,
+  `AUTH_ISSUER` and `AUTH_AUDIENCE` pointing at your `identity-service` deployment
+- `MONGO_URI`, `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_CONTROL_DB`, `MONGO_DB_PREFIX`
+- `S3_ENDPOINT`, `S3_BUCKET` — MinIO locally
+- `RECORD_SINK` — `local` (default) or `http` with `RECORD_SINK_URL`
+- `EVALUATOR_BASE` — optional; without it, evaluations are recorded but never requested
+
+Against a real `identity-service`, register the service as an Application with the role catalogue
+(`author`, `reviewer`, `workspace_admin`, `auditor`), a public client for the console, and a
+client-credentials principal for agents — `identity-service/config/seed.mstr-specs.yaml` is the
+structural seed the ds1 deployment uses. The deploy itself is `config/ds1/` plus
+`.github/workflows/deploy-ds1.yml`.
+
+Health at `GET /health`.
 
 ## API Summary
 

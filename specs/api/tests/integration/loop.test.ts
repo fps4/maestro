@@ -237,13 +237,88 @@ describe('gates', () => {
     });
   }
 
-  it('holds the gate shut until the required evaluation is recorded', async () => {
-    const version = await proposedCase('Awaiting evaluation');
+  it('records the builtin sufficiency verdict at propose, with one finding per required facet', async () => {
+    // The evaluator port's local default (ADR-0015): the facet schema, as findings. Explore opens
+    // on a deployment with nothing behind the port, and the reader sees what was checked.
+    const draft = await newBusinessCase(AUTHOR, 'Evaluated on propose');
+    const proposed = await call<{
+      version: { artifact: string; ordinal: number };
+      evaluations: Array<{ evaluator: string; status: string; verdict?: string }>;
+    }>(harness, 'POST', `${base()}/drafts/${draft.id}/propose`, { as: AUTHOR });
+    expect(proposed.body.evaluations).toEqual([
+      { evaluator: 'sufficiency', status: 'recorded', verdict: 'pass' },
+    ]);
+
+    const { artifact, ordinal } = proposed.body.version;
     const view = await call<{
       view: { open: boolean; requirements: Array<{ id: string; satisfied: boolean }> };
-    }>(harness, 'GET', `${base()}/gates/explore/${version.artifact}/${version.ordinal}`, { as: SPONSOR });
+    }>(harness, 'GET', `${base()}/gates/explore/${artifact}/${ordinal}`, { as: SPONSOR });
+    expect(view.body.view.requirements.find((r) => r.id === 'evaluation:sufficiency')!.satisfied).toBe(true);
+    expect(view.body.view.open).toBe(true);
+
+    const packet = await call<{
+      packet: {
+        checks: Array<{
+          id: string;
+          findings?: Array<{ standard: string; outcome: string; detail: string }>;
+        }>;
+      };
+    }>(harness, 'GET', `${base()}/gates/explore/${artifact}/${ordinal}/packet`, { as: SPONSOR });
+    const findings = packet.body.packet.checks.find((c) => c.id === 'evaluation:sufficiency')!.findings!;
+    expect(findings.map((f) => f.standard)).toEqual([
+      'schema:declared_outcome',
+      'schema:beneficiary',
+      'schema:personal_data_in_scope',
+      'schema:consequence_class',
+      'schema:decider',
+    ]);
+    expect(findings.every((f) => f.outcome === 'met')).toBe(true);
+    expect(findings[0]!.detail).toMatch(/^Declared outcome/);
+  });
+
+  it('holds a gate shut while its evaluator is unavailable, and says why', async () => {
+    // Conformance is an endpoint evaluator whose `${EVALUATOR_BASE}` this deployment does not set.
+    // Nothing is recorded, the gate says so, and propose reports the reason.
+    const created = await call<{ draft: { id: string } }>(harness, 'POST', `${base()}/drafts`, {
+      as: AUTHOR,
+      body: {
+        type: 'specification',
+        title: 'Awaiting conformance',
+        facets: {
+          class: 'generative',
+          acceptance_criteria: [{ id: 'AC-1', text: 'Something testable', priority: 'must', verify: 'test' }],
+          personal_data_in_scope: false,
+          consequence_class: 'c2',
+        },
+        provenance: Object.fromEntries(
+          ['class', 'acceptance_criteria', 'personal_data_in_scope', 'consequence_class'].map((f) => [
+            f,
+            { source: 'declared', by: 'x', at: '2026-08-01T00:00:00Z' },
+          ]),
+        ),
+        classification: { lawful_basis: 'contract', retention: '7y', personal_data: false },
+      },
+    });
+    const proposed = await call<{
+      version: { artifact: string; ordinal: number };
+      evaluations: Array<{ evaluator: string; status: string; reason?: string }>;
+    }>(harness, 'POST', `${base()}/drafts/${created.body.draft.id}/propose`, { as: AUTHOR });
+    expect(proposed.body.evaluations).toEqual([
+      expect.objectContaining({
+        evaluator: 'conformance',
+        status: 'unavailable',
+        reason: expect.stringMatching(/EVALUATOR_BASE/),
+      }),
+    ]);
+
+    const { artifact, ordinal } = proposed.body.version;
+    const view = await call<{
+      view: { open: boolean; requirements: Array<{ id: string; satisfied: boolean; detail: string }> };
+    }>(harness, 'GET', `${base()}/gates/specification_gate/${artifact}/${ordinal}`, { as: SPONSOR });
+    const requirement = view.body.view.requirements.find((r) => r.id === 'evaluation:conformance')!;
+    expect(requirement.satisfied).toBe(false);
+    expect(requirement.detail).toMatch(/no verdict has been recorded/);
     expect(view.body.view.open).toBe(false);
-    expect(view.body.view.requirements.find((r) => r.id === 'evaluation:sufficiency')!.satisfied).toBe(false);
   });
 
   it('refuses a verdict recorded against a different digest', async () => {

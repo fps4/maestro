@@ -34,7 +34,7 @@ resolution. No local credential store, no fallback, no development shortcut that
 | Port | Local default | Production adapter |
 |---|---|---|
 | Record sink | Outbox collection, relayed to a log | Kafka, or an external durable spine |
-| Evaluator | Absent — evaluations are optional | HTTP callout |
+| Evaluator | `builtin: facet_schema` — the type's schema, as findings *(amended by ADR-0015; was "absent")* | HTTP callout, `${VAR}` resolved from the environment |
 | Notifier | Log line | HTTP webhook |
 | Object storage | MinIO | S3 |
 

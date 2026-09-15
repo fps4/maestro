@@ -15,7 +15,7 @@ related:
 
 # specs-service — architecture
 
-**Status:** Draft v0.7
+**Status:** Draft v0.8
 **Scope:** The whole product. Model, authoring, rendering, configuration, ports, isolation,
 interfaces, storage, build order.
 **Shape:** A full end-to-end service with its own domain, its own console, and SSO through
@@ -298,6 +298,11 @@ principal may decide, and what was decided before (ADR-0013). The same object is
 `decision_packet` MCP tool, so an agent explaining a decision reads what the sponsor reads — and,
 like everything on MCP, it carries no way to decide.
 
+**An author can ask what a draft still needs.** `GET /drafts/:id/readiness` turns the type's schema
+into the questions it asks — each required facet not yet answered, in the schema's words, plus what
+the gate ahead will require — split into what stops *propose* and what the gate will refuse
+(ADR-0015). The editor shows it and re-asks after every save; over MCP it is `draft_readiness`.
+
 **A reviewer may ask.** A question attaches to an immutable version, never to a draft, and never
 changes it: it is a fact about the version, like a decision (ADR-0014). Anyone asks, anyone answers
 — an agent's answer is marked as an agent's — and a human closes it. A gate may declare
@@ -352,7 +357,7 @@ port with a working local default.
 | Port | Local default | Production adapter | Consumer |
 |---|---|---|---|
 | **Record sink** | Outbox collection, relayed to a log | Kafka, or an external durable spine | maestro points this at its record spine, which becomes authoritative |
-| **Evaluator** | None — evaluations optional | HTTP callout; result recorded on the version | maestro: standards engine. maestro v1: spec-lint, EARS check |
+| **Evaluator** | `builtin: facet_schema` — the type's own schema, one finding per required facet (ADR-0015) | HTTP callout, `${VAR}` resolved from the environment; result recorded on the version | maestro: standards engine behind `conformance`. maestro v1: spec-lint, EARS check |
 | **Notifier** | Log line | HTTP webhook; notification service | Gate awaiting a decision; changes requested |
 | **Object storage** | MinIO | S3 | Attachments, and body overflow |
 | **Principal directory** | — | `identity-service` **(required)** | Authentication and attribution |
@@ -562,6 +567,7 @@ version is admitted on that test. Comments on drafts, page trees and freeform sp
 | D14 | Every identifier a workspace declares has a label, and no surface shows the identifier | [ADR-0012](decisions/0012-labels-not-identifiers.md) |
 | D15 | The decision page is the product; the decider's packet is one call shared by console and MCP; the accepting outcome is declared | [ADR-0013](decisions/0013-the-decision-page-is-the-product.md) |
 | D16 | A question on a version is a fact about it: asked by anyone, answered by anyone, closed by a human, never a mutation; a gate may declare `questions_resolved` | [ADR-0014](decisions/0014-questions-on-a-version.md) |
+| D17 | The evaluator port has a floor (`builtin: facet_schema`) and an outbound call; both run at propose; a draft can ask its readiness | [ADR-0015](decisions/0015-the-evaluator-port-has-a-floor.md) |
 
 ---
 
@@ -606,6 +612,7 @@ Steps 1–7 are the product. Everything after makes it complete.
 
 | Version | Date | Change |
 |---|---|---|
+| 0.8 | 2026-09-15 | **The evaluator port has a floor, and the callout exists** (D17, ADR-0015). An evaluator is `builtin: facet_schema` or an `endpoint` with `${VAR}` resolved from the environment; both run at propose and on demand, and report `recorded` or `unavailable` with a reason. The committed definition makes sufficiency a builtin and leaves conformance an endpoint. **Readiness**: a draft's schema turned into the questions still to answer, split into what stops propose and what the gate will refuse; in the editor after every save, and over MCP. ADR-0002's port table amended; §5 and §3.4 updated. Standalone now runs the whole loop with nothing behind the port |
 | 0.7 | 2026-09-15 | **Questions on a version** (D16, ADR-0014). The one thing "not a wiki" wrongly excluded, admitted narrowly: a question attaches to an immutable version, never a draft, never changes it, is asked by anyone, answered by anyone with an agent's answer marked as such, and closed only by a human. Three events on the sink carrying a digest of the text, never the text. `requires.questions_resolved` on a gate, declared on the specification gate. Over MCP: list, ask, answer — no close. The decision page and the version page gain the panel; the packet carries `questions`. §2, §3.4 and §10 amended |
 | 0.6 | 2026-09-15 | **The decision page is the product** (D15, ADR-0013). One column, one call: the decider's packet returns what the gate asks, the document, the facts with their schema labels, what changed since the last *decided* version, the checks with findings, what each outcome would do (computed from the definition and stored state, with a refusal flagged before it happens), who may decide, and the history. The same object is the `decision_packet` MCP tool. The console's client-side `consequence()` is deleted. **The accepting outcome becomes declarative** (`accepts_on`), which fixes a latent defect: the catalogue's `publish` outcome would have recorded a standard as `rejected`. `gate-view.ts` extracted so the MCP import graph provably never reaches `DecisionService`, now enforced by lint. §2.7 and §3.4 added |
 | 0.5 | 2026-09-15 | **Labels beside identifiers** (D14, ADR-0012). The definition gains `description` on types and gates, `outcome_labels`, `phase_labels`, link `label` and attribution `field_labels`; the api returns the complete label set with a humanised fallback; the console renders labels and never an identifier a workspace could have named. The record is untouched. This is the first of the changes that turn the console from an auditor's surface into one a sponsor can use — the decision page and the decider's packet build on the descriptions this adds |

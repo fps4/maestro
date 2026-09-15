@@ -20,6 +20,7 @@ import type {
   Labels,
   Lineage,
   Question,
+  Readiness,
   RegisterRow,
   StandardSummary,
   Version,
@@ -118,6 +119,13 @@ export async function fetchLineage(id: string): Promise<Lineage> {
 export async function fetchDraft(id: string): Promise<Draft> {
   const { draft } = await get<{ draft: Draft }>(`/v1/workspaces/${await ws()}/drafts/${id}`);
   return draft;
+}
+
+export async function fetchReadiness(id: string): Promise<Readiness> {
+  const { readiness } = await get<{ readiness: Readiness }>(
+    `/v1/workspaces/${await ws()}/drafts/${id}/readiness`,
+  );
+  return readiness;
 }
 
 export async function fetchDrafts(): Promise<Draft[]> {

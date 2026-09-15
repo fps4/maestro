@@ -184,7 +184,12 @@ lifecycle:
     # clock rather than by a person — so it needs a transition kind that is neither propose nor gate.
     - { from: run, to: run, via: system }
 
+# Sufficiency is the facet schema, reported as findings — the port's local default (ADR-0015). It
+# is the floor of "does the case say enough", and it is what lets Explore open on a deployment with
+# no standards engine behind it. Conformance is a real evaluator: it needs the catalogue and a
+# standards engine, so it stays an endpoint, and until `EVALUATOR_BASE` is set the specification
+# gate honestly says "no verdict has been recorded".
 evaluators:
-  - { id: sufficiency, endpoint: "${EVALUATOR_BASE}/sufficiency", reads: facets }
-  - { id: intake_sufficiency, endpoint: "${EVALUATOR_BASE}/intake", reads: facets }
+  - { id: sufficiency, builtin: facet_schema }
+  - { id: intake_sufficiency, builtin: facet_schema }
   - { id: conformance, endpoint: "${EVALUATOR_BASE}/conformance", reads: facets }

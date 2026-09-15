@@ -17,6 +17,8 @@ import { mintArtifactId, mintDraftId } from '../domain/ids.js';
 import { confirmFacet, invalidateConfirmations } from '../domain/facets.js';
 import { assertLinksDeclared, assertPinsUnchanged } from '../domain/links.js';
 import { parseDuration, typeIn, initialPhase } from '../domain/workspace-definition.js';
+import { labelsFor } from '../domain/labels.js';
+import { draftReadiness, type Readiness } from '../domain/readiness.js';
 import { phaseAfterPropose } from '../domain/lifecycle.js';
 import { assertRevision, proposeVersion, recordContribution } from '../domain/versioning.js';
 import type {
@@ -240,6 +242,22 @@ export class ArtifactService {
     );
     if (!result) throw new Refused('This draft changed while you were confirming. Reload and try again.');
     return result;
+  }
+
+  /** What this draft still needs before it can be proposed, and what its gate will then ask. */
+  async readiness(id: string): Promise<Readiness> {
+    const draft = await this.getDraft(id);
+    const type = this.typeOrThrow(draft.type);
+    return draftReadiness({
+      draft,
+      type,
+      schema: (this.workspace.facet_schemas[draft.type] ?? {}) as Parameters<
+        typeof draftReadiness
+      >[0]['schema'],
+      issues: this.workspace.validator.check(draft.type, draft.facets),
+      def: this.workspace.definition,
+      labels: labelsFor(this.workspace.definition),
+    });
   }
 
   async discardDraft(id: string): Promise<void> {

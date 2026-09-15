@@ -18,6 +18,7 @@
 import { z } from 'zod';
 import { ArtifactService } from '../services/artifacts.js';
 import { AcceptanceService, CatalogueReader } from '../services/catalogue.js';
+import { EvaluationService } from '../services/evaluate.js';
 import { LineageService } from '../services/lineage.js';
 import { PacketService } from '../services/packet.js';
 import { QuestionService } from '../services/questions.js';
@@ -44,6 +45,7 @@ const services = (ctx: RequestContext) => {
     // to an agent as a signed URL it has no business forwarding.
     packets: new PacketService(ctx.handle, ctx.workspace, undefined),
     questions: new QuestionService(ctx.handle),
+    evaluations: new EvaluationService(ctx.handle, ctx.workspace),
   };
 };
 
@@ -152,6 +154,21 @@ export const TOOLS: McpTool[] = [
           acceptances,
         }),
       };
+    },
+  },
+  {
+    name: 'run_evaluations',
+    title: 'Run the evaluations a gate requires',
+    description:
+      'Re-run every evaluation any gate on this version’s type requires, and record the verdicts against its digest. Use it when a gate says "no verdict has been recorded" and an evaluator has since become available. It records facts about the version; it decides nothing.',
+    inputSchema: z.object({ artifact: z.string(), ordinal: z.number().int().positive() }),
+    async handler(ctx, input) {
+      const { artifact, ordinal } = z
+        .object({ artifact: z.string(), ordinal: z.number().int().positive() })
+        .parse(input);
+      const svc = services(ctx);
+      const version = await svc.artifacts.getVersion(artifact, ordinal);
+      return { evaluations: await svc.evaluations.run(version) };
     },
   },
   {
@@ -313,6 +330,17 @@ export const TOOLS: McpTool[] = [
     },
   },
   {
+    name: 'draft_readiness',
+    title: 'What a draft still needs',
+    description:
+      'What stops this draft from being proposed, and what its gate will ask once it is — each missing facet as the question the schema asks, each unconfirmed extraction, a missing classification or pinned link. Read this before proposing, and after every save: it is the difference between a proposal and a 422.',
+    inputSchema: z.object({ draft: z.string() }),
+    async handler(ctx, input) {
+      const { draft } = z.object({ draft: z.string() }).parse(input);
+      return { readiness: await services(ctx).artifacts.readiness(draft) };
+    },
+  },
+  {
     name: 'propose',
     title: 'Propose a version',
     description:
@@ -320,9 +348,12 @@ export const TOOLS: McpTool[] = [
     inputSchema: z.object({ draft: z.string() }),
     async handler(ctx, input) {
       const { draft } = z.object({ draft: z.string() }).parse(input);
-      const version = await services(ctx).artifacts.propose(draft, ctx.actor, 1_048_576);
+      const svc = services(ctx);
+      const version = await svc.artifacts.propose(draft, ctx.actor, 1_048_576);
+      const evaluations = await svc.evaluations.run(version);
       return {
         version,
+        evaluations,
         next: 'This version is `proposed`. A named human decides it at a gate; no MCP tool can.',
       };
     },

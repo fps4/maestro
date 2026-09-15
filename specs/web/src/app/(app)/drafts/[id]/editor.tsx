@@ -13,7 +13,7 @@ import {
   Provenance,
   SectionTitle,
 } from '@/components/atoms';
-import type { Draft } from '@/lib/types';
+import type { Draft, Readiness } from '@/lib/types';
 
 /**
  * The editing surface.
@@ -36,6 +36,7 @@ export function Editor({
   gateName,
   pinnedLink,
   classificationRequired,
+  readiness: initialReadiness,
 }: {
   workspace: string;
   draft: Draft;
@@ -43,6 +44,7 @@ export function Editor({
   gateName: string | null;
   pinnedLink: { id: string; to: string } | null;
   classificationRequired: boolean;
+  readiness: Readiness | null;
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState(initial);
@@ -51,7 +53,21 @@ export function Editor({
   const [status, setStatus] = useState<'saved' | 'saving' | 'dirty' | 'conflict'>('saved');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [readiness, setReadiness] = useState<Readiness | null>(initialReadiness);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Readiness is the schema's questions, re-asked after every save — so the checklist the author
+  // writes toward is never one revision behind what they typed.
+  const refreshReadiness = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/v1/workspaces/${workspace}/drafts/${draft.id}/readiness`);
+      if (!response.ok) return;
+      const payload = (await response.json()) as { readiness?: Readiness };
+      if (payload.readiness) setReadiness(payload.readiness);
+    } catch {
+      // A stale checklist is better than an error over one; the next save asks again.
+    }
+  }, [draft.id, workspace]);
 
   const unconfirmed = Object.entries(draft.provenance)
     .filter(([, p]) => p.source === 'extracted' && !p.confirmed_by)
@@ -82,8 +98,9 @@ export function Editor({
       setDraft(payload.draft);
       setStatus('saved');
       setError(null);
+      void refreshReadiness();
     },
-    [draft.id, draft.revision, workspace],
+    [draft.id, draft.revision, workspace, refreshReadiness],
   );
 
   // Autosave on a pause, not on every keystroke: a draft is saved continuously, but a request per
@@ -110,8 +127,10 @@ export function Editor({
         body: JSON.stringify({ fields: [field] }),
       });
       const payload = (await response.json()) as { draft?: Draft; message?: string };
-      if (payload.draft) setDraft(payload.draft);
-      else setError(payload.message ?? 'The confirmation was refused.');
+      if (payload.draft) {
+        setDraft(payload.draft);
+        void refreshReadiness();
+      } else setError(payload.message ?? 'The confirmation was refused.');
     } finally {
       setBusy(false);
     }
@@ -184,6 +203,8 @@ export function Editor({
           — the alternative would be overwriting someone else&rsquo;s work without either of you knowing.
         </Notice>
       ) : null}
+
+      {readiness ? <ReadinessCard readiness={readiness} gateName={gateName} /> : null}
 
       {blocked ? (
         <Notice
@@ -310,5 +331,67 @@ export function Editor({
         </div>
       </div>
     </>
+  );
+}
+
+/**
+ * What this draft still needs, in the schema's own words.
+ *
+ * Two lists, kept apart because they mean different things: what stops *propose* (the schema and
+ * the classification) and what the gate will then refuse (an unconfirmed extraction, an open
+ * question). Both are the author's to clear; only the first makes the button do nothing.
+ */
+function ReadinessCard({ readiness, gateName }: { readiness: Readiness; gateName: string | null }) {
+  const stopsPropose = readiness.blockers.filter((b) =>
+    ['facet_missing', 'facet_invalid', 'classification_missing'].includes(b.kind),
+  );
+  const gateWillRefuse = readiness.blockers.filter((b) => !stopsPropose.includes(b));
+
+  if (readiness.blockers.length === 0) {
+    return (
+      <Notice tone="ok" title="Ready to propose.">
+        Everything this type asks for is here.
+        {readiness.gates[0]
+          ? ` Once proposed, ${readiness.gates[0].title} will check: ${readiness.gates[0].requirements.join(' ')}`
+          : ''}
+      </Notice>
+    );
+  }
+
+  return (
+    <Card flat className="gap-2.5">
+      <SectionTitle>
+        Before you can propose{' '}
+        <span className="font-normal text-faint">
+          — {readiness.blockers.length} thing{readiness.blockers.length === 1 ? '' : 's'} still to do
+        </span>
+      </SectionTitle>
+      {stopsPropose.length > 0 ? (
+        <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-sm">
+          {stopsPropose.map((b) => (
+            <li key={`${b.kind}-${b.field ?? b.label}`}>
+              <b>{b.label}</b>
+              {b.description ? <span className="text-muted"> — {b.description}</span> : null}
+              <span className="block text-2xs text-faint">{b.detail}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {gateWillRefuse.length > 0 ? (
+        <>
+          <span className="text-2xs uppercase tracking-[0.05em] text-faint">
+            And before {gateName ?? 'the gate'} will open
+          </span>
+          <ul className="m-0 flex list-disc flex-col gap-1 pl-5 text-sm">
+            {gateWillRefuse.map((b) => (
+              <li key={`${b.kind}-${b.field ?? b.label}`}>
+                <b>{b.label}</b>
+                <span className="block text-2xs text-faint">{b.detail}</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+    </Card>
   );
 }

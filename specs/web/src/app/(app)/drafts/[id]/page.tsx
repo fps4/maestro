@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { fetchDefinition, fetchDraft } from '@/lib/api';
+import { fetchDefinition, fetchDraft, fetchReadiness } from '@/lib/api';
 import { currentWorkspace } from '@/lib/auth';
 import { Editor } from './editor';
 
@@ -22,7 +22,10 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
   }
 
   const workspace = await currentWorkspace();
-  const definition = await fetchDefinition().catch(() => null);
+  const [definition, readiness] = await Promise.all([
+    fetchDefinition().catch(() => null),
+    fetchReadiness(id).catch(() => null),
+  ]);
   const type = definition?.definition.types.find((t) => t.id === draft.type);
   const gate = definition?.definition.gates.find((g) => g.decides_on === draft.type);
 
@@ -34,6 +37,7 @@ export default async function DraftPage({ params }: { params: Promise<{ id: stri
       gateName={gate?.title ?? gate?.id ?? null}
       pinnedLink={type?.links.find((l) => l.pinned) ?? null}
       classificationRequired={type?.classification_required ?? false}
+      readiness={readiness}
     />
   );
 }

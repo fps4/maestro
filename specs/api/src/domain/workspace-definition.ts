@@ -197,12 +197,26 @@ const attributionProfile = z.object({
 
 export type AttributionProfile = z.infer<typeof attributionProfile>;
 
-const evaluatorDeclaration = z.object({
-  id: identifier,
-  endpoint: z.string(),
-  reads: z.literal('facets').default('facets'),
-  timeout_ms: z.number().int().positive().default(10_000),
-});
+/**
+ * An evaluator is an endpoint the service calls with a version's facets, or one of the built-ins
+ * the service carries as the port's local default (ADR-0015). `facet_schema` reports each required
+ * facet of the type's schema as a finding — the floor of sufficiency, and the reason a gate can
+ * open on a deployment with no standards engine behind it.
+ */
+const evaluatorDeclaration = z
+  .object({
+    id: identifier,
+    /** `${VAR}` segments resolve from the environment at call time; unresolved means unavailable. */
+    endpoint: z.string().optional(),
+    builtin: z.enum(['facet_schema']).optional(),
+    reads: z.literal('facets').default('facets'),
+    timeout_ms: z.number().int().positive().default(10_000),
+  })
+  .refine((e) => Boolean(e.endpoint) !== Boolean(e.builtin), {
+    message: 'an evaluator is either an `endpoint` or a `builtin`, not both and not neither',
+  });
+
+export type EvaluatorDeclaration = z.infer<typeof evaluatorDeclaration>;
 
 export const workspaceDefinitionSchema = z
   .object({
@@ -415,6 +429,10 @@ export function profileIn(def: WorkspaceDefinition, id: string): AttributionProf
 export function acceptingOutcome(gate: Pick<GateDeclaration, 'outcomes' | 'accepts_on'>): string | undefined {
   if (gate.accepts_on) return gate.accepts_on;
   return gate.outcomes.find((o) => o === 'approve' || o === 'accept');
+}
+
+export function evaluatorIn(def: WorkspaceDefinition, id: string): EvaluatorDeclaration | undefined {
+  return def.evaluators.find((e) => e.id === id);
 }
 
 export function gatesDecidingOn(def: WorkspaceDefinition, type: string): GateDeclaration[] {

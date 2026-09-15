@@ -135,14 +135,16 @@ Every write produces a draft or a **proposed** version. Only a gate decision acc
 | `POST /v1/attachments` | Upload. Content-addressed and deduplicated |
 | `GET /v1/gates/:gate/:id/:n/packet` | The decider's packet: everything a person needs to decide, in plain language, in one call |
 | `…/versions/:n/questions` | Ask a question of a version; answer one; a human closes it. Never a mutation |
+| `GET /v1/drafts/:id/readiness` | What a draft still needs, in the schema's words, before propose |
+| `POST …/versions/:n/evaluate` | Re-run the evaluations a gate requires; builtin or endpoint, per the definition |
 | `POST /v1/gates/:gate/decisions` | The gate's declared outcomes. Attributed, human-only |
 | `GET /v1/workspaces/:id/register` | Everything in flight, with lifecycle state |
 | `GET /v1/search` | Facets and bodies, within one workspace |
 | `GET /v1/export/:workspace` | The full chain of record, portable |
 
-**MCP** exposes reads, draft writes, propose, the decider's packet, and questions (list, ask,
-answer) — so agents author through it and can explain a pending decision to the human accountable
-for it — and **no decision surface at all**, and no way to close a question.
+**MCP** exposes reads, draft writes, readiness, propose, evaluations, the decider's packet, and
+questions (list, ask, answer) — so agents author through it and can explain a pending decision to
+the human accountable for it — and **no decision surface at all**, and no way to close a question.
 
 ## Documentation
 
@@ -156,7 +158,6 @@ Two planes: a **Docs** plane you read and a **Delivery** plane you track. Start 
 plus the MCP surface. 145 tests pass, including the loop through HTTP and the adversarial
 cross-workspace read.
 
-**Not built yet:** the evaluator port's outbound call (verdicts are recorded through the API but the
-service does not yet call out), the TypeScript SDK, export, and redaction. The catalogue holds no
+**Not built yet:** the TypeScript SDK, export, and redaction. The catalogue holds no
 real standards — the pack registry does not exist, and a fixture presented as a standard would be
 worse than an empty shelf.

@@ -120,6 +120,9 @@ lifecycle:
 # Evaluators — outbound only. The service calls out and records the verdict (architecture §4)
 # ---------------------------------------------------------------------------
 evaluators:
+  # `${VAR}` resolves from the environment when the evaluator is called; unresolved means the gate
+  # honestly says "no verdict has been recorded". `builtin: facet_schema` is the port's floor: the
+  # type's own schema, one finding per required facet, and it needs nothing behind it (ADR-0015).
   - { id: ears_lint,      endpoint: "${EVALUATOR_BASE}/ears",     reads: facets }
   - { id: spec_adherence, endpoint: "${EVALUATOR_BASE}/adhere",   reads: facets }
   - { id: sast,           endpoint: "${EVALUATOR_BASE}/sast",     reads: facets }

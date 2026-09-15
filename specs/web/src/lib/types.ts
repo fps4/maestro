@@ -169,6 +169,25 @@ export interface Question {
   resolved_by?: string;
 }
 
+/** What a draft still needs before it can be proposed, and what its gate will then ask. */
+export interface Readiness {
+  proposable: boolean;
+  blockers: Array<{
+    kind:
+      | 'facet_missing'
+      | 'facet_invalid'
+      | 'facet_unconfirmed'
+      | 'facet_unattributed'
+      | 'classification_missing'
+      | 'link_missing';
+    field?: string;
+    label: string;
+    description?: string;
+    detail: string;
+  }>;
+  gates: Array<{ gate: string; title: string; description?: string; requirements: string[] }>;
+}
+
 export interface OutcomeConsequence {
   outcome: string;
   label: string;

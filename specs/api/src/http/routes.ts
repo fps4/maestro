@@ -16,7 +16,6 @@ import {
   type RequestContext,
 } from '../auth/context.js';
 import { Unauthenticated, type TokenVerifier } from '../auth/verify.js';
-import { EVALUATIONS } from '../db/collections.js';
 import { AttributionRefused } from '../domain/attribution.js';
 import { FacetValidationError } from '../domain/facets.js';
 import { PinRefused } from '../domain/links.js';
@@ -26,13 +25,14 @@ import { labelsFor } from '../domain/labels.js';
 import { ArtifactService, NotFound, Refused } from '../services/artifacts.js';
 import { AcceptanceService, CatalogueReader } from '../services/catalogue.js';
 import { DecisionService } from '../services/decisions.js';
+import { EvaluationService } from '../services/evaluate.js';
 import { LineageService } from '../services/lineage.js';
 import { PacketService } from '../services/packet.js';
 import { PrincipalDirectory } from '../services/principals.js';
 import { QuestionService } from '../services/questions.js';
 import { renderVersion } from '../services/render.js';
 import type { UrlSigner } from '../services/attachments.js';
-import type { EvaluationResult, Principal } from '../domain/types.js';
+import type { Principal } from '../domain/types.js';
 import type { Config } from '../config.js';
 
 export interface RouteDeps extends ContextDeps {
@@ -105,6 +105,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
       lineage: new LineageService(ctx.handle, ctx.workspace),
       catalogue: reader,
       acceptances: new AcceptanceService(ctx.handle, reader),
+      evaluations: new EvaluationService(ctx.handle, ctx.workspace),
     };
   }
 
@@ -200,12 +201,23 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     return { draft: await services(ctx).artifacts.confirmFacets(id, fields, ctx.actor) };
   });
 
+  app.get('/v1/workspaces/:ws/drafts/:id/readiness', async (request) => {
+    const { ws: workspace, id } = ws.extend({ id: z.string() }).parse(request.params);
+    const ctx = await context(request, workspace);
+    return { readiness: await services(ctx).artifacts.readiness(id) };
+  });
+
   app.post('/v1/workspaces/:ws/drafts/:id/propose', async (request, reply) => {
     const { ws: workspace, id } = ws.extend({ id: z.string() }).parse(request.params);
     const ctx = await context(request, workspace);
     requireRole(ctx, 'author');
-    const version = await services(ctx).artifacts.propose(id, ctx.actor, config.BODY_CEILING_BYTES);
-    return reply.code(201).send({ version });
+    const svc = services(ctx);
+    const version = await svc.artifacts.propose(id, ctx.actor, config.BODY_CEILING_BYTES);
+    // The evaluations a gate requires run against the version as soon as it exists. They are facts
+    // about the digest, recorded outside the proposal's transaction; an unavailable evaluator is
+    // reported here rather than leaving the reader to wonder why the gate says "no verdict".
+    const evaluations = await svc.evaluations.run(version);
+    return reply.code(201).send({ version, evaluations });
   });
 
   app.delete('/v1/workspaces/:ws/drafts/:id', async (request, reply) => {
@@ -243,6 +255,19 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     const version = await services(ctx).artifacts.getVersion(id, ordinal);
     if (!render) return { version };
     return { version, rendered: await renderVersion(version, deps.signUrls) };
+  });
+
+  /** Re-run every evaluation a gate requires — after an evaluator comes online, or on demand. */
+  app.post('/v1/workspaces/:ws/artifacts/:id/versions/:ordinal/evaluate', async (request) => {
+    const {
+      ws: workspace,
+      id,
+      ordinal,
+    } = artifactParams.extend({ ordinal: z.coerce.number().int() }).parse(request.params);
+    const ctx = await context(request, workspace);
+    const svc = services(ctx);
+    const version = await svc.artifacts.getVersion(id, ordinal);
+    return { evaluations: await svc.evaluations.run(version) };
   });
 
   app.get('/v1/workspaces/:ws/artifacts/:id/diff', async (request) => {
@@ -434,12 +459,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
       );
     }
 
-    const record: EvaluationResult = { ...input, recorded_at: new Date().toISOString() };
-    await ctx.handle
-      .collection<EvaluationResult>(EVALUATIONS)
-      .replaceOne({ artifact: input.artifact, ordinal: input.ordinal, evaluator: input.evaluator }, record, {
-        upsert: true,
-      });
+    const record = await services(ctx).evaluations.record(input);
     return reply.code(201).send({ evaluation: record });
   });
 

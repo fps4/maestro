@@ -36,8 +36,9 @@ Two planes: a **Docs** plane you read, and a **Delivery** plane you track.
 | [0012](design/decisions/0012-labels-not-identifiers.md) | Every identifier a workspace declares has a label, and no surface shows the identifier |
 | [0013](design/decisions/0013-the-decision-page-is-the-product.md) | The decision page is the product; the decider's packet is one call, shared by console and MCP |
 | [0014](design/decisions/0014-questions-on-a-version.md) | A question on a version is a fact about it, not a comment; asked by anyone, answered by anyone, closed by a human |
+| [0015](design/decisions/0015-the-evaluator-port-has-a-floor.md) | The evaluator port has a floor — the facet schema, as findings — and an outbound call; a draft can ask what it still needs |
 
-All fourteen are `status: proposed`. The first build exists, but nothing has run against real content
+All fifteen are `status: proposed`. The first build exists, but nothing has run against real content
 yet, so they remain a design under review rather than a record of commitments made.
 
 ## Conventions

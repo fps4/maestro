@@ -38,15 +38,24 @@ jobs:
           TAG=ms-gitleaks:${{ github.run_id }}-${{ github.run_attempt }}
           docker build -t "$TAG" -f infra/docker/gitleaks.Dockerfile .
           docker run --rm "$TAG" detect --no-git --source=/repo --config=/repo/.gitleaks.toml --redact --no-banner
-          docker rmi "$TAG" 2>/dev/null || true
+      - name: Cleanup
+        if: always()
+        run: docker rmi "ms-gitleaks:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true
 
   api-build:
     # Building the api image runs typecheck, lint and the compile (see api.Dockerfile). Any failure
     # fails the gate, and nothing that did not pass can be shipped.
+    #
+    # The tag is per run so parallel runs cannot clobber each other, and it is removed afterwards:
+    # the runner is a shared host, and a tag per run that nobody deletes is a disk that fills at the
+    # rate of the team's commits. Layers stay cached; only the tag goes.
     runs-on: [self-hosted, ds1]
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t ms-api:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/api.Dockerfile .
+      - name: Cleanup
+        if: always()
+        run: docker rmi "ms-api:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true
 
   web-build:
     # Same shape for the console: typecheck, lint, tests and the production build.
@@ -54,6 +63,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t ms-web:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/web.Dockerfile .
+      - name: Cleanup
+        if: always()
+        run: docker rmi "ms-web:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true
 
   test:
     # The full suite against a real MongoDB REPLICA SET. Unit tests pin the domain rules;
@@ -109,7 +121,9 @@ jobs:
         if: always()
         run: |
           SUFFIX=${{ github.run_id }}-${{ github.run_attempt }}
-          docker rm -f "ms-mongo-$SUFFIX" 2>/dev/null || true
+          # `-v`: the mongo image declares two anonymous volumes, and `rm -f` without it leaves
+          # them behind on every run — 417 of them were found on the host before this was added.
+          docker rm -f -v "ms-mongo-$SUFFIX" 2>/dev/null || true
           docker network rm "ms-net-$SUFFIX" 2>/dev/null || true
           docker rmi "ms-ci:$SUFFIX" 2>/dev/null || true
 

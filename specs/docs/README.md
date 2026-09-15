@@ -39,9 +39,12 @@ Two planes: a **Docs** plane you read, and a **Delivery** plane you track.
 | [0015](design/decisions/0015-the-evaluator-port-has-a-floor.md) | The evaluator port has a floor — the facet schema, as findings — and an outbound call; a draft can ask what it still needs |
 | [0016](design/decisions/0016-the-git-native-path.md) | A specification may be a file next to the code; proposing is a command and a workflow step; deciding stays a person's act |
 | [0017](design/decisions/0017-one-document.md) | One document is the artifact; the facets are a projection of it, derived at save; typed blocks are declared, not coded |
+| [0018](design/decisions/0018-openspec-interoperate-not-adopt.md) | specs-service stays the record; OpenSpec is interoperated with (a block shape, one notation), not adopted — **accepted** |
 
-All seventeen are `status: proposed`. The first build exists, but nothing has run against real content
-yet, so they remain a design under review rather than a record of commitments made.
+0001–0017 are `status: proposed`: the builds exist, but nothing has run against real content yet,
+so they remain a design under review rather than a record of commitments made. 0018 is the first
+`accepted` decision — taken explicitly by the architect, and constraining work rather than
+describing a design.
 
 ## Conventions
 

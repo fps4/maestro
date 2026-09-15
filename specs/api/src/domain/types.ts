@@ -12,6 +12,7 @@ export type DraftId = string; // dft-…
 export type PrincipalId = string; // prn-…
 export type AttachmentId = string; // att-…
 export type DecisionId = string; // dec-…
+export type QuestionId = string; // qst-…
 
 /** Declared in a workspace definition, never in code. */
 export type TypeId = string;
@@ -203,6 +204,37 @@ export interface Attribution {
   accountable: PrincipalId;
   acting: PrincipalId;
   [field: string]: string | undefined;
+}
+
+/**
+ * A question asked of an immutable version.
+ *
+ * Not a comment and not a mutation. A question is a fact *about* a version — attributed, dated,
+ * answerable, and closed by a human — and it never changes the bytes it is about. It is the one
+ * channel a reviewer has short of `request_changes`, and it is on the record so that "what did the
+ * sponsor not understand" is answerable years later.
+ */
+export interface Answer {
+  id: string;
+  text: string;
+  by: PrincipalId;
+  kind: PrincipalKind;
+  at: string;
+}
+
+export interface Question {
+  id: QuestionId;
+  workspace: WorkspaceId;
+  artifact: ArtifactId;
+  ordinal: number;
+  text: string;
+  asked_by: PrincipalId;
+  asked_kind: PrincipalKind;
+  asked_at: string;
+  answers: Answer[];
+  /** Set once, by a human. A resolved question stays readable; nothing is deleted. */
+  resolved_at?: string;
+  resolved_by?: PrincipalId;
 }
 
 export interface Decision {

@@ -29,6 +29,7 @@ import { DecisionService } from '../services/decisions.js';
 import { LineageService } from '../services/lineage.js';
 import { PacketService } from '../services/packet.js';
 import { PrincipalDirectory } from '../services/principals.js';
+import { QuestionService } from '../services/questions.js';
 import { renderVersion } from '../services/render.js';
 import type { UrlSigner } from '../services/attachments.js';
 import type { EvaluationResult, Principal } from '../domain/types.js';
@@ -261,6 +262,47 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     const ctx = await context(request, workspace);
     return { lineage: await services(ctx).lineage.lineage(id, depth) };
   });
+
+  // --- questions on a version: asked by anyone, answered by anyone, closed by a human ---
+
+  const versionParams = artifactParams.extend({ ordinal: z.coerce.number().int().positive() });
+  const questionText = z.object({ text: z.string().min(1).max(4000) });
+
+  app.get('/v1/workspaces/:ws/artifacts/:id/versions/:ordinal/questions', async (request) => {
+    const { ws: workspace, id, ordinal } = versionParams.parse(request.params);
+    const ctx = await context(request, workspace);
+    return { questions: await new QuestionService(ctx.handle).list(id, ordinal) };
+  });
+
+  app.post('/v1/workspaces/:ws/artifacts/:id/versions/:ordinal/questions', async (request, reply) => {
+    const { ws: workspace, id, ordinal } = versionParams.parse(request.params);
+    const { text } = questionText.parse(request.body);
+    const ctx = await context(request, workspace);
+    const question = await new QuestionService(ctx.handle).ask(id, ordinal, text, ctx.actor);
+    return reply.code(201).send({ question });
+  });
+
+  const questionParams = versionParams.extend({ question: z.string() });
+
+  app.post(
+    '/v1/workspaces/:ws/artifacts/:id/versions/:ordinal/questions/:question/answers',
+    async (request, reply) => {
+      const { ws: workspace, question } = questionParams.parse(request.params);
+      const { text } = questionText.parse(request.body);
+      const ctx = await context(request, workspace);
+      const updated = await new QuestionService(ctx.handle).answer(question, text, ctx.actor);
+      return reply.code(201).send({ question: updated });
+    },
+  );
+
+  app.post(
+    '/v1/workspaces/:ws/artifacts/:id/versions/:ordinal/questions/:question/resolve',
+    async (request) => {
+      const { ws: workspace, question } = questionParams.parse(request.params);
+      const ctx = await context(request, workspace);
+      return { question: await new QuestionService(ctx.handle).resolve(question, ctx.actor) };
+    },
+  );
 
   // --- gates ---
 

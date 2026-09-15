@@ -25,6 +25,7 @@ export const mintDraftId = (): string => `dft-${token(10).toLowerCase()}`;
 export const mintPrincipalId = (): string => `prn-${token(12)}`;
 export const mintAttachmentId = (): string => `att-${token(10).toLowerCase()}`;
 export const mintDecisionId = (): string => `dec-${token(12).toLowerCase()}`;
+export const mintQuestionId = (): string => `qst-${token(10).toLowerCase()}`;
 
 /**
  * A version's public identity: `<artifact>@<ordinal>`.

@@ -53,7 +53,9 @@ a real editor and a trustworthy approval live in one service
 ## What it is not
 
 - **Not a wiki.** Artifacts have typed links, not a page tree. The editor exists to produce a version
-  a gate will decide on; authoring features that do not serve a gated artifact are out of scope.
+  a gate will decide on; authoring features that do not serve a gated artifact are out of scope. The
+  one thing attached to a version besides a decision is a **question** — a fact about it, never a
+  change to it ([ADR-0014](docs/design/decisions/0014-questions-on-a-version.md)).
 - **Not a policy engine.** It calls an evaluator and records the verdict. Gates read structured
   facets and **never** the body
   ([ADR-0004](docs/design/decisions/0004-facets-are-evaluated-bodies-are-read.md)).
@@ -132,14 +134,15 @@ Every write produces a draft or a **proposed** version. Only a gate decision acc
 | `GET /v1/artifacts/:id/lineage` | Both directions, across links |
 | `POST /v1/attachments` | Upload. Content-addressed and deduplicated |
 | `GET /v1/gates/:gate/:id/:n/packet` | The decider's packet: everything a person needs to decide, in plain language, in one call |
+| `…/versions/:n/questions` | Ask a question of a version; answer one; a human closes it. Never a mutation |
 | `POST /v1/gates/:gate/decisions` | The gate's declared outcomes. Attributed, human-only |
 | `GET /v1/workspaces/:id/register` | Everything in flight, with lifecycle state |
 | `GET /v1/search` | Facets and bodies, within one workspace |
 | `GET /v1/export/:workspace` | The full chain of record, portable |
 
-**MCP** exposes reads, draft writes, propose, and the decider's packet — so agents author through
-it and can explain a pending decision to the human accountable for it — and **no decision surface
-at all**.
+**MCP** exposes reads, draft writes, propose, the decider's packet, and questions (list, ask,
+answer) — so agents author through it and can explain a pending decision to the human accountable
+for it — and **no decision surface at all**, and no way to close a question.
 
 ## Documentation
 

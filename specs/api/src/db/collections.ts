@@ -17,6 +17,7 @@ export const EVALUATIONS = 'evaluations';
 export const MEMBERSHIPS = 'memberships';
 export const OUTBOX = 'outbox';
 export const ACCEPTANCES = 'acceptances';
+export const QUESTIONS = 'questions';
 
 /** Control database — never per workspace. */
 export const WORKSPACES = 'workspaces';
@@ -64,6 +65,11 @@ const WORKSPACE_INDEXES: Record<string, IndexDef[]> = {
     { keys: { sequence: 1 }, options: { unique: true } },
   ],
   [ACCEPTANCES]: [{ keys: { standard: 1, scope: 1, project: 1 } }, { keys: { status: 1 } }],
+  [QUESTIONS]: [
+    { keys: { id: 1 }, options: { unique: true } },
+    // "The open questions on this version" is the query every decision page runs.
+    { keys: { artifact: 1, ordinal: 1, resolved_at: 1 } },
+  ],
 };
 
 const CONTROL_INDEXES: Record<string, IndexDef[]> = {

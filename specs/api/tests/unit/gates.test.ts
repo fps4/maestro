@@ -12,7 +12,12 @@ const gate: GateDeclaration = {
   outcome_labels: {},
   reopens_on: 'request_changes',
   blocking: true,
-  requires: { confirmed_facets: true, evaluations: ['sufficiency_v2'], catalogue_acceptances: false },
+  requires: {
+    confirmed_facets: true,
+    evaluations: ['sufficiency_v2'],
+    catalogue_acceptances: false,
+    questions_resolved: false,
+  },
   separation_of_duties: 'exclude_creator',
   attribution_profile: 'default',
   records_materiality: false,
@@ -36,6 +41,7 @@ const ready: GateInput = {
   evaluations: [passingEvaluation],
   subject_digest: digest,
   acceptances: [],
+  open_questions: 0,
 };
 
 describe('gateRequirements', () => {
@@ -225,5 +231,24 @@ describe('attribution', () => {
     expect(() =>
       assertAttribution(profile, { accountable: 'prn-agent-3', acting: 'prn-agent-3' }, resolve),
     ).toThrow(AttributionRefused);
+  });
+});
+
+describe('questions_resolved', () => {
+  it('holds the gate shut while a question is open, only when the gate declares it', () => {
+    const declared = { ...gate, requires: { ...gate.requires, questions_resolved: true } };
+    const withOpen = gateRequirements({ ...ready, gate: declared, open_questions: 2 });
+    const requirement = withOpen.find((r) => r.id === 'questions_resolved')!;
+    expect(requirement.satisfied).toBe(false);
+    expect(requirement.blocking).toBe(true);
+    expect(requirement.detail).toMatch(/2 open questions/);
+    expect(gateIsOpen(withOpen)).toBe(false);
+
+    expect(gateIsOpen(gateRequirements({ ...ready, gate: declared, open_questions: 0 }))).toBe(true);
+
+    // Undeclared: open questions are shown elsewhere and never block.
+    const undeclared = gateRequirements({ ...ready, open_questions: 2 });
+    expect(undeclared.find((r) => r.id === 'questions_resolved')).toBeUndefined();
+    expect(gateIsOpen(undeclared)).toBe(true);
   });
 });

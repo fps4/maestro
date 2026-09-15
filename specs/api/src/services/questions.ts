@@ -1,0 +1,169 @@
+/**
+ * Questions on a version.
+ *
+ * The one thing "not a wiki" wrongly excluded. A reviewer who cannot ask "what does this line mean?"
+ * asks it on Slack, and the trail loses it. So a question is admitted — narrowly. It attaches to an
+ * **immutable version**, never to a draft (a draft has an editor; a question on a draft is a
+ * comment, and comments are what this service refuses). It never mutates the version: the digest is
+ * untouched, the decision still cites the same bytes. And it is closed by a **human**, which is the
+ * same line ADR-0005 draws for confirming an extraction — an agent may ask and may answer, and it
+ * is the agent answering that makes a non-technical reviewer's question cheap to ask, but the loop
+ * is closed by the person who needed the answer.
+ *
+ * Every state change is an event on the record sink, carrying the question's id and a digest of
+ * the text — never the text. A question routinely names a person; the payload stays here under the
+ * workspace's own retention, and the spine learns that a question was asked, answered and closed.
+ */
+
+import { createHash } from 'node:crypto';
+import { QUESTIONS, VERSIONS } from '../db/collections.js';
+import { emit } from '../db/outbox.js';
+import type { WorkspaceHandle } from '../db/handle.js';
+import { mintQuestionId } from '../domain/ids.js';
+import type { Answer, Question, Version } from '../domain/types.js';
+import { NotFound, Refused, type Actor } from './artifacts.js';
+
+const digestOf = (text: string) => `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`;
+
+export class QuestionService {
+  constructor(private readonly handle: WorkspaceHandle) {}
+
+  private questions() {
+    return this.handle.collection<Question>(QUESTIONS);
+  }
+
+  private async versionOrThrow(artifact: string, ordinal: number): Promise<Version> {
+    const version = await this.handle
+      .collection<Version>(VERSIONS)
+      .findOne({ artifact, ordinal }, { projection: { _id: 0, body: 0 } });
+    if (!version) throw new NotFound(`Version \`${artifact}@${ordinal}\``);
+    return version;
+  }
+
+  async list(artifact: string, ordinal: number): Promise<Question[]> {
+    return this.questions()
+      .find({ artifact, ordinal }, { projection: { _id: 0 } })
+      .sort({ asked_at: 1 })
+      .toArray();
+  }
+
+  /** Open questions on a version — the number a gate may block on. */
+  async openCount(artifact: string, ordinal: number): Promise<number> {
+    return this.questions().countDocuments({ artifact, ordinal, resolved_at: { $exists: false } });
+  }
+
+  async get(id: string): Promise<Question> {
+    const question = await this.questions().findOne({ id }, { projection: { _id: 0 } });
+    if (!question) throw new NotFound(`Question \`${id}\``);
+    return question;
+  }
+
+  async ask(artifact: string, ordinal: number, text: string, actor: Actor): Promise<Question> {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) throw new Refused('A question needs some text.');
+    await this.versionOrThrow(artifact, ordinal);
+
+    const now = new Date().toISOString();
+    const question: Question = {
+      id: mintQuestionId(),
+      workspace: this.handle.workspace,
+      artifact,
+      ordinal,
+      text: trimmed,
+      asked_by: actor.principal,
+      asked_kind: actor.kind,
+      asked_at: now,
+      answers: [],
+    };
+
+    await this.handle.transaction(async (session) => {
+      await this.questions().insertOne(question, { session });
+      await emit(this.handle.db, session, [
+        {
+          workspace: this.handle.workspace,
+          kind: 'QuestionRaised',
+          subject: { artifact, ordinal },
+          actor: actor.principal,
+          payload: { question: question.id, text_digest: digestOf(trimmed), asked_kind: actor.kind },
+          occurred_at: now,
+        },
+      ]);
+    });
+    return question;
+  }
+
+  /**
+   * Answer a question. Anyone may — including an agent, whose answer is marked as an agent's so the
+   * reader knows what they are reading. Answering does not resolve: the person who asked decides
+   * whether they were answered.
+   */
+  async answer(id: string, text: string, actor: Actor): Promise<Question> {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) throw new Refused('An answer needs some text.');
+    const question = await this.get(id);
+    if (question.resolved_at) {
+      throw new Refused('This question is closed. Ask a new one if something is still unclear.');
+    }
+
+    const now = new Date().toISOString();
+    const answer: Answer = {
+      id: `${question.id}-a${question.answers.length + 1}`,
+      text: trimmed,
+      by: actor.principal,
+      kind: actor.kind,
+      at: now,
+    };
+
+    return this.handle.transaction(async (session) => {
+      const updated = await this.questions().findOneAndUpdate(
+        { id, resolved_at: { $exists: false } },
+        { $push: { answers: answer } },
+        { session, returnDocument: 'after', projection: { _id: 0 } },
+      );
+      if (!updated) throw new Refused('This question was closed while you were answering.');
+      await emit(this.handle.db, session, [
+        {
+          workspace: this.handle.workspace,
+          kind: 'QuestionAnswered',
+          subject: { artifact: question.artifact, ordinal: question.ordinal },
+          actor: actor.principal,
+          payload: { question: id, answer: answer.id, text_digest: digestOf(trimmed), kind: actor.kind },
+          occurred_at: now,
+        },
+      ]);
+      return updated;
+    });
+  }
+
+  /** Close a question. A human's act, always — the same line as confirming an extraction. */
+  async resolve(id: string, actor: Actor): Promise<Question> {
+    if (actor.kind !== 'human') {
+      throw new Refused(
+        'Only a human closes a question. An agent closing the question it answered would make the answer decorative.',
+      );
+    }
+    const question = await this.get(id);
+    if (question.resolved_at) return question;
+
+    const now = new Date().toISOString();
+    return this.handle.transaction(async (session) => {
+      const updated = await this.questions().findOneAndUpdate(
+        { id, resolved_at: { $exists: false } },
+        { $set: { resolved_at: now, resolved_by: actor.principal } },
+        { session, returnDocument: 'after', projection: { _id: 0 } },
+      );
+      if (!updated) return question;
+      await emit(this.handle.db, session, [
+        {
+          workspace: this.handle.workspace,
+          kind: 'QuestionResolved',
+          subject: { artifact: question.artifact, ordinal: question.ordinal },
+          actor: actor.principal,
+          payload: { question: id, answers: question.answers.length },
+          occurred_at: now,
+        },
+      ]);
+      return updated;
+    });
+  }
+}

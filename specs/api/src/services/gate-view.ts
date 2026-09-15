@@ -19,6 +19,7 @@ import { labelsFor } from '../domain/labels.js';
 import type { Artifact, EvaluationResult, Principal, Version } from '../domain/types.js';
 import { gateIn, profileIn } from '../domain/workspace-definition.js';
 import { NotFound, Refused } from './artifacts.js';
+import { QuestionService } from './questions.js';
 import type { LoadedWorkspace } from './workspaces.js';
 
 export interface GateView {
@@ -102,6 +103,7 @@ export class GateViewService {
       evaluations,
       subject_digest: version.digest,
       acceptances: context.acceptances,
+      open_questions: await new QuestionService(this.handle).openCount(version.artifact, version.ordinal),
     });
 
     const verdict = mayDecide({

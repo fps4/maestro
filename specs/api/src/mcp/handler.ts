@@ -20,6 +20,7 @@ import { ArtifactService } from '../services/artifacts.js';
 import { AcceptanceService, CatalogueReader } from '../services/catalogue.js';
 import { LineageService } from '../services/lineage.js';
 import { PacketService } from '../services/packet.js';
+import { QuestionService } from '../services/questions.js';
 import { excerpt } from '../services/render.js';
 import type { RequestContext } from '../auth/context.js';
 import type { ProvenanceMap } from '../domain/types.js';
@@ -42,6 +43,7 @@ const services = (ctx: RequestContext) => {
     // No URL signer over MCP: an attachment reference is reported as unresolved rather than handed
     // to an agent as a signed URL it has no business forwarding.
     packets: new PacketService(ctx.handle, ctx.workspace, undefined),
+    questions: new QuestionService(ctx.handle),
   };
 };
 
@@ -150,6 +152,47 @@ export const TOOLS: McpTool[] = [
           acceptances,
         }),
       };
+    },
+  },
+  {
+    name: 'list_questions',
+    title: 'Read the questions on a version',
+    description:
+      'Every question asked of one version, with its answers and whether a human has closed it. Open questions are what a decider is waiting on; if you can answer one from the version and the standards, do — a question a sponsor asked at 22:00 answered by 22:01 is the difference between a decision tomorrow and a decision next week.',
+    inputSchema: z.object({ artifact: z.string(), ordinal: z.number().int().positive() }),
+    async handler(ctx, input) {
+      const { artifact, ordinal } = z
+        .object({ artifact: z.string(), ordinal: z.number().int().positive() })
+        .parse(input);
+      return { questions: await services(ctx).questions.list(artifact, ordinal) };
+    },
+  },
+  {
+    name: 'ask_question',
+    title: 'Ask a question of a version',
+    description:
+      'Attach a question to an immutable version. It never changes the version — the digest a decision cites is untouched — and it goes on the record, attributed to you as an agent. Ask when something in a version you are reviewing or explaining is genuinely unclear; do not ask what the version already answers.',
+    inputSchema: z.object({
+      artifact: z.string(),
+      ordinal: z.number().int().positive(),
+      text: z.string().min(1),
+    }),
+    async handler(ctx, input) {
+      const { artifact, ordinal, text } = z
+        .object({ artifact: z.string(), ordinal: z.number().int().positive(), text: z.string().min(1) })
+        .parse(input);
+      return { question: await services(ctx).questions.ask(artifact, ordinal, text, ctx.actor) };
+    },
+  },
+  {
+    name: 'answer_question',
+    title: 'Answer a question',
+    description:
+      'Answer an open question on a version. Your answer is marked as an agent’s, so the reader knows what they are reading; cite the version, the facets, or a standard rather than asserting. Answering does not close the question — the person who asked decides whether they were answered, and there is no tool here that closes one.',
+    inputSchema: z.object({ question: z.string(), text: z.string().min(1) }),
+    async handler(ctx, input) {
+      const { question, text } = z.object({ question: z.string(), text: z.string().min(1) }).parse(input);
+      return { question: await services(ctx).questions.answer(question, text, ctx.actor) };
     },
   },
   {

@@ -15,7 +15,7 @@ related:
 
 # specs-service — architecture
 
-**Status:** Draft v0.6
+**Status:** Draft v0.7
 **Scope:** The whole product. Model, authoring, rendering, configuration, ports, isolation,
 interfaces, storage, build order.
 **Shape:** A full end-to-end service with its own domain, its own console, and SSO through
@@ -72,6 +72,7 @@ Workspace                    the confidentiality and ownership boundary
               ├── body       authored content in a declared format. Rendered, diffed, searched
               ├── attachments  images, PDFs and files, content-addressed in object storage
               └── links      typed edges; at most one pinned at acceptance
+        └── Question         a fact about a version: asked, answered (by anyone), closed by a human
 Gate
   └── Decision               immutable, attributed to a named human principal
 Lifecycle
@@ -296,6 +297,12 @@ the last version anyone decided on, what the checks found, what each outcome wou
 principal may decide, and what was decided before (ADR-0013). The same object is the
 `decision_packet` MCP tool, so an agent explaining a decision reads what the sponsor reads — and,
 like everything on MCP, it carries no way to decide.
+
+**A reviewer may ask.** A question attaches to an immutable version, never to a draft, and never
+changes it: it is a fact about the version, like a decision (ADR-0014). Anyone asks, anyone answers
+— an agent's answer is marked as an agent's — and a human closes it. A gate may declare
+`requires.questions_resolved` to hold shut over an open question; undeclared, open questions are
+shown and never block.
 
 ### 3.5 Search
 
@@ -529,6 +536,10 @@ constant. Following it produces a worse Confluence with a governance story bolte
 editor exists to produce a version that a gate will decide on.** Authoring features that do not serve
 a gated artifact are out of scope, and a proposal to relax that is a strategy change, not a feature.
 
+**One narrowing, made deliberately** (ADR-0014): *anything attached to a version is a fact about it
+— a decision, an evaluation, a question — and never a change to it.* A question on an immutable
+version is admitted on that test. Comments on drafts, page trees and freeform spaces still fail it.
+
 ---
 
 ## 11. Decisions
@@ -550,6 +561,7 @@ a gated artifact are out of scope, and a proposal to relax that is a strategy ch
 | D13 | Versions may be effective-dated; only a *material* change lapses an acceptance | [ADR-0010](decisions/0010-effective-dating-and-acceptance-lapse.md) |
 | D14 | Every identifier a workspace declares has a label, and no surface shows the identifier | [ADR-0012](decisions/0012-labels-not-identifiers.md) |
 | D15 | The decision page is the product; the decider's packet is one call shared by console and MCP; the accepting outcome is declared | [ADR-0013](decisions/0013-the-decision-page-is-the-product.md) |
+| D16 | A question on a version is a fact about it: asked by anyone, answered by anyone, closed by a human, never a mutation; a gate may declare `questions_resolved` | [ADR-0014](decisions/0014-questions-on-a-version.md) |
 
 ---
 
@@ -594,6 +606,7 @@ Steps 1–7 are the product. Everything after makes it complete.
 
 | Version | Date | Change |
 |---|---|---|
+| 0.7 | 2026-09-15 | **Questions on a version** (D16, ADR-0014). The one thing "not a wiki" wrongly excluded, admitted narrowly: a question attaches to an immutable version, never a draft, never changes it, is asked by anyone, answered by anyone with an agent's answer marked as such, and closed only by a human. Three events on the sink carrying a digest of the text, never the text. `requires.questions_resolved` on a gate, declared on the specification gate. Over MCP: list, ask, answer — no close. The decision page and the version page gain the panel; the packet carries `questions`. §2, §3.4 and §10 amended |
 | 0.6 | 2026-09-15 | **The decision page is the product** (D15, ADR-0013). One column, one call: the decider's packet returns what the gate asks, the document, the facts with their schema labels, what changed since the last *decided* version, the checks with findings, what each outcome would do (computed from the definition and stored state, with a refusal flagged before it happens), who may decide, and the history. The same object is the `decision_packet` MCP tool. The console's client-side `consequence()` is deleted. **The accepting outcome becomes declarative** (`accepts_on`), which fixes a latent defect: the catalogue's `publish` outcome would have recorded a standard as `rejected`. `gate-view.ts` extracted so the MCP import graph provably never reaches `DecisionService`, now enforced by lint. §2.7 and §3.4 added |
 | 0.5 | 2026-09-15 | **Labels beside identifiers** (D14, ADR-0012). The definition gains `description` on types and gates, `outcome_labels`, `phase_labels`, link `label` and attribution `field_labels`; the api returns the complete label set with a humanised fallback; the console renders labels and never an identifier a workspace could have named. The record is untouched. This is the first of the changes that turn the console from an auditor's surface into one a sponsor can use — the decision page and the decider's packet build on the descriptions this adds |
 | 0.4 | 2026-09-15 | **Consumer vocabulary aligned with the platform it serves.** The repository is now `maestro-specs` (was `mstr-specs`), and the two consumers are named as the platform names them: *maestro* is the governed application platform (`../maestro`, conceptual D44) and *maestro v1* its retired first iteration, the agentic delivery platform. Until now this repository called the first *adel* and the second *maestro* — so after the rename it used its own name for the wrong product. Swapped throughout the docs, ADRs 0001/0004/0005/0006, the glossary and the example workspace; the example workspace id is `maestro-v1-core`. Console wordmark, page title, MCP `serverInfo.name` and the npm package names follow the repository. **The deployed identifiers do not** — compose project, container names, `AUTH_AUDIENCE`, the identity client ids and the bucket still read `mstr-specs`, because changing them is a coordinated deploy with an `identity-service` seed on the other side. README Quick Start rewritten against the tree that exists (`make up`, ports 8020/8021, `AUTH_MODE`). No model, port, or decision changed |

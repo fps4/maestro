@@ -141,6 +141,9 @@ gates:
       # A specification is what gets built, so a lapsed acceptance under it blocks here — unlike at
       # Explore, where it is recorded and advisory.
       catalogue_acceptances: true
+      # And nothing gets built with a reviewer's question still open. Explore does not declare this:
+      # an open question on a business case is a reason to ask for changes, not to hold the gate.
+      questions_resolved: true
     separation_of_duties: exclude_creator
     attribution_profile: maestro_default
 

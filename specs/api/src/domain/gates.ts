@@ -37,6 +37,8 @@ export interface GateInput {
   evaluations: EvaluationResult[];
   subject_digest: string;
   acceptances: AcceptanceState[];
+  /** Questions asked of this version and not yet resolved by a human. */
+  open_questions: number;
 }
 
 /**
@@ -86,6 +88,20 @@ export function gateRequirements(input: GateInput): Requirement[] {
           : result.verdict === 'not_applicable'
             ? 'not applicable to this version'
             : `failed, recorded ${result.recorded_at}`,
+      blocking: true,
+    });
+  }
+
+  if (gate.requires.questions_resolved) {
+    const n = input.open_questions;
+    requirements.push({
+      id: 'questions_resolved',
+      satisfied: n === 0,
+      title: 'Every question on this version answered and closed',
+      detail:
+        n === 0
+          ? 'No open questions.'
+          : `${n} open question${n === 1 ? '' : 's'}. Answer them, or the asker closes them, before this gate opens.`,
       blocking: true,
     });
   }

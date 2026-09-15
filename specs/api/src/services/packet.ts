@@ -16,11 +16,12 @@ import { consequencesOf, type OutcomeConsequence } from '../domain/consequences.
 import { facetDiff, linkDiff, bodyDiff, type FacetChange, type LinkDiff } from '../domain/diff.js';
 import type { Requirement } from '../domain/gates.js';
 import { humanise, labelsFor } from '../domain/labels.js';
-import type { Decision, EvaluationResult, Version } from '../domain/types.js';
+import type { Decision, EvaluationResult, Question, Version } from '../domain/types.js';
 import { gateIn, typeIn } from '../domain/workspace-definition.js';
 import { ArtifactService, NotFound } from './artifacts.js';
 import type { UrlSigner } from './attachments.js';
 import { GateViewService, type DecisionContext } from './gate-view.js';
+import { QuestionService } from './questions.js';
 import { renderVersion, type RenderedBody } from './render.js';
 import type { LoadedWorkspace } from './workspaces.js';
 
@@ -87,6 +88,8 @@ export interface DecisionPacket {
   /** What changed since the last version anyone decided on. Null the first time a decision is taken. */
   since: PacketSince | null;
   checks: PacketCheck[];
+  /** Questions asked of this version. Open ones are the thing to read before deciding. */
+  questions: { open: number; items: Question[] };
   open: boolean;
   decider: {
     may_decide: boolean;
@@ -129,6 +132,8 @@ export class PacketService {
       .collection<EvaluationResult>(EVALUATIONS)
       .find({ artifact: artifactId, ordinal }, { projection: { _id: 0 } })
       .toArray();
+
+    const questions = await new QuestionService(this.handle).list(artifactId, ordinal);
 
     const history = await this.handle
       .collection<Decision>(DECISIONS)
@@ -200,6 +205,7 @@ export class PacketService {
           : undefined;
         return { ...requirement, ...(result?.findings ? { findings: result.findings } : {}) };
       }),
+      questions: { open: questions.filter((q) => !q.resolved_at).length, items: questions },
       open: view.open,
       decider: {
         may_decide: view.may_decide,

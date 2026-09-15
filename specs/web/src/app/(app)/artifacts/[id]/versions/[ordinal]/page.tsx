@@ -1,6 +1,8 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { fetchLabels, fetchVersion } from '@/lib/api';
+import { fetchLabels, fetchQuestions, fetchVersion } from '@/lib/api';
+import { currentWorkspace } from '@/lib/auth';
+import { Questions } from '@/components/questions';
 import { stateLabel, typeLabel } from '@/lib/labels';
 import {
   Card,
@@ -35,7 +37,11 @@ export default async function VersionPage({ params }: { params: Promise<{ id: st
     notFound();
   }
   const { version, rendered } = data;
-  const labels = await fetchLabels();
+  const [labels, questions, workspace] = await Promise.all([
+    fetchLabels(),
+    fetchQuestions(id, Number(ordinal)).catch(() => []),
+    currentWorkspace(),
+  ]);
 
   return (
     <>
@@ -72,6 +78,16 @@ export default async function VersionPage({ params }: { params: Promise<{ id: st
           ) : null}
 
           <Rendered html={rendered?.html ?? ''} />
+
+          <SectionTitle>
+            Questions
+            {questions.some((q) => !q.resolved_at) ? (
+              <span className="ml-2 font-normal text-warning">
+                {questions.filter((q) => !q.resolved_at).length} open
+              </span>
+            ) : null}
+          </SectionTitle>
+          <Questions workspace={workspace} artifact={id} ordinal={Number(ordinal)} questions={questions} />
         </div>
 
         <div className="flex flex-col gap-4">

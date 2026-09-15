@@ -146,6 +146,29 @@ export interface GateView {
   };
 }
 
+export interface Answer {
+  id: string;
+  text: string;
+  by: string;
+  kind: 'human' | 'agent' | 'service';
+  at: string;
+}
+
+/** A question asked of an immutable version. Never a mutation of it; closed by a human. */
+export interface Question {
+  id: string;
+  workspace: string;
+  artifact: string;
+  ordinal: number;
+  text: string;
+  asked_by: string;
+  asked_kind: 'human' | 'agent' | 'service';
+  asked_at: string;
+  answers: Answer[];
+  resolved_at?: string;
+  resolved_by?: string;
+}
+
 export interface OutcomeConsequence {
   outcome: string;
   label: string;
@@ -204,6 +227,7 @@ export interface DecisionPacket {
       }>;
     }
   >;
+  questions: { open: number; items: Question[] };
   open: boolean;
   decider: {
     may_decide: boolean;

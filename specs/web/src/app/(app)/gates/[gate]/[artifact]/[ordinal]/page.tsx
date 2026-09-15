@@ -11,6 +11,7 @@ import {
   SectionTitle,
   shortDigest,
 } from '@/components/atoms';
+import { Questions } from '@/components/questions';
 import type { DecisionPacket } from '@/lib/types';
 import { DecideForm } from './decide-form';
 
@@ -108,6 +109,20 @@ export default async function DecidePage({
         ) : (
           <Checks checks={packet.checks} />
         )}
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <SectionTitle>
+          Questions
+          {packet.questions.open > 0 ? (
+            <span className="ml-2 font-normal text-warning">{packet.questions.open} open</span>
+          ) : null}
+        </SectionTitle>
+        <p className="m-0 text-sm text-muted">
+          Anything unclear? Ask here rather than deciding on a guess. The author or an assistant answers, and
+          you close the question when it is answered. Nothing you ask changes the version.
+        </p>
+        <Questions workspace={workspace} artifact={artifact} ordinal={n} questions={packet.questions.items} />
       </section>
 
       <section className="flex flex-col gap-3">

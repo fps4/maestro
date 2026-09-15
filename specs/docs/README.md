@@ -35,8 +35,9 @@ Two planes: a **Docs** plane you read, and a **Delivery** plane you track.
 | [0011](design/decisions/0011-password-grant-first-pkce-later.md) | The console ships with the password grant; PKCE is the follow-up |
 | [0012](design/decisions/0012-labels-not-identifiers.md) | Every identifier a workspace declares has a label, and no surface shows the identifier |
 | [0013](design/decisions/0013-the-decision-page-is-the-product.md) | The decision page is the product; the decider's packet is one call, shared by console and MCP |
+| [0014](design/decisions/0014-questions-on-a-version.md) | A question on a version is a fact about it, not a comment; asked by anyone, answered by anyone, closed by a human |
 
-All thirteen are `status: proposed`. The first build exists, but nothing has run against real content
+All fourteen are `status: proposed`. The first build exists, but nothing has run against real content
 yet, so they remain a design under review rather than a record of commitments made.
 
 ## Conventions

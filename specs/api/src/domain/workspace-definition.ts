@@ -136,6 +136,12 @@ const gateDeclaration = z.object({
        * because a lapse that blocks release legitimately does not block an early gate.
        */
       catalogue_acceptances: z.boolean().default(false),
+      /**
+       * Hold the gate shut while a question on the version is unanswered. Declared per gate: a
+       * release gate may reasonably refuse to open over an open question; an early exploration gate
+       * may reasonably not. Undeclared, open questions are shown and never block.
+       */
+      questions_resolved: z.boolean().default(false),
     })
     .default({}),
   /**

@@ -19,6 +19,7 @@ import type {
   GateView,
   Labels,
   Lineage,
+  Question,
   RegisterRow,
   StandardSummary,
   Version,
@@ -137,6 +138,13 @@ export async function fetchPacket(gate: string, artifact: string, ordinal: numbe
     `/v1/workspaces/${await ws()}/gates/${gate}/${artifact}/${ordinal}/packet`,
   );
   return packet;
+}
+
+export async function fetchQuestions(artifact: string, ordinal: number): Promise<Question[]> {
+  const { questions } = await get<{ questions: Question[] }>(
+    `/v1/workspaces/${await ws()}/artifacts/${artifact}/versions/${ordinal}/questions`,
+  );
+  return questions;
 }
 
 export async function fetchStandards(): Promise<StandardSummary[]> {

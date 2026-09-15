@@ -172,9 +172,16 @@ Two planes: a **Docs** plane you read and a **Delivery** plane you track. Start 
 
 ## Status
 
-**First build.** Steps 1–9 of [`architecture.md`](docs/design/architecture.md) §12 are implemented,
-plus the MCP surface. 145 tests pass, including the loop through HTTP and the adversarial
-cross-workspace read.
+**Second build (2026-09-15).** The first build made the record trustworthy; this one made it
+usable by the three kinds of reader it has — a person who decides, a person who writes next to the
+code, and an agent — without weakening the record. ADR-0012 to ADR-0017: labels instead of
+identifiers, the decision page built from one packet shared with MCP, questions on a version, an
+evaluator port with a floor and an outbound call, readiness before propose, the `specs` CLI and a
+proposing GitHub Action, and one document from which the facets are derived. Two defects found on
+the way and closed: the catalogue's `publish` outcome would have recorded a standard as `rejected`,
+and a specification with no pinned link could be accepted. 178 tests pass, including the loop
+through HTTP and through the CLI, the adversarial cross-workspace read, and the MCP surface with
+no way to decide.
 
 **Not built yet:** the TypeScript SDK, export, and redaction. The catalogue holds no
 real standards — the pack registry does not exist, and a fixture presented as a standard would be

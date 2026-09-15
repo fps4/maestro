@@ -17,6 +17,7 @@ import { mintArtifactId, mintDraftId } from '../domain/ids.js';
 import { confirmFacet, invalidateConfirmations } from '../domain/facets.js';
 import { assertLinksDeclared, assertPinsUnchanged } from '../domain/links.js';
 import { parseDuration, typeIn, initialPhase } from '../domain/workspace-definition.js';
+import { composeDocument, parseDocument } from '../domain/document.js';
 import { labelsFor } from '../domain/labels.js';
 import { draftReadiness, type Readiness } from '../domain/readiness.js';
 import { phaseAfterPropose } from '../domain/lifecycle.js';
@@ -214,6 +215,75 @@ export class ArtifactService {
     if (!result)
       throw new Refused('This draft changed while you were saving. Reload and apply your edit again.');
     return result;
+  }
+
+  /**
+   * Save a draft as one document (ADR-0017).
+   *
+   * Front-matter and declared blocks become the facets; the rest is the body. Every facet the
+   * document carries is re-marked with this actor's provenance — `declared` for a person,
+   * `extracted` for an agent — and a facet the document no longer carries is dropped. A human's
+   * earlier confirmation survives only where the value did, which `saveDraft` already enforces.
+   */
+  async saveDocument(
+    id: string,
+    input: { revision: number; document: string },
+    actor: Actor,
+  ): Promise<Draft> {
+    const draft = await this.getDraft(id);
+    const type = this.typeOrThrow(draft.type);
+    const parsed = parseDocument(input.document, type);
+
+    const at = new Date().toISOString();
+    const provenance: ProvenanceMap = {};
+    for (const field of Object.keys(parsed.facets)) {
+      const previous = draft.provenance[field];
+      const unchanged =
+        previous && JSON.stringify(draft.facets[field]) === JSON.stringify(parsed.facets[field]);
+      // An unchanged facet keeps its provenance, confirmation included; a changed one is this
+      // actor's, and invalidateConfirmations in saveDraft would clear a stale confirmation anyway.
+      provenance[field] = unchanged
+        ? previous
+        : { source: actor.kind === 'agent' ? 'extracted' : 'declared', by: actor.principal, at };
+    }
+
+    return this.saveDraft(
+      id,
+      {
+        revision: input.revision,
+        ...(parsed.envelope.title ? { title: parsed.envelope.title } : {}),
+        facets: parsed.facets,
+        provenance,
+        body: parsed.body,
+        ...(parsed.envelope.links ? { links: parsed.envelope.links } : {}),
+        ...(parsed.envelope.classification ? { classification: parsed.envelope.classification } : {}),
+        ...(parsed.envelope.catalogue_refs ? { catalogue_refs: parsed.envelope.catalogue_refs } : {}),
+        ...(parsed.envelope.effective ? { effective: parsed.envelope.effective } : {}),
+      },
+      actor,
+    );
+  }
+
+  /** A draft or version as one document: the envelope and facets as front-matter, then the body. */
+  documentOf(
+    record: Pick<
+      Draft,
+      'type' | 'title' | 'facets' | 'body' | 'classification' | 'links' | 'catalogue_refs' | 'effective'
+    >,
+  ): string {
+    const type = this.typeOrThrow(record.type);
+    return composeDocument(
+      {
+        title: record.title,
+        facets: record.facets,
+        body: record.body,
+        ...(record.classification ? { classification: record.classification } : {}),
+        ...(record.links ? { links: record.links } : {}),
+        ...(record.catalogue_refs ? { catalogue_refs: record.catalogue_refs } : {}),
+        ...(record.effective ? { effective: record.effective } : {}),
+      },
+      type,
+    );
   }
 
   /** Confirm an agent's extraction. The one act that lets a facet reach a gate. */

@@ -38,8 +38,9 @@ Two planes: a **Docs** plane you read, and a **Delivery** plane you track.
 | [0014](design/decisions/0014-questions-on-a-version.md) | A question on a version is a fact about it, not a comment; asked by anyone, answered by anyone, closed by a human |
 | [0015](design/decisions/0015-the-evaluator-port-has-a-floor.md) | The evaluator port has a floor — the facet schema, as findings — and an outbound call; a draft can ask what it still needs |
 | [0016](design/decisions/0016-the-git-native-path.md) | A specification may be a file next to the code; proposing is a command and a workflow step; deciding stays a person's act |
+| [0017](design/decisions/0017-one-document.md) | One document is the artifact; the facets are a projection of it, derived at save; typed blocks are declared, not coded |
 
-All sixteen are `status: proposed`. The first build exists, but nothing has run against real content
+All seventeen are `status: proposed`. The first build exists, but nothing has run against real content
 yet, so they remain a design under review rather than a record of commitments made.
 
 ## Conventions

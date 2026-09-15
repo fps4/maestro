@@ -15,7 +15,7 @@ related:
 
 # specs-service — architecture
 
-**Status:** Draft v0.9
+**Status:** Draft v1.0
 **Scope:** The whole product. Model, authoring, rendering, configuration, ports, isolation,
 interfaces, storage, build order.
 **Shape:** A full end-to-end service with its own domain, its own console, and SSO through
@@ -164,6 +164,14 @@ body:
 **Facets are what a machine reads. The body is what a person reads.** The service renders, diffs and
 searches the body; it never *evaluates* it, and no gate requirement may depend on it. That single
 rule is what lets a body format change without invalidating a record, and lets prose stay prose.
+
+**But they are authored as one document** (ADR-0017). A draft is written and saved as one markdown
+text: front-matter carries the envelope and any facet, and a type may declare `body_blocks` — *the
+table under the heading "Acceptance criteria" is the facet `acceptance_criteria`* — so a block is
+prose to the reader and structure to the gate, and the same bytes are both. The service derives the
+projection at save, marks its provenance from the saver, and shows it beside the editor as *what the
+gate will read*. There is no second form. A version's document is composed from the record; the
+digest is over facets and body as before.
 
 **Provenance is per field** — `declared` (a human wrote it), `extracted` (an agent proposed it),
 `reconstructed` (recovered after the fact). **Only confirmed facets are evaluated or gated**: an
@@ -578,6 +586,7 @@ version is admitted on that test. Comments on drafts, page trees and freeform sp
 | D16 | A question on a version is a fact about it: asked by anyone, answered by anyone, closed by a human, never a mutation; a gate may declare `questions_resolved` | [ADR-0014](decisions/0014-questions-on-a-version.md) |
 | D17 | The evaluator port has a floor (`builtin: facet_schema`) and an outbound call; both run at propose; a draft can ask its readiness | [ADR-0015](decisions/0015-the-evaluator-port-has-a-floor.md) |
 | D18 | A specification may be a file next to the code; `specs propose` and a GitHub Action propose, nothing in CI decides; a version must carry its declared pin | [ADR-0016](decisions/0016-the-git-native-path.md) |
+| D19 | One document is the artifact; facets are derived from it at save; `body_blocks` declare which table is which facet | [ADR-0017](decisions/0017-one-document.md) |
 
 ---
 
@@ -622,6 +631,7 @@ Steps 1–7 are the product. Everything after makes it complete.
 
 | Version | Date | Change |
 |---|---|---|
+| 1.0 | 2026-09-15 | **One document** (D19, ADR-0017). ADR-0004's split stays in the record and leaves authoring: a draft is saved as one markdown text (`PUT /drafts/:id/document`), the facets derived from front-matter and from the type's declared `body_blocks` — a table under a named heading is a facet — with provenance from the saver and a human's confirmation surviving an unchanged value. A version composes its document from the record; the digest is unchanged. The console editor is one textarea with the derived projection beside it; the second form is gone. The CLI sends the file as the document; MCP gains `read_document` and `save_document`. The specification type declares its acceptance-criteria table. §2.4 amended |
 | 0.9 | 2026-09-15 | **The git-native path** (D18, ADR-0016). `specs` CLI — propose a markdown file with front-matter (readiness first, one live proposal per lineage, evaluations run), print the decider's packet as markdown, decide under one's own token, withdraw. `withdraw` reaches the api for the first time. A composite GitHub Action proposes from a pull request and posts the packet; no decide step in CI, by design. **A version whose type declares a pin must carry it** — a gate requirement computed once for view and decision — closing a bypass where a specification with no `justified_by` could be accepted. Guide added |
 | 0.8 | 2026-09-15 | **The evaluator port has a floor, and the callout exists** (D17, ADR-0015). An evaluator is `builtin: facet_schema` or an `endpoint` with `${VAR}` resolved from the environment; both run at propose and on demand, and report `recorded` or `unavailable` with a reason. The committed definition makes sufficiency a builtin and leaves conformance an endpoint. **Readiness**: a draft's schema turned into the questions still to answer, split into what stops propose and what the gate will refuse; in the editor after every save, and over MCP. ADR-0002's port table amended; §5 and §3.4 updated. Standalone now runs the whole loop with nothing behind the port |
 | 0.7 | 2026-09-15 | **Questions on a version** (D16, ADR-0014). The one thing "not a wiki" wrongly excluded, admitted narrowly: a question attaches to an immutable version, never a draft, never changes it, is asked by anyone, answered by anyone with an agent's answer marked as such, and closed only by a human. Three events on the sink carrying a digest of the text, never the text. `requires.questions_resolved` on a gate, declared on the specification gate. Over MCP: list, ask, answer — no close. The decision page and the version page gain the panel; the packet carries `questions`. §2, §3.4 and §10 amended |

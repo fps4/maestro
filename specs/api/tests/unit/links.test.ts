@@ -16,6 +16,7 @@ const specification: TypeDeclaration = {
   effective_dating: false,
   classification_required: true,
   catalogue_refs: true,
+  body_blocks: [],
   links: [
     { id: 'justified_by', to: 'business_case', pinned: true },
     { id: 'addresses', to: 'opportunity', pinned: false },

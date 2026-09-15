@@ -36,22 +36,29 @@ decider: usr-j-dekker
 Six projects of planning history say fourteen days.
 `;
 
-/** `SPEC` is a template; the test fills in the case it rests on once one is accepted. */
+/**
+ * `SPEC` is a template; the test fills in the case it rests on once one is accepted. The
+ * acceptance criteria are a table in the body — the type declares that block — so the file has no
+ * second form for them.
+ */
 const specResting = (on: string) => `---
 type: specification
 title: Materiaalstaat generator
 classification: { lawful_basis: contract, retention: 7y, personal_data: false }
 links: [{ type: justified_by, target: ${on} }]
-facets:
-  class: generative
-  acceptance_criteria:
-    - { id: AC-1, text: "When a project is selected, the system shall generate the staat", priority: must, verify: test }
-  personal_data_in_scope: false
-  consequence_class: c2
+class: generative
+personal_data_in_scope: false
+consequence_class: c2
 ---
 ## Scope
 
 When a project is selected, the system shall generate the materiaalstaat.
+
+## Acceptance criteria
+
+| id   | text                                                            | priority | verify |
+|------|-----------------------------------------------------------------|----------|--------|
+| AC-1 | When a project is selected, the system shall generate the staat | must     | test   |
 `;
 let SPEC = '';
 
@@ -123,8 +130,9 @@ describe('front-matter', () => {
     const { meta, body } = splitFrontMatter(SPEC);
     expect(meta.type).toBe('specification');
     expect(body.trim()).toMatch(/^## Scope/);
+    // Front-matter alone carries three facets; the fourth, acceptance criteria, is the table in
+    // the body and is the service's to read from the type's declared block.
     expect(Object.keys(facetsFrom(meta)).sort()).toEqual([
-      'acceptance_criteria',
       'class',
       'consequence_class',
       'personal_data_in_scope',

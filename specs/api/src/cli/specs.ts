@@ -26,24 +26,15 @@
  *   ---
  *   ## Scope
  *
- * Auth is a bearer token in `SPECS_TOKEN` and the service in `SPECS_URL`. Facets are marked
- * `declared` when the token is a person's and `extracted` when it is an agent's — the CLI is the
- * same principal as its token, never someone else.
+ * Auth is a bearer token in `SPECS_TOKEN` and the service in `SPECS_URL`. The service marks the
+ * facets `declared` when the token is a person's and `extracted` when it is an agent's — the CLI
+ * is the same principal as its token, never someone else.
  */
 
 import { readFile } from 'node:fs/promises';
-import { parse as parseYaml } from 'yaml';
+import { facetsFrom, splitFrontMatter } from '../domain/document.js';
 
-const RESERVED = new Set([
-  'type',
-  'title',
-  'artifact',
-  'classification',
-  'links',
-  'catalogue_refs',
-  'effective',
-  'facets',
-]);
+export { facetsFrom, splitFrontMatter };
 
 interface Options {
   url: string;
@@ -96,25 +87,6 @@ function ref(value: string): { artifact: string; ordinal: number } {
   return { artifact: m[1]!, ordinal: Number(m[2]) };
 }
 
-/** Split `---\n…\n---\n` front-matter from the body. No front-matter is fine: everything is body. */
-export function splitFrontMatter(source: string): { meta: Record<string, unknown>; body: string } {
-  const m = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/.exec(source);
-  if (!m) return { meta: {}, body: source };
-  const meta = (parseYaml(m[1]!) ?? {}) as Record<string, unknown>;
-  if (typeof meta !== 'object' || Array.isArray(meta)) throw new Error('front-matter must be a mapping');
-  return { meta, body: m[2] ?? '' };
-}
-
-/** Facets are the `facets:` block plus every top-level key the api does not reserve. */
-export function facetsFrom(meta: Record<string, unknown>): Record<string, unknown> {
-  const facets: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(meta)) {
-    if (!RESERVED.has(key)) facets[key] = value;
-  }
-  if (meta.facets && typeof meta.facets === 'object') Object.assign(facets, meta.facets as object);
-  return facets;
-}
-
 class Api {
   constructor(private readonly options: Options) {}
 
@@ -143,45 +115,15 @@ class Api {
   }
 }
 
-/**
- * What kind of principal this token is, so provenance is marked honestly. The dev verifier encodes
- * it in the token; a JWT carries it as a claim. The service resolves the truth either way — this is
- * only about not claiming a person wrote what an agent did.
- */
-function tokenKind(token: string): string {
-  if (token.startsWith('dev:')) return token.split(':')[2] ?? 'human';
-  try {
-    const [, payload] = token.split('.');
-    const claims = JSON.parse(
-      Buffer.from(payload!.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'),
-    ) as {
-      kind?: string;
-      principal_kind?: string;
-    };
-    return claims.kind ?? claims.principal_kind ?? 'human';
-  } catch {
-    return 'human';
-  }
-}
-
 async function propose(api: Api, file: string, flags: Record<string, string | true>) {
   const source = await readFile(file, 'utf8');
-  const { meta, body } = splitFrontMatter(source);
+  // Only the envelope is read here, to name the type and lineage; the service parses the rest.
+  const { meta } = splitFrontMatter(source);
   const type = (flags.type as string) ?? (meta.type as string);
   const title = (flags.title as string) ?? (meta.title as string);
   const artifact = (flags.artifact as string) ?? (meta.artifact as string | undefined);
   if (!type) throw new Error('a type is needed: `type:` in the front-matter or --type');
   if (!title) throw new Error('a title is needed: `title:` in the front-matter or --title');
-
-  const facets = facetsFrom(meta);
-  const kind = tokenKind(process.env.SPECS_TOKEN ?? '');
-  const at = new Date().toISOString();
-  const provenance = Object.fromEntries(
-    Object.keys(facets).map((f) => [
-      f,
-      { source: kind === 'agent' ? 'extracted' : 'declared', by: 'self', at },
-    ]),
-  );
 
   // One live proposal per lineage: withdraw what this principal proposed earlier and nobody decided.
   if (artifact && !flags['keep-proposed']) {
@@ -201,17 +143,16 @@ async function propose(api: Api, file: string, flags: Record<string, string | tr
     }
   }
 
-  const { draft } = await api.call<{ draft: { id: string } }>('POST', '/drafts', {
+  // One code path: the file *is* the document. The service derives facets from front-matter and
+  // from the type's declared blocks, and marks their provenance from the token's kind.
+  const { draft: created } = await api.call<{ draft: { id: string; revision: number } }>('POST', '/drafts', {
     type,
     title,
     ...(artifact ? { artifact } : {}),
-    facets,
-    provenance,
-    body: { format: 'markdown/v1', content: body },
-    ...(meta.links ? { links: meta.links } : {}),
-    ...(meta.classification ? { classification: meta.classification } : {}),
-    ...(meta.catalogue_refs ? { catalogue_refs: meta.catalogue_refs } : {}),
-    ...(meta.effective ? { effective: meta.effective } : {}),
+  });
+  const { draft } = await api.call<{ draft: { id: string } }>('PUT', `/drafts/${created.id}/document`, {
+    revision: created.revision,
+    document: source,
   });
 
   const { readiness } = await api.call<{

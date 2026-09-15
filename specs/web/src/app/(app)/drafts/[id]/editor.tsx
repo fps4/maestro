@@ -16,9 +16,15 @@ import {
 import type { Draft, Readiness } from '@/lib/types';
 
 /**
- * The editing surface.
+ * The editing surface — one document (ADR-0017).
  *
- * Two properties carry it.
+ * The author writes a single markdown text: front-matter for the title, classification, links and
+ * facets; the body below; and, where the type declares a block, a table under a named heading that
+ * *is* a facet. The service derives the projection at every save, and the panel beside the editor
+ * shows what the gate will read — so the author sees the structure their prose became without ever
+ * filling in a second form.
+ *
+ * Two further properties carry it.
  *
  * **Autosave with optimistic concurrency.** Saves are ordinary writes — a draft has no integrity
  * obligations because it is not a record — but a save carrying a stale revision is refused *with
@@ -37,6 +43,8 @@ export function Editor({
   pinnedLink,
   classificationRequired,
   readiness: initialReadiness,
+  document: initialDocument,
+  blocks,
 }: {
   workspace: string;
   draft: Draft;
@@ -45,11 +53,13 @@ export function Editor({
   pinnedLink: { id: string; to: string } | null;
   classificationRequired: boolean;
   readiness: Readiness | null;
+  document: string;
+  blocks: Array<{ facet: string; heading: string }>;
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState(initial);
-  const [body, setBody] = useState(initial.body.content);
-  const [title, setTitle] = useState(initial.title);
+  const [document, setDocument] = useState(initialDocument);
+  const [savedDocument, setSavedDocument] = useState(initialDocument);
   const [status, setStatus] = useState<'saved' | 'saving' | 'dirty' | 'conflict'>('saved');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -74,14 +84,19 @@ export function Editor({
     .map(([field]) => field);
 
   const save = useCallback(
-    async (patch: Record<string, unknown>) => {
+    async (text: string) => {
       setStatus('saving');
-      const response = await fetch(`/api/v1/workspaces/${workspace}/drafts/${draft.id}`, {
-        method: 'PATCH',
+      const response = await fetch(`/api/v1/workspaces/${workspace}/drafts/${draft.id}/document`, {
+        method: 'PUT',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ revision: draft.revision, ...patch }),
+        body: JSON.stringify({ revision: draft.revision, document: text }),
       });
-      const payload = (await response.json()) as { draft?: Draft; message?: string; actual?: number };
+      const payload = (await response.json()) as {
+        draft?: Draft;
+        document?: string;
+        message?: string;
+        actual?: number;
+      };
 
       if (response.status === 409) {
         // Refused *with the current state*, which is what makes this recoverable rather than a
@@ -96,6 +111,9 @@ export function Editor({
         return;
       }
       setDraft(payload.draft);
+      // What was sent is what is saved; the composed document may differ in whitespace, and
+      // replacing the author's text with it mid-typing would move their cursor.
+      setSavedDocument(text);
       setStatus('saved');
       setError(null);
       void refreshReadiness();
@@ -106,17 +124,17 @@ export function Editor({
   // Autosave on a pause, not on every keystroke: a draft is saved continuously, but a request per
   // character would make the slowest thing in the service the act of writing in it.
   useEffect(() => {
-    if (body === draft.body.content && title === draft.title) return;
+    if (document === savedDocument) return;
     if (status === 'conflict') return;
     setStatus('dirty');
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(() => {
-      void save({ body: { format: draft.body.format, content: body }, title });
+      void save(document);
     }, 900);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [body, title, draft.body.content, draft.body.format, draft.title, save, status]);
+  }, [document, savedDocument, save, status]);
 
   async function confirm(field: string) {
     setBusy(true);
@@ -165,7 +183,7 @@ export function Editor({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="flex flex-col gap-1">
           <Eyebrow>draft · mutable · not a record</Eyebrow>
-          <PageTitle>{title || 'Untitled draft'}</PageTitle>
+          <PageTitle>{draft.title || 'Untitled draft'}</PageTitle>
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
             <Mono>{draft.type}</Mono>
             <span className="text-faint">·</span>
@@ -227,42 +245,40 @@ export function Editor({
         <div className="flex flex-col gap-2.5">
           <div className="flex items-center justify-between gap-2">
             <SectionTitle>
-              Body <span className="font-normal text-faint font-mono">{draft.body.format}</span>
+              The document <span className="font-normal text-faint font-mono">{draft.body.format}</span>
             </SectionTitle>
           </div>
 
-          <input
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Title"
-            aria-label="Title"
-            className="rounded border border-dashed border-rule-strong bg-surface-2 px-2.5 py-2 text-sm"
-          />
-
           <textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            aria-label="Body"
+            value={document}
+            onChange={(e) => setDocument(e.target.value)}
+            aria-label="Document"
             spellCheck
-            className="min-h-[420px] w-full rounded border border-dashed border-rule-strong bg-surface-2 px-3.5 py-3 font-mono text-xs leading-[1.65]"
+            className="min-h-[520px] w-full rounded border border-dashed border-rule-strong bg-surface-2 px-3.5 py-3 font-mono text-xs leading-[1.65]"
           />
 
           <p className="m-0 text-2xs text-faint">
-            Autosaved on every pause. A save carrying a stale revision is refused with the current state
-            rather than overwriting it.
+            One text. The front-matter between the <Mono>---</Mono> lines carries the title, classification,
+            links and any facet; everything below is the body.
+            {blocks.length > 0
+              ? ` A table under the heading ${blocks.map((b) => `“${b.heading}”`).join(' or ')} is read as a facet.`
+              : ''}{' '}
+            Autosaved on every pause; a save carrying a stale revision is refused rather than overwriting.
           </p>
         </div>
 
         <div className="flex flex-col gap-2.5">
           <SectionTitle>
-            Facets <span className="font-normal text-faint">— the only thing a gate reads</span>
+            What the gate will read{' '}
+            <span className="font-normal text-faint">— derived from the document</span>
           </SectionTitle>
 
           {Object.keys(draft.facets).length === 0 ? (
             <Card flat>
               <p className="m-0 text-xs text-muted">
-                No facet is set yet. A version cannot be proposed until the facets satisfy this type&rsquo;s
-                schema — a draft may be invalid; a proposal may not.
+                Nothing yet. Add keys to the front-matter
+                {blocks.length > 0 ? `, or a table under “${blocks[0]!.heading}”` : ''}, and they appear here
+                as the facets a gate reads. A draft may be incomplete; a proposal may not.
               </p>
             </Card>
           ) : (

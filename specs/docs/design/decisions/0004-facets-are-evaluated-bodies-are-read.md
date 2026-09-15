@@ -2,6 +2,7 @@
 title: "0004: Facets are evaluated; bodies are authored, rendered and diffed but never evaluated"
 summary: "A version is an envelope, a typed facet set validated per artifact type, and a body in a declared format. The service now authors, renders, diffs and searches bodies — but no gate requirement and no evaluator may read one. That single rule keeps the body format free to change and keeps gates falsifiable."
 status: proposed
+amended_by: ./0017-one-document.md
 last_updated: 2026-08-04
 date: 2026-08-04
 related:

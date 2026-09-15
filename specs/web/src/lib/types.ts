@@ -360,6 +360,7 @@ export interface TypeDeclaration {
   catalogue_refs: boolean;
   draft_expiry?: string;
   links: Array<{ id: string; to: string; pinned: boolean; label?: string }>;
+  body_blocks: Array<{ facet: string; heading: string; shape: 'table' }>;
 }
 
 export interface GateDeclaration {

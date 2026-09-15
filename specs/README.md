@@ -50,6 +50,10 @@ Editing is continuous and messy; a record is neither. Keeping them as separate e
 a real editor and a trustworthy approval live in one service
 ([ADR-0003](docs/design/decisions/0003-immutable-versions-mutable-drafts.md)).
 
+And a draft is **one document**: markdown with front-matter, where a table under a declared heading
+*is* a facet. The gate reads structure; the author writes prose; the same bytes are both
+([ADR-0017](docs/design/decisions/0017-one-document.md)).
+
 ## What it is not
 
 - **Not a wiki.** Artifacts have typed links, not a page tree. The editor exists to produce a version
@@ -136,6 +140,8 @@ Every write produces a draft or a **proposed** version. Only a gate decision acc
 | `GET /v1/gates/:gate/:id/:n/packet` | The decider's packet: everything a person needs to decide, in plain language, in one call |
 | `…/versions/:n/questions` | Ask a question of a version; answer one; a human closes it. Never a mutation |
 | `GET /v1/drafts/:id/readiness` | What a draft still needs, in the schema's words, before propose |
+| `GET`/`PUT /v1/drafts/:id/document` | The draft as one document; save it as one, facets derived |
+| `GET …/versions/:n/document` | A version as one document, composed from the record |
 | `POST …/versions/:n/evaluate` | Re-run the evaluations a gate requires; builtin or endpoint, per the definition |
 | `POST …/versions/:n/withdraw` | The proposer takes a proposed version back, before any decision |
 | `POST /v1/gates/:gate/decisions` | The gate's declared outcomes. Attributed, human-only |
@@ -143,8 +149,8 @@ Every write produces a draft or a **proposed** version. Only a gate decision acc
 | `GET /v1/search` | Facets and bodies, within one workspace |
 | `GET /v1/export/:workspace` | The full chain of record, portable |
 
-**MCP** exposes reads, draft writes, readiness, propose, evaluations, the decider's packet, and
-questions (list, ask, answer) — so agents author through it and can explain a pending decision to
+**MCP** exposes reads, the document (read and save), draft writes, readiness, propose,
+evaluations, the decider's packet, and questions (list, ask, answer) — so agents author through it and can explain a pending decision to
 the human accountable for it — and **no decision surface at all**, and no way to close a question.
 
 ## From a file next to the code

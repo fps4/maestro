@@ -17,6 +17,7 @@ import {
 } from '../auth/context.js';
 import { Unauthenticated, type TokenVerifier } from '../auth/verify.js';
 import { AttributionRefused } from '../domain/attribution.js';
+import { DocumentError } from '../domain/document.js';
 import { FacetValidationError } from '../domain/facets.js';
 import { PinRefused } from '../domain/links.js';
 import { IllegalStateChange, ProposalRefused, StaleRevision } from '../domain/versioning.js';
@@ -194,6 +195,28 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     return { draft: await services(ctx).artifacts.saveDraft(id, saveDraft.parse(request.body), ctx.actor) };
   });
 
+  // --- the document: one text, from which the facets are derived (ADR-0017) ---
+
+  app.get('/v1/workspaces/:ws/drafts/:id/document', async (request) => {
+    const { ws: workspace, id } = ws.extend({ id: z.string() }).parse(request.params);
+    const ctx = await context(request, workspace);
+    const svc = services(ctx);
+    const draft = await svc.artifacts.getDraft(id);
+    return { document: svc.artifacts.documentOf(draft), revision: draft.revision };
+  });
+
+  app.put('/v1/workspaces/:ws/drafts/:id/document', async (request) => {
+    const { ws: workspace, id } = ws.extend({ id: z.string() }).parse(request.params);
+    const input = z
+      .object({ revision: z.number().int().positive(), document: z.string() })
+      .parse(request.body);
+    const ctx = await context(request, workspace);
+    requireRole(ctx, 'author');
+    const svc = services(ctx);
+    const draft = await svc.artifacts.saveDocument(id, input, ctx.actor);
+    return { draft, document: svc.artifacts.documentOf(draft) };
+  });
+
   app.post('/v1/workspaces/:ws/drafts/:id/confirm', async (request) => {
     const { ws: workspace, id } = ws.extend({ id: z.string() }).parse(request.params);
     const { fields } = z.object({ fields: z.array(z.string()).min(1) }).parse(request.body);
@@ -281,6 +304,18 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     const svc = services(ctx);
     const version = await svc.artifacts.getVersion(id, ordinal);
     return { evaluations: await svc.evaluations.run(version) };
+  });
+
+  app.get('/v1/workspaces/:ws/artifacts/:id/versions/:ordinal/document', async (request) => {
+    const {
+      ws: workspace,
+      id,
+      ordinal,
+    } = artifactParams.extend({ ordinal: z.coerce.number().int() }).parse(request.params);
+    const ctx = await context(request, workspace);
+    const svc = services(ctx);
+    const version = await svc.artifacts.getVersion(id, ordinal);
+    return { document: svc.artifacts.documentOf(version), digest: version.digest };
   });
 
   app.get('/v1/workspaces/:ws/artifacts/:id/diff', async (request) => {
@@ -546,6 +581,9 @@ export function errorHandler(error: Error, _request: FastifyRequest, reply: Fast
     return reply
       .code(422)
       .send({ error: 'definition_invalid', message: error.message, issues: error.issues });
+  }
+  if (error instanceof DocumentError) {
+    return reply.code(422).send({ error: 'document_invalid', message: error.message });
   }
   if (error instanceof PinRefused || error instanceof IllegalStateChange || error instanceof Refused) {
     return reply.code(422).send({ error: 'refused', message: error.message });

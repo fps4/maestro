@@ -121,6 +121,11 @@ export async function fetchDraft(id: string): Promise<Draft> {
   return draft;
 }
 
+/** A draft as one document — front-matter and body — with the revision to save it against. */
+export async function fetchDocument(id: string): Promise<{ document: string; revision: number }> {
+  return get(`/v1/workspaces/${await ws()}/drafts/${id}/document`);
+}
+
 export async function fetchReadiness(id: string): Promise<Readiness> {
   const { readiness } = await get<{ readiness: Readiness }>(
     `/v1/workspaces/${await ws()}/drafts/${id}/readiness`,

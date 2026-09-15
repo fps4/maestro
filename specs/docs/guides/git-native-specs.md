@@ -23,22 +23,30 @@ title: Materiaalstaat generator
 artifact: art-7q2k9…                        # after the first propose: revise this lineage
 classification: { lawful_basis: contract, retention: 7y, personal_data: false }
 links: [{ type: justified_by, target: art-c4se… }]
-facets:
-  class: generative
-  acceptance_criteria:
-    - { id: AC-1, text: "When a project is selected, the system shall generate the staat", priority: must, verify: test }
-  personal_data_in_scope: false
-  consequence_class: c2
+class: generative
+personal_data_in_scope: false
+consequence_class: c2
 ---
 ## Scope
 
 When a project is selected, the system shall generate the materiaalstaat.
+
+## Acceptance criteria
+
+| id   | text                                                            | priority | verify |
+|------|-----------------------------------------------------------------|----------|--------|
+| AC-1 | When a project is selected, the system shall generate the staat | must     | test   |
 ```
 
 Everything above the second `---` is what the api needs; everything below is the body. `type` and
 `title` are required; `artifact` names the lineage to revise (omit it the first time, then paste
 the id the command prints); `classification`, `links`, `catalogue_refs` and `effective` are passed
 through. Every other top-level key, and everything under `facets:`, is a facet.
+
+**The acceptance criteria are a table, not front-matter.** The `specification` type declares that
+the table under the heading *Acceptance criteria* is the facet `acceptance_criteria`
+([ADR-0017](../design/decisions/0017-one-document.md)): header cells become keys, rows become the
+objects the gate reads. Write them once, as prose a reviewer can read; there is no second form.
 
 ## The command
 

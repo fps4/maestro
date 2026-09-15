@@ -91,6 +91,20 @@ const typeDeclaration = z.object({
   /** Whether artifacts of this type may reference standards in the catalogue workspace. */
   catalogue_refs: z.boolean().default(false),
   links: z.array(linkDeclaration).default([]),
+  /**
+   * Typed blocks: a part of the body that is also a facet (ADR-0017). "The table under the
+   * heading *Acceptance criteria* is the facet `acceptance_criteria`." The block stays prose to a
+   * reader and becomes structure to a gate; the same bytes are both, so they cannot drift.
+   */
+  body_blocks: z
+    .array(
+      z.object({
+        facet: identifier,
+        heading: z.string().min(1),
+        shape: z.enum(['table']).default('table'),
+      }),
+    )
+    .default([]),
 });
 
 export type TypeDeclaration = z.infer<typeof typeDeclaration>;
@@ -265,6 +279,13 @@ export const workspaceDefinitionSchema = z
         if (!typeIds.has(link.to)) {
           fail(['types', i, 'links', j, 'to'], `link \`${link.id}\` targets undeclared type \`${link.to}\``);
         }
+      });
+      const blockFacets = new Set<string>();
+      type.body_blocks.forEach((block, j) => {
+        if (blockFacets.has(block.facet)) {
+          fail(['types', i, 'body_blocks', j, 'facet'], `facet \`${block.facet}\` is declared by two blocks`);
+        }
+        blockFacets.add(block.facet);
       });
       if (type.draft_expiry) {
         try {

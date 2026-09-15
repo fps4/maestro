@@ -57,6 +57,10 @@ types:
       # sees the case as it read when someone accepted it, not as it was rewritten afterwards.
       - { id: justified_by, to: business_case, pinned: true, label: Justified by the business case }
       - { id: addresses, to: opportunity, label: Addresses the opportunity }
+    # The acceptance criteria are written as a table in the document, under this heading, and
+    # read by the gate as the facet — one text, two readers, no second form (ADR-0017).
+    body_blocks:
+      - { facet: acceptance_criteria, heading: Acceptance criteria, shape: table }
 
   - id: intake_assessment
     title: Intake assessment

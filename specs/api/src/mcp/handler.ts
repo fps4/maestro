@@ -330,6 +330,60 @@ export const TOOLS: McpTool[] = [
     },
   },
   {
+    name: 'read_document',
+    title: 'Read a draft or a version as one document',
+    description:
+      'The whole artifact as one markdown document: front-matter carrying the title, classification, links and facets, then the body. Pass a draft id for the live draft, or an artifact and ordinal for an immutable version. This is the form to edit — change the document and save it with `save_document` rather than editing facets and body separately.',
+    inputSchema: z.object({
+      draft: z.string().optional(),
+      artifact: z.string().optional(),
+      ordinal: z.number().int().positive().optional(),
+    }),
+    async handler(ctx, input) {
+      const { draft, artifact, ordinal } = z
+        .object({
+          draft: z.string().optional(),
+          artifact: z.string().optional(),
+          ordinal: z.number().int().positive().optional(),
+        })
+        .parse(input);
+      const svc = services(ctx);
+      if (draft) {
+        const record = await svc.artifacts.getDraft(draft);
+        return { document: svc.artifacts.documentOf(record), revision: record.revision };
+      }
+      if (!artifact) throw new Error('Pass a `draft`, or an `artifact` and `ordinal`.');
+      const version =
+        ordinal === undefined
+          ? ((await svc.artifacts.acceptedVersion(artifact)) ??
+            (await svc.artifacts.getVersion(
+              artifact,
+              (await svc.artifacts.getArtifact(artifact)).latest_ordinal,
+            )))
+          : await svc.artifacts.getVersion(artifact, ordinal);
+      return {
+        document: svc.artifacts.documentOf(version),
+        digest: version.digest,
+        ordinal: version.ordinal,
+      };
+    },
+  },
+  {
+    name: 'save_document',
+    title: 'Save a draft as one document',
+    description:
+      'Replace a draft with one markdown document: front-matter (title, classification, links, and every other key as a facet) and the body. Facets the type declares as body blocks — a table under a named heading — are read from the body. Every facet you write is marked `extracted` and attributed to you; a person confirms before it reaches a gate. Supply the `revision` you read.',
+    inputSchema: z.object({ draft: z.string(), revision: z.number().int().positive(), document: z.string() }),
+    async handler(ctx, input) {
+      const { draft, revision, document } = z
+        .object({ draft: z.string(), revision: z.number().int().positive(), document: z.string() })
+        .parse(input);
+      const svc = services(ctx);
+      const saved = await svc.artifacts.saveDocument(draft, { revision, document }, ctx.actor);
+      return { draft: saved, readiness: await svc.artifacts.readiness(draft) };
+    },
+  },
+  {
     name: 'draft_readiness',
     title: 'What a draft still needs',
     description:

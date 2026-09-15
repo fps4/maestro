@@ -252,3 +252,38 @@ describe('questions_resolved', () => {
     expect(gateIsOpen(undeclared)).toBe(true);
   });
 });
+
+describe('pinned_link', () => {
+  it('holds the gate shut when the type declares a pin and the version carries none', () => {
+    const missing = gateRequirements({
+      ...ready,
+      pinned_link: {
+        type: 'justified_by',
+        label: 'Justified by',
+        target_label: 'business case',
+        present: false,
+      },
+    });
+    const requirement = missing.find((r) => r.id === 'pinned_link')!;
+    expect(requirement.satisfied).toBe(false);
+    expect(requirement.blocking).toBe(true);
+    expect(requirement.title).toBe('Rests on a business case');
+    expect(requirement.detail).toMatch(/nothing to freeze to/);
+    expect(gateIsOpen(missing)).toBe(false);
+
+    const present = gateRequirements({
+      ...ready,
+      pinned_link: {
+        type: 'justified_by',
+        label: 'Justified by',
+        target_label: 'business case',
+        present: true,
+      },
+    });
+    expect(present.find((r) => r.id === 'pinned_link')!.satisfied).toBe(true);
+    expect(gateIsOpen(present)).toBe(true);
+
+    // A type with no pin declares no such requirement.
+    expect(gateRequirements(ready).find((r) => r.id === 'pinned_link')).toBeUndefined();
+  });
+});

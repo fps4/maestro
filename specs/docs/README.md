@@ -8,7 +8,7 @@ Two planes: a **Docs** plane you read, and a **Delivery** plane you track.
 |---|---|
 | [`design/`](design/) | How it is built and why. [`architecture.md`](design/architecture.md) is the entry point; [`decisions/`](design/decisions/) holds the ADRs; [`ui/`](design/ui/) holds the approved console design |
 | `reference/` | API, SDK, MCP tool, and configuration-schema reference. *Not yet written* |
-| `guides/` | Setup, defining a workspace, integrating an evaluator. *Not yet written* |
+| `guides/` | [`git-native-specs.md`](guides/git-native-specs.md) — a specification as a file next to the code. Setup, defining a workspace, integrating an evaluator: *not yet written* |
 | `product/` | Requirements and user stories. *Not yet written* |
 
 ## Start here
@@ -37,8 +37,9 @@ Two planes: a **Docs** plane you read, and a **Delivery** plane you track.
 | [0013](design/decisions/0013-the-decision-page-is-the-product.md) | The decision page is the product; the decider's packet is one call, shared by console and MCP |
 | [0014](design/decisions/0014-questions-on-a-version.md) | A question on a version is a fact about it, not a comment; asked by anyone, answered by anyone, closed by a human |
 | [0015](design/decisions/0015-the-evaluator-port-has-a-floor.md) | The evaluator port has a floor — the facet schema, as findings — and an outbound call; a draft can ask what it still needs |
+| [0016](design/decisions/0016-the-git-native-path.md) | A specification may be a file next to the code; proposing is a command and a workflow step; deciding stays a person's act |
 
-All fifteen are `status: proposed`. The first build exists, but nothing has run against real content
+All sixteen are `status: proposed`. The first build exists, but nothing has run against real content
 yet, so they remain a design under review rather than a record of commitments made.
 
 ## Conventions

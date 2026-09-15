@@ -31,6 +31,7 @@ import type {
 } from '../domain/types.js';
 import { NotFound, Refused, type Actor } from './artifacts.js';
 import { GateViewService, type DecisionContext, type GateView } from './gate-view.js';
+import { pinnedLinkInput } from './pinned-link.js';
 import { QuestionService } from './questions.js';
 import type { LoadedWorkspace } from './workspaces.js';
 
@@ -126,6 +127,7 @@ export class DecisionService {
       subject_digest: version.digest,
       acceptances: context.acceptances,
       open_questions: await new QuestionService(this.handle).openCount(version.artifact, version.ordinal),
+      ...pinnedLinkInput(this.workspace.definition, version),
     });
 
     const verdict = mayDecide({

@@ -2,7 +2,7 @@
   "name": "@fps4/maestro-specs-api",
   "version": "0.1.0",
   "private": true,
-  "description": "Governed specification service — drafts, immutable versions, gates a named human passes, and the standards catalogue they are judged against.",
+  "description": "Governed specification service \u2014 drafts, immutable versions, gates a named human passes, and the standards catalogue they are judged against.",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -19,7 +19,8 @@
     "test:unit": "vitest run tests/unit",
     "workspace:apply": "tsx src/cli/apply-workspace.ts",
     "workspace:validate": "tsx src/cli/validate-workspaces.ts",
-    "workspace:seed": "tsx src/cli/seed.ts"
+    "workspace:seed": "tsx src/cli/seed.ts",
+    "specs": "tsx src/cli/specs.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.716.0",
@@ -50,5 +51,8 @@
     "typescript": "^5.7.3",
     "typescript-eslint": "^8.20.0",
     "vitest": "^3.2.6"
+  },
+  "bin": {
+    "specs": "dist/cli/specs.js"
   }
 }

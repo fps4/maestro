@@ -13,6 +13,7 @@ import { call, grantMembership, startHarness, token, type Harness } from './help
 
 let harness: Harness;
 let sponsor: string;
+let acceptedCase: string;
 
 const AUTHOR = token('p-visser', 'human', 'author');
 const SPONSOR = token('j-dekker', 'human', 'author,reviewer');
@@ -29,7 +30,47 @@ beforeAll(async () => {
   await grantMembership(harness, harness.tenant, 'p-visser', ['author']);
   sponsor = await grantMembership(harness, harness.tenant, 'j-dekker', ['author', 'sponsor', 'owner']);
   await grantMembership(harness, harness.tenant, 'agt-explainer', ['author']);
+  acceptedCase = await acceptBusinessCase();
 }, 60_000);
+
+/** A specification rests on an accepted business case; the gate refuses one that does not. */
+async function acceptBusinessCase(): Promise<string> {
+  const facets = {
+    declared_outcome: {
+      statement: 'Materiaalstaat sneller samenstellen',
+      baseline: 14.2,
+      target: 8,
+      unit: 'days',
+      baseline_source: 'measured',
+    },
+    beneficiary: { role: 'werkvoorbereider', count_estimate: 6 },
+    personal_data_in_scope: true,
+    consequence_class: 'c3',
+    decider: 'usr-j-dekker',
+  };
+  const created = await call<{ draft: { id: string } }>(harness, 'POST', `${base()}/drafts`, {
+    as: AUTHOR,
+    body: { type: 'business_case', title: 'The case', facets, provenance: declared(facets), classification },
+  });
+  const { version } = (
+    await call<{ version: { artifact: string; ordinal: number } }>(
+      harness,
+      'POST',
+      `${base()}/drafts/${created.body.draft.id}/propose`,
+      { as: AUTHOR },
+    )
+  ).body;
+  await call(harness, 'POST', `${base()}/gates/explore/decisions`, {
+    as: SPONSOR,
+    body: {
+      artifact: version.artifact,
+      ordinal: version.ordinal,
+      outcome: 'approve',
+      attribution: { accountable: sponsor, acting: sponsor, seat: 'sponsor', oversight_level: 'O2' },
+    },
+  });
+  return version.artifact;
+}
 
 afterAll(async () => {
   await harness?.stop();
@@ -58,6 +99,7 @@ async function proposeSpecification(title: string) {
         content: '## Scope\n\nWhen a project is selected, the system shall generate the materiaalstaat.',
       },
       classification,
+      links: [{ type: 'justified_by', target: acceptedCase }],
     },
   });
   const proposed = await call<{ version: { artifact: string; ordinal: number; digest: string } }>(

@@ -20,7 +20,7 @@ import { parseDuration, typeIn, initialPhase } from '../domain/workspace-definit
 import { labelsFor } from '../domain/labels.js';
 import { draftReadiness, type Readiness } from '../domain/readiness.js';
 import { phaseAfterPropose } from '../domain/lifecycle.js';
-import { assertRevision, proposeVersion, recordContribution } from '../domain/versioning.js';
+import { assertRevision, nextState, proposeVersion, recordContribution } from '../domain/versioning.js';
 import type {
   Artifact,
   Body,
@@ -344,6 +344,52 @@ export class ArtifactService {
       await this.emitVersionProposed(session, version, actor);
       return version;
     });
+  }
+
+  /**
+   * Withdraw a proposed version — the proposer's act, before any decision.
+   *
+   * The git-native path re-proposes on every push, and a lineage with three versions all awaiting
+   * the same decision is three decisions nobody wants to take. Withdrawing the earlier one keeps
+   * one live proposal per lineage. The withdrawn version stays in the record: it was proposed, and
+   * that it was taken back is a fact too.
+   */
+  async withdraw(artifactId: string, ordinal: number, actor: Actor, reason?: string): Promise<Version> {
+    const version = await this.getVersion(artifactId, ordinal);
+    if (version.proposed_by !== actor.principal) {
+      throw new Refused(
+        `Only the proposer withdraws a version. \`${artifactId}@${ordinal}\` was proposed by \`${version.proposed_by}\`.`,
+      );
+    }
+    const state = nextState(version.state, { kind: 'withdraw', by: actor.principal });
+    const now = new Date().toISOString();
+    return this.handle.transaction(async (session) => {
+      const updated = await this.versions().findOneAndUpdate(
+        { artifact: artifactId, ordinal, state: 'proposed' },
+        { $set: { state, decided_at: now } },
+        { session, returnDocument: 'after', projection: { _id: 0 } },
+      );
+      if (!updated) throw new Refused(`\`${artifactId}@${ordinal}\` is no longer proposed.`);
+      await emit(this.handle.db, session, [
+        {
+          workspace: this.handle.workspace,
+          kind: 'VersionWithdrawn',
+          subject: { artifact: artifactId, ordinal },
+          actor: actor.principal,
+          payload: { ...(reason ? { reason } : {}) },
+          occurred_at: now,
+        },
+      ]);
+      return updated;
+    });
+  }
+
+  /** The versions of a lineage still awaiting a decision. */
+  async proposedVersions(artifactId: string): Promise<Version[]> {
+    return this.versions()
+      .find({ artifact: artifactId, state: 'proposed' }, { projection: { _id: 0, ...WITHOUT_BODY } })
+      .sort({ ordinal: 1 })
+      .toArray();
   }
 
   private async emitVersionProposed(session: ClientSession, version: Version, actor: Actor) {

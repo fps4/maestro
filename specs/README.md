@@ -137,6 +137,7 @@ Every write produces a draft or a **proposed** version. Only a gate decision acc
 | `…/versions/:n/questions` | Ask a question of a version; answer one; a human closes it. Never a mutation |
 | `GET /v1/drafts/:id/readiness` | What a draft still needs, in the schema's words, before propose |
 | `POST …/versions/:n/evaluate` | Re-run the evaluations a gate requires; builtin or endpoint, per the definition |
+| `POST …/versions/:n/withdraw` | The proposer takes a proposed version back, before any decision |
 | `POST /v1/gates/:gate/decisions` | The gate's declared outcomes. Attributed, human-only |
 | `GET /v1/workspaces/:id/register` | Everything in flight, with lifecycle state |
 | `GET /v1/search` | Facets and bodies, within one workspace |
@@ -145,6 +146,17 @@ Every write produces a draft or a **proposed** version. Only a gate decision acc
 **MCP** exposes reads, draft writes, readiness, propose, evaluations, the decider's packet, and
 questions (list, ask, answer) — so agents author through it and can explain a pending decision to
 the human accountable for it — and **no decision surface at all**, and no way to close a question.
+
+## From a file next to the code
+
+```bash
+cd api && SPECS_URL=… SPECS_TOKEN=… npm run specs -- propose ../../my-service/docs/spec.md --workspace maestro-platform
+```
+
+A markdown file with YAML front-matter is a complete authoring surface, and
+[`.github/actions/specs`](.github/actions/specs/action.yml) proposes it from a pull request and
+comments the decider's packet. Nothing in CI decides — see
+[`docs/guides/git-native-specs.md`](docs/guides/git-native-specs.md).
 
 ## Documentation
 

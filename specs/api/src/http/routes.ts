@@ -257,6 +257,19 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     return { version, rendered: await renderVersion(version, deps.signUrls) };
   });
 
+  /** The proposer takes a proposed version back, before any decision. It stays in the record. */
+  app.post('/v1/workspaces/:ws/artifacts/:id/versions/:ordinal/withdraw', async (request) => {
+    const {
+      ws: workspace,
+      id,
+      ordinal,
+    } = artifactParams.extend({ ordinal: z.coerce.number().int() }).parse(request.params);
+    const { reason } = z.object({ reason: z.string().max(1000).optional() }).parse(request.body ?? {});
+    const ctx = await context(request, workspace);
+    requireRole(ctx, 'author');
+    return { version: await services(ctx).artifacts.withdraw(id, ordinal, ctx.actor, reason) };
+  });
+
   /** Re-run every evaluation a gate requires — after an evaluator comes online, or on demand. */
   app.post('/v1/workspaces/:ws/artifacts/:id/versions/:ordinal/evaluate', async (request) => {
     const {

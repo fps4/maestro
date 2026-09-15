@@ -39,6 +39,12 @@ export interface GateInput {
   acceptances: AcceptanceState[];
   /** Questions asked of this version and not yet resolved by a human. */
   open_questions: number;
+  /**
+   * The pinned link the type declares, if any, and whether this version carries one. A pin that
+   * points at nothing accepted is refused at acceptance; a version with no pin at all must not
+   * slip past that refusal by having nothing to freeze.
+   */
+  pinned_link?: { type: string; label: string; target_label: string; present: boolean };
 }
 
 /**
@@ -88,6 +94,19 @@ export function gateRequirements(input: GateInput): Requirement[] {
           : result.verdict === 'not_applicable'
             ? 'not applicable to this version'
             : `failed, recorded ${result.recorded_at}`,
+      blocking: true,
+    });
+  }
+
+  if (input.pinned_link) {
+    const { label, target_label, present } = input.pinned_link;
+    requirements.push({
+      id: 'pinned_link',
+      satisfied: present,
+      title: `Rests on a ${target_label}`,
+      detail: present
+        ? `"${label}" is declared, and freezes to the accepted version at acceptance.`
+        : `No "${label}" link. Acceptance would have nothing to freeze to, so this version cannot be accepted until it says which ${target_label} it rests on.`,
       blocking: true,
     });
   }

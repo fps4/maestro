@@ -1,5 +1,5 @@
 {
-  "name": "@fps4/mstr-specs-api",
+  "name": "@fps4/maestro-specs-api",
   "version": "0.1.0",
   "private": true,
   "description": "Governed specification service — drafts, immutable versions, gates a named human passes, and the standards catalogue they are judged against.",

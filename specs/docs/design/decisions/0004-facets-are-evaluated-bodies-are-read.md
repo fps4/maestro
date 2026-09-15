@@ -15,14 +15,14 @@ related:
 Two requirements pull against each other.
 
 **Artifacts must be machine-evaluable.** A gate that requires a passing check needs something
-structured to check. maestro generates spec-adherence tests from EARS acceptance criteria; adel
+structured to check. maestro v1 generates spec-adherence tests from EARS acceptance criteria; maestro
 evaluates sufficiency standards against a business case. Neither works against prose.
 
 **Artifacts must be human-authored and human-readable**, in this service, by people who are not
 schema authors. An artifact someone cannot read is one they cannot confirm, and a confirmation
 nobody understood is worthless.
 
-A third pressure decides how they are reconciled: **the representation is not settled.** adel has an
+A third pressure decides how they are reconciled: **the representation is not settled.** maestro has an
 open question about what a specification's internal representation should be — controlled natural
 language, a structured model, or a hybrid. Committing the service to one answer commits every
 consumer to it, and changing it later invalidates everything written before.
@@ -73,8 +73,8 @@ alongside the body in the editor, so divergence is visible while writing rather 
 
 **The facet schema is the real design work per consumer**, and that is where the difficulty moves
 rather than disappearing. Too thin and gates check nothing; too thick and authoring becomes
-form-filling. Both known consumers have a usable start — maestro's `AC-N` with `priority`, `verify`,
-`source` and `rationale`; adel's sufficiency fields.
+form-filling. Both known consumers have a usable start — maestro v1's `AC-N` with `priority`, `verify`,
+`source` and `rationale`; maestro's sufficiency fields.
 
 **Diff splits in two.** Facet diff is structural and available for every type immediately. Body diff
 is per format, with a line differ as the default. A body diff only a developer can read is a defect

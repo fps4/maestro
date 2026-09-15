@@ -1,6 +1,6 @@
 ---
 title: "0006: Workspace is the isolation boundary, enforced by database-per-workspace bound once per request"
-summary: "One boundary concept — the workspace — which adel maps to a tenant and maestro to its organisation. Every access binds a workspace-scoped handle resolving to that workspace's own MongoDB database; no query names a workspace and none filters by one. The property that matters is that the mistake fails closed."
+summary: "One boundary concept — the workspace — which maestro maps to a tenant and maestro v1 to its organisation. Every access binds a workspace-scoped handle resolving to that workspace's own MongoDB database; no query names a workspace and none filters by one. The property that matters is that the mistake fails closed."
 status: proposed
 last_updated: 2026-08-04
 date: 2026-08-04
@@ -11,15 +11,15 @@ related:
 
 ## Context
 
-Both consumers need a boundary and neither means the same thing by it. adel needs a **tenant** — a
-client organisation, with data isolation and an audit scope that must hold under scrutiny. maestro
+Both consumers need a boundary and neither means the same thing by it. maestro needs a **tenant** — a
+client organisation, with data isolation and an audit scope that must hold under scrutiny. maestro v1
 needs its **organisation**, where the concern is clarity rather than confidentiality.
 
 Modelling both is two boundary concepts on every query, permission check and export. Modelling
 neither leaves each consumer to filter for itself, which is the weakest possible answer for the
 consumer with the strongest requirement.
 
-The deployment question compounds it. adel wants the isolation *level* to be a choice: most clients
+The deployment question compounds it. maestro wants the isolation *level* to be a choice: most clients
 share infrastructure, a regulated one gets dedicated. If that is an architecture decision rather than
 a deployment one, it gets made once, early, wrongly.
 
@@ -29,7 +29,7 @@ built has to work without database-enforced row policies.
 
 ## Decision
 
-**One concept: the workspace.** adel maps a tenant onto it; maestro maps its organisation. Nothing
+**One concept: the workspace.** maestro maps a tenant onto it; maestro v1 maps its organisation. Nothing
 crosses it — not a link, not a lineage, not a query, not a search index.
 
 **A workspace is logical, never physical.** Which database or deployment it lives in is a deployment

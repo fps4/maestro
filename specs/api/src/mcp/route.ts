@@ -47,7 +47,7 @@ export async function registerMcp(app: FastifyInstance, deps: RouteDeps): Promis
             return respond({
               protocolVersion: PROTOCOL_VERSION,
               capabilities: { tools: {} },
-              serverInfo: { name: 'mstr-specs', version: '0.1.0' },
+              serverInfo: { name: 'maestro-specs', version: '0.1.0' },
               instructions:
                 'A governed specification service. You may read anything in this workspace, read the shared standards catalogue, edit drafts and propose versions. ' +
                 'You cannot decide at a gate — no tool here does, by design. Facets you write are marked `extracted` and attributed to you; a named human must confirm them before they can reach a gate.',

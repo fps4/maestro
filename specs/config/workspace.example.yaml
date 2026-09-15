@@ -4,10 +4,10 @@
 # conditionals and no hooks. Where judgement is needed, declare a required evaluation and let an
 # evaluator answer through the port; the service records the verdict and never computes one.
 #
-# This example models maestro's spec-driven SDLC. The adel mapping for each concept is in
+# This example models maestro v1's spec-driven SDLC. The maestro mapping for each concept is in
 # ../GLOSSARY.md; it uses the same fields with different names.
 
-workspace: maestro-core
+workspace: maestro-v1-core
 definition_version: 3            # stamped on every version written under it; history is never rewritten
 
 # ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ attribution_profiles:
       # rejection is itself recorded (ADR-0005).
       accountable: { must_resolve_to: principal, kind: human }
       acting:      { must_resolve_to: principal }
-    optional: [risk_tier]        # adel populates `seat` and `oversight_level` here instead
+    optional: [risk_tier]        # maestro populates `seat` and `oversight_level` here instead
 
 # ---------------------------------------------------------------------------
 # Gates

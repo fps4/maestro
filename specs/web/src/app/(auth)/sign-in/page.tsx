@@ -41,7 +41,7 @@ export default async function SignInPage({
       <div className="flex w-full max-w-[372px] flex-col gap-4">
         <div className="flex flex-col gap-1">
           <div className="font-mono text-base font-semibold tracking-[-0.01em]">
-            mstr<span className="text-faint">-</span>specs
+            maestro<span className="text-faint">-</span>specs
           </div>
           <p className="text-sm text-muted">Specification records, and the standards they answer to.</p>
         </div>

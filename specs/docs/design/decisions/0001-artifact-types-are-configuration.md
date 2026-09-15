@@ -1,6 +1,6 @@
 ---
 title: "0001: Artifact types, links, gates and lifecycles are configuration, not code"
-summary: "The service ships no domain vocabulary. A workspace declares its artifact types, facet schemas, link types, gate definitions, lifecycle phases and attribution profile as data; the service enforces the rules those declarations imply. This is what lets adel and maestro run the same engine with no shared vocabulary."
+summary: "The service ships no domain vocabulary. A workspace declares its artifact types, facet schemas, link types, gate definitions, lifecycle phases and attribution profile as data; the service enforces the rules those declarations imply. This is what lets maestro and maestro v1 run the same engine with no shared vocabulary."
 status: proposed
 last_updated: 2026-08-04
 date: 2026-08-04
@@ -12,9 +12,9 @@ related:
 
 ## Context
 
-Two consumers exist today and their vocabularies do not overlap at all. adel has opportunities,
+Two consumers exist today and their vocabularies do not overlap at all. maestro has opportunities,
 business cases, specifications and intake assessments, moving through Explore, Assess, specification
-and release gates. maestro has charters, functional specs, technical designs and implementations,
+and release gates. maestro v1 has charters, functional specs, technical designs and implementations,
 moving through functional and technical gates.
 
 The mechanics *are* the same — a typed artifact, an immutable version, typed links to other

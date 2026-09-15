@@ -1,7 +1,7 @@
 ---
 title: specs-service architecture
 status: draft
-last_updated: 2026-08-04
+last_updated: 2026-09-15
 owners: [architect]
 related:
   - ./decisions/0001-artifact-types-are-configuration.md
@@ -15,7 +15,7 @@ related:
 
 # specs-service — architecture
 
-**Status:** Draft v0.2
+**Status:** Draft v0.4
 **Scope:** The whole product. Model, authoring, rendering, configuration, ports, isolation,
 interfaces, storage, build order.
 **Shape:** A full end-to-end service with its own domain, its own console, and SSO through
@@ -43,7 +43,7 @@ than a component.
 Extraction from a single caller produces that caller's implementation with a package boundary around
 it. The model here is the **overlap** between two systems that already exist:
 
-| Concept | adel | maestro |
+| Concept | maestro | maestro v1 |
 |---|---|---|
 | Isolation boundary | Tenant | The organisation |
 | Artifact chain | Opportunity → Business case → Specification | Charter → Functional spec → Technical design + tasks |
@@ -84,15 +84,15 @@ an unusable editor and a worthless record. Keeping them apart gives both.
 
 ### 2.1 Workspace
 
-The isolation boundary (ADR-0006). adel maps a tenant onto it; maestro maps its organisation.
+The isolation boundary (ADR-0006). maestro maps a tenant onto it; maestro v1 maps its organisation.
 Nothing crosses a workspace — not a link, not a lineage, not a query.
 
 **A workspace is logical, never physical.** Which database or deployment it lives in is a choice
 (§6), and the workspace id never encodes it. If it did, moving a workspace would change every export
 and every pinned reference.
 
-Choose the altitude by asking: *what must never leak, and what must be queryable together?* adel
-answers "tenant", because the portfolio queries across every application within one. maestro answers
+Choose the altitude by asking: *what must never leak, and what must be queryable together?* maestro
+answers "tenant", because the portfolio queries across every application within one. maestro v1 answers
 "the organisation", because a charter is shared across products.
 
 ### 2.2 Draft — where authoring happens
@@ -234,7 +234,7 @@ attribution_profiles:
     optional: [seat, oversight_level, consequence_class]
 ```
 
-adel populates `seat` and `oversight_level`; maestro does not. **The generic rule is that a named
+maestro populates `seat` and `oversight_level`; maestro v1 does not. **The generic rule is that a named
 human is answerable and an agent can never occupy that field** — enforced at write time. A decision
 missing a required field is rejected, and the rejection is itself recorded.
 
@@ -298,7 +298,7 @@ governed change: existing versions were written against the definition in force 
 that definition version is stamped on them.
 
 ```yaml
-workspace: maestro-core
+workspace: maestro-v1-core
 types:
   - id: functional_spec
     facet_schema: ./schemas/functional-spec.json
@@ -325,8 +325,8 @@ port with a working local default.
 
 | Port | Local default | Production adapter | Consumer |
 |---|---|---|---|
-| **Record sink** | Outbox collection, relayed to a log | Kafka, or an external durable spine | adel points this at its record spine, which becomes authoritative |
-| **Evaluator** | None — evaluations optional | HTTP callout; result recorded on the version | adel: standards engine. maestro: spec-lint, EARS check |
+| **Record sink** | Outbox collection, relayed to a log | Kafka, or an external durable spine | maestro points this at its record spine, which becomes authoritative |
+| **Evaluator** | None — evaluations optional | HTTP callout; result recorded on the version | maestro: standards engine. maestro v1: spec-lint, EARS check |
 | **Notifier** | Log line | HTTP webhook; notification service | Gate awaiting a decision; changes requested |
 | **Object storage** | MinIO | S3 | Attachments, and body overflow |
 | **Principal directory** | — | `identity-service` **(required)** | Authentication and attribution |
@@ -384,7 +384,7 @@ specs-service is one **Application** there, with:
   confidential client-credentials principal for service-to-service and agent runtimes
 - **Redirect URIs and CORS origins** for its own domain
 
-**SSO is transparent because the session is `identity-service`'s.** A user signed in for adel and
+**SSO is transparent because the session is `identity-service`'s.** A user signed in for maestro and
 landing on specs-service's domain completes the authorization-code flow against an existing session
 and never sees a login form. That works because both are Applications in one deployment over a
 shared user pool — the property `identity-service`'s ADR-0018 exists to provide.
@@ -397,7 +397,7 @@ Decision Point.
 
 **Authorisation is ours**, and narrow: who may author in a workspace, and who may decide at a gate.
 Gate ownership resolves through a declared resolver — role claim, explicit assignment, or a routing
-table — which is how maestro's `reviewers.yaml` and adel's tenant roles become one mechanism.
+table — which is how maestro v1's `reviewers.yaml` and maestro's tenant roles become one mechanism.
 
 **Principal ids are ours.** A registry maps `(issuer, subject) → principal id`, and only the local id
 is written to a draft, version, decision, or export. An issuer's subject is minted per deployment;
@@ -409,7 +409,7 @@ from the human accountable for their work — which is what makes §2.8's rule e
 
 ### 7.3 Under an umbrella later
 
-Nothing above changes when adel adopts it. adel becomes another Application in the same identity
+Nothing above changes when maestro adopts it. maestro becomes another Application in the same identity
 deployment, links to or embeds specs-service's console, and points the record sink at its spine. The
 service does not learn it has been absorbed.
 
@@ -573,6 +573,7 @@ Steps 1–7 are the product. Everything after makes it complete.
 
 | Version | Date | Change |
 |---|---|---|
+| 0.4 | 2026-09-15 | **Consumer vocabulary aligned with the platform it serves.** The repository is now `maestro-specs` (was `mstr-specs`), and the two consumers are named as the platform names them: *maestro* is the governed application platform (`../maestro`, conceptual D44) and *maestro v1* its retired first iteration, the agentic delivery platform. Until now this repository called the first *adel* and the second *maestro* — so after the rename it used its own name for the wrong product. Swapped throughout the docs, ADRs 0001/0004/0005/0006, the glossary and the example workspace; the example workspace id is `maestro-v1-core`. Console wordmark, page title, MCP `serverInfo.name` and the npm package names follow the repository. **The deployed identifiers do not** — compose project, container names, `AUTH_AUDIENCE`, the identity client ids and the bucket still read `mstr-specs`, because changing them is a coordinated deploy with an `identity-service` seed on the other side. README Quick Start rewritten against the tree that exists (`make up`, ports 8020/8021, `AUTH_MODE`). No model, port, or decision changed |
 | 0.3 | 2026-08-06 | **First build.** Steps 1–9 of §12 implemented, plus MCP. Three additions the build made necessary, each with an ADR: the **catalogue as a workspace reached through a read-only handle** (D11, ADR-0008), which resolves the tension between a pack being shared across tenants and §6 saying nothing crosses a workspace; **external and platform standards as distinct types** (D12, ADR-0009), because ISO's licence forbids holding the text while the Bbl's does not, and "is this the obligation or our reading of it" must not be a settable flag; and **effective dating with acceptance lapse on a material change** (D13, ADR-0010), which is the one real addition to the version model — accepted and *in force* are different questions. The console ships with the password grant rather than PKCE, and §7.1's transparent-SSO property therefore does not hold yet (ADR-0011). §9 rewritten to match what was built; §11 gains D11–D13 |
 | 0.2 | 2026-08-04 | **Authoring and rendering brought in scope** — the service is a full product with its own domain, console and SSO, not a headless registry. Drafts added as a mutable entity distinct from immutable versions (D3), which is what lets editing and an audit record coexist. Bodies are now authored, rendered, diffed and searched — but still never evaluated (D4), the one property preserved from v0.1. MCP gains draft writes and propose, keeping only the decision surface closed (D5). **Storage moved to MongoDB with bodies inline** and attachments content-addressed in object storage (D7); isolation reworked to database-per-workspace with the fail-closed argument (D6); redaction recorded as the single permitted mutation (D10). §3 authoring, §7 identity and SSO, and §8.4 on what MongoDB does not give us added. The wiki risk named explicitly in §10 |
-| 0.1 | 2026-08-04 | Initial architecture. Model derived from the overlap between adel and maestro. Configuration-driven types, links, gates and lifecycles. Ports with local defaults. Immutable supersede-only versions; facets separated from an opaque body; the service records decisions and never makes one; workspace isolation by binding |
+| 0.1 | 2026-08-04 | Initial architecture. Model derived from the overlap between maestro and maestro v1. Configuration-driven types, links, gates and lifecycles. Ports with local defaults. Immutable supersede-only versions; facets separated from an opaque body; the service records decisions and never makes one; workspace isolation by binding |

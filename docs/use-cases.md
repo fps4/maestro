@@ -1,6 +1,6 @@
 # Use cases
 
-The flows the MVP exists for, walked through the components. Where a component was missing, that is a gap (G-numbers); the [roadmap](roadmap.md) is ordered by which gaps each use case needs. The first application throughout is a serverless integration adapter on AWS with its own P1–P4 failure monitor and a drift-detection workflow.
+The flows the MVP exists for, walked through the components. Where a component was missing, that is a gap (G-numbers); the [roadmap](roadmap.md) is ordered by which gaps each use case needs. The first application throughout is **app1**: serverless on AWS, with its own P1–P4 failure monitor and a drift-detection workflow.
 
 ## UC1 · Human-gated ops on a serverless application
 

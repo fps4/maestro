@@ -34,13 +34,13 @@ Owned by maestro, versioned. Every source adapter produces exactly this.
 ```yaml
 signal_version: 1
 source: cloudwatch-alarm | app-monitor | eventbridge | github | maestro-drift | maestro-heartbeat
-application: app1                 # from the tag or the topic
+application: app1                # from the tag or the topic
 environment: production
 kind: alarm_state | dlq | error_rate | latency | deploy | advisory | finding | drift | silence
 state: alarm | ok                # OK closes or downgrades; deploy and advisory have no state
 severity_hint: P2                # the application's opinion; policy decides
-fingerprint: app1/prod/fn-pipeline/ErrorRate     # dedup key; advisory id × artifact for findings
-resource: arn:aws:lambda:eu-west-1:<account>:function:app1-fn-pipeline
+fingerprint: app1/prod/api/ErrorRate            # dedup key; advisory id × artifact for findings
+resource: arn:aws:lambda:eu-west-1:<account>:function:app1-api
 occurred_at: 2026-09-18T08:12:00Z
 link: https://console.aws.amazon.com/cloudwatch/…
 detail: {}                       # source-specific, classified

@@ -8,7 +8,7 @@ Two backlog items and one branch. Kept here so they are not forgotten and not pl
 
 A Slack-facing agent that takes a request in a thread, interviews the requester against the application's own end-user documentation and configuration schema until every required key has an answer, writes the configuration folder, runs the application's own validation, and opens a draft PR — with a specification proposed into specs-service so the request has a decision page. It authors and proposes; it never merges and never decides.
 
-Needs: a Slack app; the Slack↔principal link in identity-service (a Slack user is a principal, minted on first sight, only the maestro id reaching any record); an `integration_spec` artifact type; the OpenSpec block shape in specs-service (the first application already runs OpenSpec — the condition in `maestro-specs` ADR-0018 is met); a versioned guideline corpus per run kind, so an intake that went wrong can be traced to the guideline it followed.
+Needs: a Slack app; the Slack↔principal link in identity-service (a Slack user is a principal, minted on first sight, only the maestro id reaching any record); an `integration_spec` artifact type; the OpenSpec block shape in specs-service (app1 already runs OpenSpec — the condition in `maestro-specs` ADR-0018 is met); a versioned guideline corpus per run kind, so an intake that went wrong can be traced to the guideline it followed.
 
 ### Customer-facing tenants
 

@@ -10,11 +10,11 @@ What was built and what is running where. One deployable, two collections: the *
 
 ```yaml
 artifact:
-  artifact_id:      art-app1-fn-pipeline@sha256:3fa1…
-  application_id:   app-app1
+  artifact_id:      art-app1-api@sha256:3fa1…
+  application_id:   app1
   digest:           sha256:3fa1…          # the identity; tags are never resolved
   version:          1.14.2
-  built_from:       { repo: "…/app1-repository", commit: "9c2e…" }
+  built_from:       { repo: "<tenant>/app1", commit: "9c2e…" }
   sbom_ref:         s3://…/sbom/art-…json
   signature:        cosign:…              # optional in the MVP; the field exists
   recorded_at:      2026-09-18T07:50:00Z
@@ -26,9 +26,9 @@ artifact:
 instance:
   instance_id:        ins-app1-prod
   workspace_id:       ws-aannemer-x
-  application_id:     app-app1
+  application_id:     app1
   environment:        production          # dev | test | acceptance | production
-  artifact:           art-app1-fn-pipeline@sha256:3fa1…   # digest-pinned into the ledger
+  artifact:           art-app1-api@sha256:3fa1…   # digest-pinned into the ledger
   specification:      spec://application/app1@3            # optional: the accepted version it realises
 
   hosted_by:          tenant              # always tenant in the MVP
@@ -40,7 +40,7 @@ instance:
   state:              running             # running | suspended | retired
   deployed_at:        2026-09-18T08:01:12Z
   deployed_by:        prn-h-jdekker       # the pipeline's actor, resolved to a principal
-  rollback_target:    art-app1-fn-pipeline@sha256:8b07…    # the previous artifact, copied on
+  rollback_target:    art-app1-api@sha256:8b07…    # the previous artifact, copied on
   signals_topic:      arn:aws:sns:…:ops-signals-app1-prod
 ```
 

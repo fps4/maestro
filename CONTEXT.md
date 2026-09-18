@@ -44,7 +44,7 @@ One meaning per word, across every component and document. If a component needs 
 
 | Term | Meaning |
 |---|---|
-| **Application** | A system a tenant runs and maestro observes. Has a **criticality tier** and an **onboarding level**. |
+| **Application** | A system a tenant runs and maestro observes. Has a **criticality tier** and an **onboarding level**. `app1` in these docs is the first one — a placeholder, never a name. |
 | **Onboarding level** | N0 observed · N1 operated · N2 governed · N3 integrated · N4 regenerated. What maestro may do *to* an application; the ceiling for remediation. The MVP uses N0–N2. |
 | **Artifact (deployed)** | What was built: an image or bundle with a digest, a version, an SBOM, and a known-good rollback target. Held in the ledger. |
 | **Instance** | One artifact digest running in one environment of one application. Held in the register. A running digest the ledger does not know is a hard stop. |

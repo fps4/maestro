@@ -5,7 +5,7 @@ This repository holds the design of maestro's MVP. Read `README.md`, then `docs/
 ## Rules
 
 - **Vocabulary is `CONTEXT.md`.** Use its words. A new term is added there before it is used elsewhere.
-- **Nothing tenant-identifying lands here.** No client names, AWS account ids, hostnames, webhooks or channel ids. The demo tenant is fictional (`aannemer-x`). Tenant configuration lives in `fps4/maestro-config-<tenant>`; see `docs/tenancy-and-config.md`.
+- **Nothing tenant-identifying lands here.** No client names, application names, AWS account ids, hostnames, webhooks or channel ids. The demo tenant is fictional (`aannemer-x`); the first observed application is always `app1`. Tenant configuration lives in `fps4/maestro-config-<tenant>`; see `docs/tenancy-and-config.md`.
 - **Links are checked.** Run `scripts/check-links.sh` before pushing; CI runs it on every PR.
 - **The retired corpus** (git tag `corpus-2026-09`) is history, not a source. Do not cite its identifiers (T-, D-, PS-numbers) in current documents.
 

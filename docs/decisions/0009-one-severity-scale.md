@@ -4,7 +4,7 @@
 
 ## Context
 
-The first application classifies its own failures P1–P4. An ops engine that carried a second scale would need a person to translate at every incident. Response and resolution clocks, agent ceilings and chase ladders need a home before any standards registry exists.
+The first application (app1) classifies its own failures P1–P4. An ops engine that carried a second scale would need a person to translate at every incident. Response and resolution clocks, agent ceilings and chase ladders need a home before any standards registry exists.
 
 ## Decision
 

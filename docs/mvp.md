@@ -42,7 +42,7 @@ Each component writes its events to a transactional outbox. A scheduled relay dr
 
 ## The first application
 
-The first application maestro observes is a serverless integration adapter on AWS — Lambda functions, Terraform, JSON-driven integrations under CODEOWNERS, its own failure monitor with P1–P4 alerts to Slack. Its maestro glue (the signals module, a deploy-event step) lives in its own repository. It is onboarded at N2 by milestone 4.
+The first application maestro observes — **app1** throughout these docs — is a serverless application on AWS: Lambda functions, infrastructure as code, configuration changes by PR under CODEOWNERS, its own failure monitor with P1–P4 alerts to Slack. Its maestro glue (the signals module, a deploy-event step) lives in its own repository. It is onboarded at N2 by milestone 4.
 
 ## Four seams kept open
 

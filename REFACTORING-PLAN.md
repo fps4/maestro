@@ -36,7 +36,7 @@ Between 2026-09-15 and 2026-09-18 the direction was reviewed and changed. **The 
 
 **Database:** MongoDB Atlas Flex (ruled 2026-09-18). Zero code change; DynamoDB stays a deliberate later step if single-vendor comes to matter.
 
-**First real application:** app1 (`~/Repositories/app1-repository`, the tenant's integration adapter): serverless on AWS, Terraform, JSON-driven integrations under CODEOWNERS, PRs to `pre-release`, a drift-detection workflow, its own failure monitor (`fn-notifier`, P1–P4 → Slack). It runs OpenSpec; ADR-0018's interoperation shape is post-MVP unless use case 1 needs it.
+**First real application: app1** (a placeholder throughout the docs; the real name and repository are the tenant's and never appear in a maestro repository): serverless on AWS, infrastructure as code, configuration by PR under CODEOWNERS, a drift-detection workflow, its own failure monitor (P1–P4 → Slack). It runs OpenSpec; ADR-0018's interoperation shape is post-MVP unless use case 1 needs it.
 
 ### 0.1 Where the reasoning lives
 
@@ -73,7 +73,7 @@ Ruled 2026-09-18 (Q10). **Detection lives where the knowledge lives; response li
 |---|---|
 | CloudWatch alarms: thresholds, periods, composite alarms, anomaly detectors — the team that owns the SLO owns the alarm | Subscribe to the topic (cross-account SQS); normalise to the `signal` envelope |
 | DLQ depth, error-rate and latency alarms on its own functions and queues | Dedup by `fingerprint` within a window; correlate a storm into one item |
-| Its own failure monitor (app1's `fn-notifier`) publishing to the topic with a P-hint | Severity from **policy**: the app's hint × the app's tier/N-level → SEV1–4; maestro may raise or lower, and records why |
+| Its own failure monitor publishing to the topic with a P-hint | Severity from **policy**: the app's hint × the app's tier/N-level → SEV1–4; maestro may raise or lower, and records why |
 | **One SNS topic per application per environment — `ops-signals` — the app's public ops interface.** Alarm actions and OK actions target it; the subscription policy allows the maestro account. Anything else may subscribe too (Chatbot, email, PagerDuty) | Clocks, chase ladders, ceilings, evidence plans — the work item |
 | Resource tags `maestro:application`, `maestro:environment`, `maestro:tier` so a signal identifies its instance without a lookup | Routing to humans (Slack, SES) **once it is an item**, with the item link — one alert, one owner: once maestro subscribes, the app's direct Slack alert for the same signal is retired |
 | Deploy events to EventBridge from the pipeline (artifact digest, environment, commit, actor) — feeds the instance register | What the app cannot see about itself: **silence** (heartbeat expired), estate-wide drift, GitHub/Dependabot advisories, ECR/Inspector findings, cross-account patterns |
@@ -86,13 +86,13 @@ The `signal` envelope (owned by maestro, versioned):
 ```yaml
 signal_version: 1
 source: cloudwatch-alarm | app-monitor | eventbridge | github | maestro-drift | maestro-heartbeat
-application: app1            # from the tag or the topic
+application: app1           # from the tag or the topic
 environment: production
 kind: alarm_state | dlq | error_rate | latency | deploy | advisory | finding | drift | silence
 state: alarm | ok           # OK actions close or downgrade
 severity_hint: P2           # the app's opinion; policy decides
-fingerprint: app1/prod/fn-pipeline/ErrorRate   # dedup key
-resource: arn:aws:lambda:…:function:app1-fn-pipeline
+fingerprint: app1/prod/api/ErrorRate          # dedup key
+resource: arn:aws:lambda:…:function:app1-api
 occurred_at: 2026-09-18T08:12:00Z
 link: https://console.aws.amazon.com/…
 detail: {}                  # source-specific, classified
@@ -117,7 +117,7 @@ detail: {}                  # source-specific, classified
 2. **Re-derive, don't carry.** Where a new document needs something the corpus got right — the spine invariants, the six work classes and their rules, the onboarding ladder N0–N4, oversight levels and ceilings, the four seams — it is rewritten in the new document's own terms with a one-line credit to the tag. No old identifiers (T-numbers, D-numbers, PS-numbers, W-/R-/X-rules) appear in the new docs.
 3. **A fresh decision log.** `docs/decisions/` holds ADRs numbered from 0001, the same shape as `../maestro-specs/docs/design/decisions/`. The rulings of 2026-09-15..18 are the first fifteen (§3.2).
 4. **Short, agent-readable.** Every document fits in one read; the whole of `docs/` should stay under ~150 KB. A document that argues with a superseded design has failed the purpose of the purge.
-5. **Nothing tenant-identifying in a public repository.** The demo tenant is fictional (`aannemer-x`); anything naming a client, an account id, a hostname, a webhook lives in `maestro-config-<tenant>` or is gitignored (§5).
+5. **Nothing tenant-identifying in a public repository.** The demo tenant is fictional (`aannemer-x`); the first application is `app1`; anything naming a client, an application, an account id, a hostname, a webhook lives in `maestro-config-<tenant>` or is gitignored (§5).
 6. **Milestones are M1–M4.** E and F appear once, in `beyond-mvp.md`. R appears once, there too.
 7. **Link integrity is a gate.** A relative-link checker runs in CI on every PR from phase 1 on.
 8. **Public last.** Licence and visibility change in the final PR, after the tree is clean (§5's checks green).
@@ -137,7 +137,7 @@ detail: {}                  # source-specific, classified
 | **Q7** | "Today" landing | Defer to M2. |
 | **Q8** | Instance register: one deployable or two | **One deployable** (`runtime-service`): artifact ledger + instance record as two collections, one deploy event. ADR-0011. |
 | **Q9** | MVP CI floor | **Secret scan, dependency audit, SBOM emission.** The standards layer is branch R. |
-| **Q10** | Severity + signals split | **SEV1–4, app1 P1–P4 mapped 1:1; the signals contract in §0.4.** ADR-0009 and ADR-0012. |
+| **Q10** | Severity + signals split | **SEV1–4, app1's P1–P4 mapped 1:1; the signals contract in §0.4.** ADR-0009 and ADR-0012. |
 
 **Q8, the reasoning kept for ADR-0011.** Two facts about a deployment: the **artifact ledger** (what was built: digest, version, SBOM, signature, known-good rollback target) and the **instance record** (what is running where: this digest, in this environment, in this tenant, at this tier and onboarding level, since this deploy event). They are two views of one deploy event, and the one check that matters — a running digest the ledger does not know is an ungated deploy or a compromise — needs both side by side. One deployable, two collections, one event. *What would reopen it:* the platform executing instances itself (out of MVP).
 
@@ -278,7 +278,7 @@ applications/*.yaml       the tenant's applications: name, environments, tier, o
 secrets.md                the *names* of secrets in Secrets Manager / SSM — never values
 ```
 
-`maestro-config-demo` holds the fictional tenant and proves the layout round-trips; it can be public.
+`maestro-config-demo` holds the fictional tenant and proves the layout round-trips; it can be public. **The first real tenant's repository exists (private, created 2026-09-18) with this layout; everything that identifies that tenant or its applications lives there.**
 
 **How a deployment uses it:** the tenant repository's pipeline checks out each public component at a tag and runs `cdk deploy` with the repository root as context. The public repositories' own pipelines deploy only the demo tenant.
 
@@ -288,7 +288,7 @@ secrets.md                the *names* of secrets in Secrets Manager / SSM — ne
 - fail on a list of forbidden strings kept *outside* the repo (the client names), run as a secret-scan custom pattern — the list itself never lands in the repo.
 - The demo tenant stays fictional: `aannemer-x`, "Aannemer X", `usr-j-dekker`. A reviewer who sees a real company name in a public repo treats it as a defect.
 
-**app1:** the tenant's repository keeps its own maestro glue — the signals Terraform module applied, the deploy-event step, the CODEOWNERS that gate merges. Nothing of app1's is copied into a maestro repository.
+**app1:** the tenant's repository keeps its own maestro glue — the signals Terraform module applied, the deploy-event step, the CODEOWNERS that gate merges. Nothing of the tenant's is copied into a maestro repository, including the application's name.
 
 ---
 

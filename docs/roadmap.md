@@ -11,7 +11,7 @@ gantt
     M1 Foundation on AWS        :m1, 2026-10-01, 21d
     M2 work-service v1          :m2, after m1, 28d
     M3 Agent runs               :m3, after m2, 21d
-    M4 Use case 1 on app1        :m4, after m3, 21d
+    M4 Use case 1 on app1       :m4, after m3, 21d
     section After
     Backlog (intake agent, customer tenants) :crit, after m4, 14d
     Branch R forks here          :milestone, after m4, 0d
@@ -35,9 +35,9 @@ gantt
 
 **Gate:** a bump goes red in CI; a `bump` run claims the item, makes the test pass, and every step, the plan and the next human touchpoint are visible while it runs. A green patch-level bump on an N2 application merges under the agent's ceiling. One run in N lands in a person's review queue.
 
-## M4 · Use case 1 on the first application (~3 weeks)
+## M4 · Use case 1 on app1 (~3 weeks)
 
-**Builds:** CloudWatch, EventBridge and the application's own monitor as signal sources; the `cause_analysis` type and its gate in specs-service; RCA and fix run kinds; runtime-service fed by EventBridge deploy events; evidence resolved from events; the application onboarded at N2.
+**Builds:** CloudWatch, EventBridge and app1's own monitor as signal sources; the `cause_analysis` type and its gate in specs-service; RCA and fix run kinds; runtime-service fed by EventBridge deploy events; evidence resolved from events; app1 onboarded at N2.
 
 **Gate:** an injected failure in staging becomes a SEV item, an accepted analysis, a merged fix and a closed item — with a person at [three gates](use-cases.md#uc1--human-gated-ops-on-a-serverless-application) and nowhere else.
 

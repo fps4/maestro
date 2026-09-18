@@ -278,7 +278,7 @@ applications/*.yaml       the tenant's applications: name, environments, tier, o
 secrets.md                the *names* of secrets in Secrets Manager / SSM — never values
 ```
 
-`maestro-config-demo` holds the fictional tenant and proves the layout round-trips; it can be public.
+`maestro-config-demo` holds the fictional tenant and proves the layout round-trips; it can be public. **The first real tenant's repository exists (private, created 2026-09-18) with this layout; everything that identifies that tenant or its applications lives there.**
 
 **How a deployment uses it:** the tenant repository's pipeline checks out each public component at a tag and runs `cdk deploy` with the repository root as context. The public repositories' own pipelines deploy only the demo tenant.
 

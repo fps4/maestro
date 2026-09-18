@@ -253,7 +253,7 @@ Each phase is one draft PR on `refactor/mvp-docs` unless noted. Phases 2 and 3 c
 - [x] `../maestro-specs`: `config/ds1/`, `deploy-ds1.yml`, `compose.ds1.networks.yml` removed; the `dod` gate stays on the self-hosted runner until M1 moves it — PR #14
 - [x] **added 2026-09-18 (the architect's ruling on the UI):** the demo workspace re-seeded to the MVP's four types (`config/workspaces/aannemer-x.yaml` v2; the old chain is the integration fixture; 178 tests green); the console shows the catalogue only when the workspace declares `catalogue_refs`; catalogue code and ADR-0008/0009 kept — PR #14
 - [x] **added:** `docs/ux.md` here — the surface rules, the screen inventory, the acceptance for the redraw; `CONTEXT.md` gains *Surfaces*; `components/specs-service.md` updated — this PR
-- [ ] memory: `maestro-aws-alternative-and-roadmap`, `specs-service-accessibility-rebuild` point at the new `docs/`; a note on the UX redraw
+- [x] memory: `maestro-aws-alternative-and-roadmap`, `specs-service-accessibility-rebuild` point at the new `docs/`; `ux-redraw-after-refactor` added (2026-09-18)
 - *Not in the refactor:* the redraw of the design canvas around UC1 (Today, frontier, work item; the board, run page and estate for the first time) is a design session after phase 4 — acceptance in `docs/ux.md`.
 
 **Phase 4 — public** *(last PR in each repo; the architect flips visibility)*

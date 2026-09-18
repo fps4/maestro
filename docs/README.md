@@ -14,6 +14,7 @@ Read in this order the first time; jump straight to a component after that.
 | [`operations-model.md`](operations-model.md) | Support tiers, commitments, clocks, incidents, decommission |
 | [`governance-model.md`](governance-model.md) | Oversight levels, ceilings, onboarding levels, remediation classes, authority at claim |
 | [`build-standards.md`](build-standards.md) | The CI floor every maestro repository meets |
+| [`ux.md`](ux.md) | The rules every screen obeys, the screens per component, and what the redraw must show |
 | [`beyond-mvp.md`](beyond-mvp.md) | The backlog after the MVP, and the regulated branch |
 | [`components/`](components/) | One document per component: what it holds, its ports, its interfaces, its build gates |
 | [`decisions/`](decisions/) | The decision log, ADR-0001 onward |

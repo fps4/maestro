@@ -1,7 +1,7 @@
 # Refactoring plan — from the design corpus to the MVP docs
 
-**Created:** 2026-09-18 · **Rulings taken:** 2026-09-18, all ten (§2) · **Branch:** `refactor/mvp-docs` · **Owner:** the architect
-**How to use:** feed this file to a fresh session. §0 is everything a session needs to know, §2 holds the rulings, §3 is the target tree and what each document says, §4 is the ordered work with checkboxes. Tick boxes as work lands. This file is deleted in the last PR of the refactor. **Phase 1 may start immediately.**
+**Created:** 2026-09-18 · **Rulings taken:** 2026-09-18, all ten (§2) · **Phases 1–2 merged to `main`** (PR #1, PR #2, 2026-09-18) · **Owner:** the architect
+**How to use:** feed this file to a fresh session. §0 is everything a session needs to know, §2 holds the rulings, §3 is the target tree and what each document says, §4 is the ordered work with checkboxes. Tick boxes as work lands. This file is deleted in the last PR of the refactor. **Next: phase 3 (§4), then phase 4.**
 
 ---
 
@@ -244,15 +244,16 @@ Each phase is one draft PR on `refactor/mvp-docs` unless noted. Phases 2 and 3 c
 - [x] `docs/use-cases.md`
 - [x] `docs/components/{spine, work-service, runtime-service, agent-service, specs-service, identity-service}.md` + `components/README.md`
 - [x] `docs/operations-model.md`, `docs/governance-model.md`, `docs/build-standards.md`
-- [ ] the architect's review of PR #1; corrections folded in
+- [x] the architect's review of PR #1; merged 2026-09-18. PR #2 (app1 naming, no client names) merged the same day
 
 **Phase 3 — cross-repository** *(one small PR per repo)*
 - [ ] `../maestro-specs/docs/design/architecture.md`: isolation (tenant = deployment default), ports (spine = archive + queue), stack (AWS deployment)
-- [ ] `../maestro-specs`: re-point the corpus references — `docs/design/decisions/0017`, `0018` (PS3 / platform-standards citations → the tag or the new docs), `config/workspaces/maestro-platform.yaml` line 1, `docs/design/ui/console-mock.html` PS-labels
+- [ ] `../maestro-specs`: re-point the corpus references — `docs/design/decisions/0017`, `0018` (citations of the old design → tag `corpus-2026-09` or the new docs), `config/workspaces/maestro-platform.yaml` line 1, `docs/design/ui/console-mock.html` old service labels; `git grep -nE '\bT[0-9]{1,2}\b|\bPS[0-9]{1,2}\b|conceptual-design|technical-design'` finds them
 - [ ] `../maestro-specs`: remove `config/ds1/` (ds1 retires; it carries hostnames) — same PR
 - [ ] memory: `maestro-aws-alternative-and-roadmap`, `specs-service-accessibility-rebuild` point at the new `docs/`
 
 **Phase 4 — public** *(last PR in each repo; the architect flips visibility)*
+- [ ] set the `FORBIDDEN_PATTERNS` repository secret on `fps4/maestro` and `fps4/maestro-specs` (one regex per line: the tenant's and application's names, from the tenant repository's README) — `scripts/check-public.sh` reads it
 - [ ] `LICENSE` (MIT, copyright line as identity-service's) in `maestro` and `maestro-specs`
 - [ ] §5 guards green in both repos; a grep for client names, account ids, hostnames returns nothing
 - [ ] delete this file
@@ -302,6 +303,6 @@ secrets.md                the *names* of secrets in Secrets Manager / SSM — ne
 
 ## 7. Notes for the next session
 
-- Working tree: `/Users/farid.gurbanov/Repositories/fps4/maestro`, branch `refactor/mvp-docs`. Sibling repositories under `/Users/farid.gurbanov/Repositories/fps4/`.
+- Working tree: `/Users/farid.gurbanov/Repositories/fps4/maestro`, start from `main`; one new branch per phase, draft PRs. Sibling repositories under `/Users/farid.gurbanov/Repositories/fps4/`. The first tenant's private configuration repository is a sibling too; its README maps the placeholders (`tenant1`, `app1`) to real names — read it there, never copy from it.
 - `../maestro-specs` test suite: `make mongo`, then in `api/`: `MONGO_URI='mongodb://127.0.0.1:27019/?directConnection=true' MONGO_USER=specs MONGO_PASSWORD=specs npm test` (178 tests as of 2026-09-15).
 - Memory index: `~/.claude/projects/-Users-farid-gurbanov-Repositories-fps4-maestro/memory/MEMORY.md` — the entries `maestro-aws-alternative-and-roadmap`, `specs-service-accessibility-rebuild`, `openspec-not-adopted`, `maestro-v2-docs-only-reset` are current; older entries describe maestro v1 and are historical.

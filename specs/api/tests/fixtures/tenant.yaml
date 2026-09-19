@@ -1,19 +1,19 @@
-# The maestro platform's own artifact chain (PS3 §2 of ../maestro/docs).
+# The integration fixture: a generic three-type chain that exercises every mechanism the service
+# has — a pinned link, a typed block, a gate on the builtin evaluator, a gate on an endpoint
+# evaluator that also requires questions resolved and catalogue acceptances in force, separation
+# of duties, draft expiry, classification.
 #
 #   Opportunity ──▶ Business case ──▶ Specification
 #                        │                  │
 #                        └── pinned ────────┘
 #
-# Plus the intake assessment — the business case's brownfield twin, asking "is this ours to hold?"
-# rather than "is this worth building?" — and the pack binding, which records which standards this
-# tenant accepted and who accepted each.
-#
-# Nothing below is in the code. A fifth artifact class costs a definition, not a release.
+# It is a fixture, not a product definition: the demo tenant the service ships is
+# config/workspaces/aannemer-x.yaml. The harness overrides `workspace` per test file.
 
-workspace: aannemer-x
+workspace: fixture-tenant
 definition_version: 1
 kind: tenant
-title: Aannemer X
+title: Fixture tenant
 
 types:
   # No gate of its own: raising one is open to anyone authorised in the workspace, and the outcome
@@ -62,28 +62,6 @@ types:
     body_blocks:
       - { facet: acceptance_criteria, heading: Acceptance criteria, shape: table }
 
-  - id: intake_assessment
-    title: Intake assessment
-    description: For something that already exists — is this ours to hold, and at what level?
-    facet_schema: ./schemas/intake-assessment.json
-    body_format: markdown/v1
-    draft_expiry: 90d
-    classification_required: true
-    catalogue_refs: true
-    links: []
-
-  # The tenant's own record of which standards it accepted, who accepted each, and when. It lives
-  # here rather than in the catalogue because the catalogue is shared across tenants and may hold no
-  # tenant runtime data — and it hands over at exit as the tenant's property.
-  - id: pack_binding
-    title: Standards binding
-    description: Which standards this workspace has accepted, who accepted each, and when.
-    facet_schema: ./schemas/pack-binding.json
-    body_format: markdown/v1
-    classification_required: false
-    catalogue_refs: true
-    links: []
-
 attribution_profiles:
   - id: maestro_default
     required: [accountable, acting, seat, oversight_level]
@@ -114,22 +92,6 @@ gates:
     separation_of_duties: exclude_creator
     attribution_profile: maestro_default
 
-  - id: assess
-    title: Assess
-    description: Should we take this existing application on, at the level the assessment proposes?
-    decides_on: intake_assessment
-    owner: { resolver: role, role: sponsor }
-    outcomes: [approve, request_changes, decline]
-    outcome_labels: { approve: Take it on, request_changes: Ask for changes, decline: Decline }
-    reopens_on: request_changes
-    blocking: true
-    requires:
-      confirmed_facets: true
-      evaluations: [intake_sufficiency]
-    # No separation of duties declared. At this client the sponsor who raised the intake is the one
-    # who assesses it; the exemption is visible rather than assumed.
-    attribution_profile: maestro_default
-
   - id: specification_gate
     title: Specification
     description: Is this exactly what should be built? Approving it is what gets built.
@@ -151,19 +113,6 @@ gates:
     separation_of_duties: exclude_creator
     attribution_profile: maestro_default
 
-  - id: binding_gate
-    title: Standards binding
-    description: Does this workspace accept these standards, as read?
-    decides_on: pack_binding
-    owner: { resolver: role, role: workspace_admin }
-    outcomes: [approve, request_changes]
-    outcome_labels: { approve: Accept the binding, request_changes: Ask for changes }
-    reopens_on: request_changes
-    blocking: true
-    requires:
-      confirmed_facets: true
-    attribution_profile: maestro_default
-
 lifecycle:
   phases: [explore, prove, build, run, retired, closed]
   phase_labels:
@@ -180,20 +129,14 @@ lifecycle:
     - { from: explore, to: explore, via_gate: explore, on: request_changes }
     - { from: prove, to: build, via_gate: specification_gate, on: approve }
     - { from: prove, to: prove, via_gate: specification_gate, on: request_changes }
-    - { from: explore, to: prove, via_gate: assess, on: approve }
-    - { from: explore, to: closed, via_gate: assess, on: decline }
     - { from: build, to: run, via: propose }
     - { from: run, to: retired, via: system }
     # A descriptive specification rots the moment it is written, and expiry is set by a consumer's
     # clock rather than by a person — so it needs a transition kind that is neither propose nor gate.
     - { from: run, to: run, via: system }
 
-# Sufficiency is the facet schema, reported as findings — the port's local default (ADR-0015). It
-# is the floor of "does the case say enough", and it is what lets Explore open on a deployment with
-# no standards engine behind it. Conformance is a real evaluator: it needs the catalogue and a
-# standards engine, so it stays an endpoint, and until `EVALUATOR_BASE` is set the specification
-# gate honestly says "no verdict has been recorded".
+# Sufficiency is the facet schema, reported as findings — the port's local default (ADR-0015).
+# Conformance is an endpoint, so the tests can exercise `unavailable` and a recorded verdict.
 evaluators:
   - { id: sufficiency, builtin: facet_schema }
-  - { id: intake_sufficiency, builtin: facet_schema }
-  - { id: conformance, endpoint: "${EVALUATOR_BASE}/conformance", reads: facets }
+  - { id: conformance, endpoint: '${EVALUATOR_BASE}/conformance', reads: facets }

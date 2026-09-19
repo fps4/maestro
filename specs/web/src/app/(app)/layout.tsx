@@ -25,11 +25,16 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   let title = workspace;
   let definitionVersion: number | null = null;
   let kind: string = 'tenant';
+  // The catalogue is a surface only for a workspace that declares it: a catalogue workspace itself,
+  // or a tenant whose types may reference standards (`catalogue_refs`). A workspace that declares
+  // neither has no standards to show, and an empty shelf in the rail would say otherwise.
+  let usesCatalogue = false;
   try {
-    const { record } = await fetchDefinition();
+    const { record, definition } = await fetchDefinition();
     title = record.title ?? record.id;
     definitionVersion = record.definition_version;
     kind = record.kind;
+    usesCatalogue = kind === 'catalogue' || definition.types.some((t) => t.catalogue_refs);
   } catch {
     /* rendered below as an unknown definition rather than as a crash */
   }
@@ -57,8 +62,12 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
 
         <RailGroup label="Workspace">
           <RailLink href="/">Register</RailLink>
-          <RailLink href="/catalogue">Catalogue</RailLink>
-          <RailLink href="/standards">Standards &amp; binding</RailLink>
+          {usesCatalogue ? (
+            <>
+              <RailLink href="/catalogue">Catalogue</RailLink>
+              <RailLink href="/standards">Standards &amp; binding</RailLink>
+            </>
+          ) : null}
           <RailLink href="/search">Search</RailLink>
           <RailLink href="/definition">Definition</RailLink>
         </RailGroup>

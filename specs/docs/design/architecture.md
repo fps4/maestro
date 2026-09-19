@@ -1,7 +1,7 @@
 ---
 title: specs-service architecture
 status: draft
-last_updated: 2026-09-15
+last_updated: 2026-09-18
 owners: [architect]
 related:
   - ./decisions/0001-artifact-types-are-configuration.md
@@ -15,11 +15,11 @@ related:
 
 # specs-service — architecture
 
-**Status:** Draft v1.1
+**Status:** Draft v1.2
 **Scope:** The whole product. Model, authoring, rendering, configuration, ports, isolation,
 interfaces, storage, build order.
 **Shape:** A full end-to-end service with its own domain, its own console, and SSO through
-`identity-service` — usable on its own, and later composable under a larger platform.
+`identity-service` — usable on its own, and one of maestro's components (`../maestro/docs/components/specs-service.md`).
 
 ---
 
@@ -43,18 +43,18 @@ than a component.
 Extraction from a single caller produces that caller's implementation with a package boundary around
 it. The model here is the **overlap** between two systems that already exist:
 
-| Concept | maestro | maestro v1 |
+| Concept | maestro (the ops engine) | maestro v1 |
 |---|---|---|
-| Isolation boundary | Tenant | The organisation |
-| Artifact chain | Opportunity → Business case → Specification | Charter → Functional spec → Technical design + tasks |
-| Evaluable units | Sufficiency and conformance standards | EARS acceptance criteria `AC-N`, NFRs |
+| Isolation boundary | Tenant — one deployment by default | The organisation |
+| Artifact chain | Cause analysis; intake assessment; specification; change record pinned to the specification it implements | Charter → Functional spec → Technical design + tasks |
+| Evaluable units | Facets against the type's schema — the floor; a standards engine only in its regulated branch | EARS acceptance criteria `AC-N`, NFRs |
 | Unit attributes | Facets with provenance | `priority`, `verify`, `source`, `rationale` |
-| Gates | Explore, Assess, specification, release | Functional, technical design, technical merge |
-| Gate owner resolution | Role in a tenant, per application | `config/reviewers.yaml` routing matrix |
-| Outcomes | Five recorded Explore outcomes | approve / request-changes / reject |
-| Agent posture | Proposes; a named human decides | Produces artifacts; never decides a gate |
-| Proportionality | Consequence class | Risk tier relaxing human review |
-| Pre-gate assist | Facet extraction, then human confirmation | The clarify pass |
+| Gates | RCA review, intake, specification, release | Functional, technical design, technical merge |
+| Gate owner resolution | A seat — operations, sponsor, owner — as a role in the tenant | `config/reviewers.yaml` routing matrix |
+| Outcomes | accept / request changes / reject, labelled per gate | approve / request-changes / reject |
+| Agent posture | An RCA run proposes; a named human decides | Produces artifacts; never decides a gate |
+| Proportionality | Consequence class; onboarding level | Risk tier relaxing human review |
+| Pre-gate assist | Facet extraction by a run, then a person's confirmation | The clarify pass |
 
 **Every row is the same mechanism with different words.** That is the product; the words are
 configuration (ADR-0001).
@@ -373,9 +373,9 @@ port with a working local default.
 
 | Port | Local default | Production adapter | Consumer |
 |---|---|---|---|
-| **Record sink** | Outbox collection, relayed to a log | Kafka, or an external durable spine | maestro points this at its record spine, which becomes authoritative |
-| **Evaluator** | `builtin: facet_schema` — the type's own schema, one finding per required facet (ADR-0015) | HTTP callout, `${VAR}` resolved from the environment; result recorded on the version | maestro: standards engine behind `conformance`. maestro v1: spec-lint, EARS check |
-| **Notifier** | Log line | HTTP webhook; notification service | Gate awaiting a decision; changes requested |
+| **Record sink** | Outbox collection, drained locally | maestro's spine: a scheduled relay drains the outbox to an S3 archive; SNS/SQS deliver to consumers; replay reads the archive | maestro — the archive becomes the record and this database a projection |
+| **Evaluator** | `builtin: facet_schema` — the type's own schema, one finding per required facet (ADR-0015) | HTTP callout, `${VAR}` resolved from the environment; result recorded on the version | maestro: the builtin floor in the MVP; a standards engine only in its regulated branch. maestro v1: spec-lint, EARS check |
+| **Notifier** | Log line | HTTP webhook (Slack); SES | Gate awaiting a decision; changes requested |
 | **Object storage** | MinIO | S3 | Attachments, and body overflow |
 | **Principal directory** | — | `identity-service` **(required)** | Authentication and attribution |
 
@@ -383,7 +383,9 @@ port with a working local default.
 proposed, decision recorded, link pinned, body redacted — is emitted as an attributed event,
 transactionally with the change via an outbox. Run with the default and this database is the record.
 Point it at a durable spine and **the spine becomes authoritative and this database becomes a
-projection.** One configuration value.
+projection.** One configuration value. In maestro that spine is an S3 archive fed by a relay from
+this outbox (`../maestro/docs/components/spine.md`); nothing in this service names it, which is
+what keeps the default and the spine the same code path.
 
 ---
 
@@ -412,6 +414,11 @@ Three deployment levels, and the code cannot tell them apart:
 
 Object storage mirrors it: prefix per workspace, and a prefix-scoped credential at the dedicated
 levels.
+
+**maestro's default is the third row.** A tenant is one deployment of maestro (its ADR-0007): one
+stack, one identity realm, one archive prefix — so a tenant's specs-service holds one workspace, or
+several for a tenant with several estates, and never another tenant's. The shared level stays
+available, unchanged in code, for a consumer that wants it.
 
 **An adversarial isolation test is a build gate** — acquire workspace A's handle, attempt B's data,
 assert failure. It belongs in the tier that proves the service works at all.
@@ -457,9 +464,9 @@ from the human accountable for their work — which is what makes §2.8's rule e
 
 ### 7.3 Under an umbrella later
 
-Nothing above changes when maestro adopts it. maestro becomes another Application in the same identity
-deployment, links to or embeds specs-service's console, and points the record sink at its spine. The
-service does not learn it has been absorbed.
+Nothing above changes under maestro. maestro's other components are Applications in the same
+identity deployment; its landing page ("Today") links to this console's decision page; the record
+sink points at its spine. The service does not learn it has been absorbed.
 
 ---
 
@@ -538,6 +545,15 @@ keep those contexts small and the two builds genuinely independent.
 
 **No workflow or event-sourcing framework.** Propose, accept and supersede are the product; a
 framework that owns them owns the thing being sold.
+
+**Deployment is serverless AWS**, as maestro's ADR-0002 rules for every component: the api as a
+Lambda behind an HTTP API Gateway through the Lambda Web Adapter, code unchanged; the console
+through OpenNext to Lambda and CloudFront; MongoDB Atlas Flex, still one database per workspace;
+S3 for attachments and body overflow; the record-sink relay as a scheduled Lambda; the whole as a
+CDK stack that a tenant's private configuration repository (`fps4/maestro-config-<tenant>`) deploys
+at a tag, with this repository's own pipeline deploying the demo tenant only. `docker compose` is
+the development loop and CI, not a deployment target; the self-hosted deployment this repository
+used to carry is gone. The CDK stack is M1 of maestro's roadmap.
 
 ---
 
@@ -632,6 +648,7 @@ Steps 1–7 are the product. Everything after makes it complete.
 
 | Version | Date | Change |
 |---|---|---|
+| 1.2 | 2026-09-18 | **Aligned with the maestro MVP.** maestro was re-scoped on 2026-09-18 from a governed application platform to an ops engine, its design corpus retired (tag `corpus-2026-09` on `fps4/maestro`) and rewritten; this service is one of its components. §1.1's maestro column now reads in the MVP's words; §5 names the spine the record sink drains to (an S3 archive via a relay, SNS/SQS delivery) and drops Kafka as the example; §6 records that tenant = deployment is maestro's default; §9 gains the deployment shape (Lambda + API Gateway, OpenNext, Atlas Flex, S3, CDK). The shipped demo workspace is `config/workspaces/aannemer-x.yaml` v2 — cause analysis, intake assessment, specification, change record — and the earlier chain lives on as the integration fixture; the console shows the catalogue only for a workspace that declares `catalogue_refs`. The self-hosted deployment configuration and workflow are removed. No model, port or decision changed |
 | 1.1 | 2026-09-15 | **OpenSpec: interoperate, do not adopt** (D20, ADR-0018 — the first *accepted* decision). Its requirement/scenario layout becomes the second `body_blocks` shape; requirement statements stay EARS with GIVEN/WHEN/THEN scenarios; no `openspec/` directory in a maestro repository. The change workflow is recorded as owed by work-service and skills, not by a spec convention |
 | 1.0 | 2026-09-15 | **One document** (D19, ADR-0017). ADR-0004's split stays in the record and leaves authoring: a draft is saved as one markdown text (`PUT /drafts/:id/document`), the facets derived from front-matter and from the type's declared `body_blocks` — a table under a named heading is a facet — with provenance from the saver and a human's confirmation surviving an unchanged value. A version composes its document from the record; the digest is unchanged. The console editor is one textarea with the derived projection beside it; the second form is gone. The CLI sends the file as the document; MCP gains `read_document` and `save_document`. The specification type declares its acceptance-criteria table. §2.4 amended |
 | 0.9 | 2026-09-15 | **The git-native path** (D18, ADR-0016). `specs` CLI — propose a markdown file with front-matter (readiness first, one live proposal per lineage, evaluations run), print the decider's packet as markdown, decide under one's own token, withdraw. `withdraw` reaches the api for the first time. A composite GitHub Action proposes from a pull request and posts the packet; no decide step in CI, by design. **A version whose type declares a pin must carry it** — a gate requirement computed once for view and decision — closing a bypass where a specification with no `justified_by` could be accepted. Guide added |
@@ -639,7 +656,7 @@ Steps 1–7 are the product. Everything after makes it complete.
 | 0.7 | 2026-09-15 | **Questions on a version** (D16, ADR-0014). The one thing "not a wiki" wrongly excluded, admitted narrowly: a question attaches to an immutable version, never a draft, never changes it, is asked by anyone, answered by anyone with an agent's answer marked as such, and closed only by a human. Three events on the sink carrying a digest of the text, never the text. `requires.questions_resolved` on a gate, declared on the specification gate. Over MCP: list, ask, answer — no close. The decision page and the version page gain the panel; the packet carries `questions`. §2, §3.4 and §10 amended |
 | 0.6 | 2026-09-15 | **The decision page is the product** (D15, ADR-0013). One column, one call: the decider's packet returns what the gate asks, the document, the facts with their schema labels, what changed since the last *decided* version, the checks with findings, what each outcome would do (computed from the definition and stored state, with a refusal flagged before it happens), who may decide, and the history. The same object is the `decision_packet` MCP tool. The console's client-side `consequence()` is deleted. **The accepting outcome becomes declarative** (`accepts_on`), which fixes a latent defect: the catalogue's `publish` outcome would have recorded a standard as `rejected`. `gate-view.ts` extracted so the MCP import graph provably never reaches `DecisionService`, now enforced by lint. §2.7 and §3.4 added |
 | 0.5 | 2026-09-15 | **Labels beside identifiers** (D14, ADR-0012). The definition gains `description` on types and gates, `outcome_labels`, `phase_labels`, link `label` and attribution `field_labels`; the api returns the complete label set with a humanised fallback; the console renders labels and never an identifier a workspace could have named. The record is untouched. This is the first of the changes that turn the console from an auditor's surface into one a sponsor can use — the decision page and the decider's packet build on the descriptions this adds |
-| 0.4 | 2026-09-15 | **Consumer vocabulary aligned with the platform it serves.** The repository is now `maestro-specs` (was `mstr-specs`), and the two consumers are named as the platform names them: *maestro* is the governed application platform (`../maestro`, conceptual D44) and *maestro v1* its retired first iteration, the agentic delivery platform. Until now this repository called the first *adel* and the second *maestro* — so after the rename it used its own name for the wrong product. Swapped throughout the docs, ADRs 0001/0004/0005/0006, the glossary and the example workspace; the example workspace id is `maestro-v1-core`. Console wordmark, page title, MCP `serverInfo.name` and the npm package names follow the repository. **The deployed identifiers do not** — compose project, container names, `AUTH_AUDIENCE`, the identity client ids and the bucket still read `mstr-specs`, because changing them is a coordinated deploy with an `identity-service` seed on the other side. README Quick Start rewritten against the tree that exists (`make up`, ports 8020/8021, `AUTH_MODE`). No model, port, or decision changed |
+| 0.4 | 2026-09-15 | **Consumer vocabulary aligned with the platform it serves.** The repository is now `maestro-specs` (was `mstr-specs`), and the two consumers are named as the platform names them: *maestro* is the governed application platform (`../maestro`, as its design corpus of the time described it — retired 2026-09-18, tag `corpus-2026-09`) and *maestro v1* its retired first iteration, the agentic delivery platform. Until now this repository called the first *adel* and the second *maestro* — so after the rename it used its own name for the wrong product. Swapped throughout the docs, ADRs 0001/0004/0005/0006, the glossary and the example workspace; the example workspace id is `maestro-v1-core`. Console wordmark, page title, MCP `serverInfo.name` and the npm package names follow the repository. **The deployed identifiers do not** — compose project, container names, `AUTH_AUDIENCE`, the identity client ids and the bucket still read `mstr-specs`, because changing them is a coordinated deploy with an `identity-service` seed on the other side. README Quick Start rewritten against the tree that exists (`make up`, ports 8020/8021, `AUTH_MODE`). No model, port, or decision changed |
 | 0.3 | 2026-08-06 | **First build.** Steps 1–9 of §12 implemented, plus MCP. Three additions the build made necessary, each with an ADR: the **catalogue as a workspace reached through a read-only handle** (D11, ADR-0008), which resolves the tension between a pack being shared across tenants and §6 saying nothing crosses a workspace; **external and platform standards as distinct types** (D12, ADR-0009), because ISO's licence forbids holding the text while the Bbl's does not, and "is this the obligation or our reading of it" must not be a settable flag; and **effective dating with acceptance lapse on a material change** (D13, ADR-0010), which is the one real addition to the version model — accepted and *in force* are different questions. The console ships with the password grant rather than PKCE, and §7.1's transparent-SSO property therefore does not hold yet (ADR-0011). §9 rewritten to match what was built; §11 gains D11–D13 |
 | 0.2 | 2026-08-04 | **Authoring and rendering brought in scope** — the service is a full product with its own domain, console and SSO, not a headless registry. Drafts added as a mutable entity distinct from immutable versions (D3), which is what lets editing and an audit record coexist. Bodies are now authored, rendered, diffed and searched — but still never evaluated (D4), the one property preserved from v0.1. MCP gains draft writes and propose, keeping only the decision surface closed (D5). **Storage moved to MongoDB with bodies inline** and attachments content-addressed in object storage (D7); isolation reworked to database-per-workspace with the fail-closed argument (D6); redaction recorded as the single permitted mutation (D10). §3 authoring, §7 identity and SSO, and §8.4 on what MongoDB does not give us added. The wiki risk named explicitly in §10 |
 | 0.1 | 2026-08-04 | Initial architecture. Model derived from the overlap between maestro and maestro v1. Configuration-driven types, links, gates and lifecycles. Ports with local defaults. Immutable supersede-only versions; facets separated from an opaque body; the service records decisions and never makes one; workspace isolation by binding |

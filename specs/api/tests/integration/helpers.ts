@@ -19,7 +19,14 @@ import { WorkspaceRegistry } from '../../src/services/workspaces.js';
 import { MEMBERSHIPS } from '../../src/db/collections.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
+/** The shipped definitions — the catalogue is applied from here. */
 export const CONFIG_DIR = resolve(here, '../../../config/workspaces');
+/**
+ * The tenant the tests run against is a fixture, not the demo tenant the service ships: the tests
+ * need a chain that exercises every mechanism, and the demo needs to read as a product. Keeping
+ * them apart means a product change never silently rewrites what the suite proves.
+ */
+export const FIXTURE_DIR = resolve(here, '../fixtures');
 
 export const MONGO_URI = process.env.MONGO_URI ?? 'mongodb://127.0.0.1:27019/?directConnection=true';
 
@@ -70,8 +77,8 @@ export async function startHarness(suffix: string): Promise<Harness> {
   const app = await buildApp(config);
   const registry = new WorkspaceRegistry(app.store);
 
-  await applyDefinition(registry, 'catalogue.yaml', { workspace: catalogue });
-  await applyDefinition(registry, 'maestro-platform.yaml', { workspace: tenant });
+  await applyDefinition(registry, resolve(CONFIG_DIR, 'catalogue.yaml'), { workspace: catalogue });
+  await applyDefinition(registry, resolve(FIXTURE_DIR, 'tenant.yaml'), { workspace: tenant });
 
   return {
     app,
@@ -94,18 +101,19 @@ export async function startHarness(suffix: string): Promise<Harness> {
   };
 }
 
-async function applyDefinition(
+export async function applyDefinition(
   registry: WorkspaceRegistry,
-  file: string,
+  path: string,
   overrides: { workspace: string },
 ): Promise<void> {
-  const raw = parse(await readFile(resolve(CONFIG_DIR, file), 'utf8')) as Record<string, unknown>;
+  const raw = parse(await readFile(path, 'utf8')) as Record<string, unknown>;
   const definition = parseWorkspaceDefinition({ ...raw, workspace: overrides.workspace });
 
+  // Facet schemas resolve relative to the definition that names them, as the apply CLI does.
   const facetSchemas: Record<string, object> = {};
   for (const type of definition.types) {
     facetSchemas[type.id] = JSON.parse(
-      await readFile(resolve(CONFIG_DIR, type.facet_schema), 'utf8'),
+      await readFile(resolve(dirname(path), type.facet_schema), 'utf8'),
     ) as object;
   }
   await registry.apply({ definition, facet_schemas: facetSchemas, applied_by: 'test' });

@@ -58,13 +58,13 @@ fmt: ## Format both packages
 validate: ## Validate every committed workspace definition (no database needed)
 	cd api && npm run workspace:validate
 
-apply: ## Apply both workspace definitions to the running MongoDB
+apply: ## Apply the catalogue and the demo tenant to the running MongoDB
 	cd api && MONGO_URI='mongodb://127.0.0.1:27019/?directConnection=true' \
 		MONGO_USER=specs MONGO_PASSWORD=specs \
 		npm run workspace:apply -- ../config/workspaces/catalogue.yaml
 	cd api && MONGO_URI='mongodb://127.0.0.1:27019/?directConnection=true' \
 		MONGO_USER=specs MONGO_PASSWORD=specs \
-		npm run workspace:apply -- ../config/workspaces/maestro-platform.yaml
+		npm run workspace:apply -- ../config/workspaces/aannemer-x.yaml
 
 mongo-shell: ## Open a mongosh against the running replica set
 	$(COMPOSE) exec mongo mongosh -u specs -p specs --authenticationDatabase admin

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "change_record",
+  "description": "A production change to a high-tier application: what ships, against which accepted specification, and how it comes back if it must.",
+  "type": "object",
+  "required": ["application", "environment", "artifact_digest", "rollback_target", "summary", "consequence_class"],
+  "additionalProperties": false,
+  "properties": {
+    "application": { "type": "string", "minLength": 1 },
+    "environment": { "type": "string", "minLength": 1 },
+    "artifact_digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "What ships. Must be known to the artifact ledger; a digest the ledger does not hold is an ungated build."
+    },
+    "rollback_target": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "description": "The known-good digest the deploy event will name as the way back."
+    },
+    "summary": { "type": "string", "minLength": 10, "description": "What changes for the people who use it, in one paragraph." },
+    "risk": { "enum": ["low", "medium", "high"] },
+    "window": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "from": { "type": "string", "format": "date-time" },
+        "to": { "type": "string", "format": "date-time" }
+      }
+    },
+    "verification": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 5 },
+      "description": "How it is confirmed in production: an alarm that stays OK, a synthetic check, a person's look."
+    },
+    "consequence_class": { "enum": ["c1", "c2", "c3", "c4"] }
+  }
+}

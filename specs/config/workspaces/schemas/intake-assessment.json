@@ -1,24 +1,60 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "intake_assessment",
-  "description": "Is this existing application ours to hold, and at what level? A different question from 'is it worth building', with different standards.",
+  "description": "Is this existing application ours to hold, at which onboarding level, at which criticality tier? Its acceptance sets both in the instance register.",
   "type": "object",
-  "required": ["application_name", "onboarding_level", "reconstructed_purpose", "personal_data_in_scope"],
+  "required": [
+    "application_name",
+    "onboarding_level",
+    "criticality_tier",
+    "reconstructed_purpose",
+    "personal_data_in_scope"
+  ],
   "additionalProperties": false,
   "properties": {
-    "application_name": { "type": "string", "minLength": 1 },
+    "application_name": {
+      "type": "string",
+      "minLength": 1
+    },
     "onboarding_level": {
-      "enum": ["N0", "N1", "N2", "N3", "N4"],
-      "description": "How much of this system we take responsibility for. Below N2 the incumbent team keeps deploying."
+      "enum": [
+        "N0",
+        "N1",
+        "N2",
+        "N3",
+        "N4"
+      ],
+      "description": "How much of this application maestro may act on. N0 observed, N1 operated, N2 governed; N3 and N4 are not used in the MVP."
+    },
+    "criticality_tier": {
+      "type": "string",
+      "pattern": "^tier[1-4]$",
+      "description": "What the clocks derive from: severity × tier → respond_by and resolve_by, from the tenant's policy."
     },
     "reconstructed_purpose": {
       "type": "string",
       "minLength": 10,
       "description": "Recovered after the fact. Mark its provenance `reconstructed` — never present it as original."
     },
-    "incumbent": { "type": "string" },
-    "personal_data_in_scope": { "type": "boolean" },
-    "consequence_class": { "enum": ["c1", "c2", "c3", "c4"] },
-    "known_gaps": { "type": "array", "items": { "type": "string" } }
+    "incumbent": {
+      "type": "string"
+    },
+    "personal_data_in_scope": {
+      "type": "boolean"
+    },
+    "consequence_class": {
+      "enum": [
+        "c1",
+        "c2",
+        "c3",
+        "c4"
+      ]
+    },
+    "known_gaps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
   }
 }

@@ -6,7 +6,7 @@ Two planes: a **Docs** plane you read, and a **Delivery** plane you track.
 
 | Section | Holds |
 |---|---|
-| [`design/`](design/) | How it is built and why. [`architecture.md`](design/architecture.md) is the entry point; [`decisions/`](design/decisions/) holds the ADRs; [`ui/`](design/ui/) holds the approved console design |
+| [`design/`](design/) | How it is built and why. [`architecture.md`](design/architecture.md) is the entry point; [`decisions/`](design/decisions/) holds the ADRs; [`ui/`](design/ui/) holds the approved console design — its tokens and treatments; its screen content predates the MVP workspace |
 | `reference/` | API, SDK, MCP tool, and configuration-schema reference. *Not yet written* |
 | `guides/` | [`git-native-specs.md`](guides/git-native-specs.md) — a specification as a file next to the code. Setup, defining a workspace, integrating an evaluator: *not yet written* |
 | `product/` | Requirements and user stories. *Not yet written* |
@@ -17,6 +17,7 @@ Two planes: a **Docs** plane you read, and a **Delivery** plane you track.
 2. [`design/architecture.md`](design/architecture.md) — the model, ports, isolation, build order
 3. [`../GLOSSARY.md`](../GLOSSARY.md) — the vocabulary, and what each term maps to in a consumer
 4. [`design/ui/`](design/ui/) — the approved console design, as a single browsable file
+5. [`../../maestro/docs/components/specs-service.md`](../../maestro/docs/components/specs-service.md) — what maestro's MVP uses this service for, and how it deploys
 
 ## Decisions
 

@@ -8,7 +8,6 @@ node_modules
 **/*.tsbuildinfo
 .cache
 coverage
-config/ds1/.env
 .env
 .env.local
 *.md

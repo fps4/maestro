@@ -522,12 +522,16 @@
     <p class="eyebrow">mstr-specs · console · UI mock v3 · for approval</p>
     <h1>Eleven screens for a service whose whole product is that a record cannot change afterwards</h1>
     <p>
-      The console for <span class="id">fps4/mstr-specs</span> — the specification service realising
-      PS3 of the maestro platform. Every screen below is built from the real seeded workspace
-      (<span class="mono">ws-aannemer-x</span>: opportunity → business case → specification → intake
-      assessment → pack binding), the real facet names from PS3 §4, real standards from the
-      NL-construction model, and the real gates from the workspace definition. Nothing here is
-      placeholder text.
+      The console for <span class="id">fps4/maestro-specs</span>. Every screen below is built from the
+      workspace this repository seeded when the design was approved (<span class="mono">ws-aannemer-x</span>,
+      definition v1: opportunity → business case → specification → intake assessment → pack binding),
+      its facet names, fictional standards, and the gates of that definition. Nothing here is
+      placeholder text. <strong>Since 2026-09-18 the shipped demo workspace is a different one</strong>
+      (<span class="mono">config/workspaces/aannemer-x.yaml</span>, v2: cause analysis, intake assessment,
+      specification, change record): the tokens, component vocabulary and state treatments here are
+      what the console implements; the screen content is illustrative of the mechanism, not of the
+      current definition. The Catalogue and Standards screens appear only for a workspace that
+      declares <span class="mono">catalogue_refs</span>.
     </p>
     <p>
       <strong>New in v3 — the standards live here too.</strong> A standard has a lineage, immutable
@@ -590,7 +594,7 @@
         </nav>
       </div>
       <div class="rail-foot">
-        <b>PS3 · S1</b>
+        <b>specs-service</b>
         <span>This store is a projection. The record sink is authoritative.</span>
       </div>
     </aside>
@@ -893,7 +897,7 @@
                     <span class="chip accepted" style="margin-top: 1px;">met</span>
                     <span class="stack" style="gap: 0;">
                       <span class="mono xsmall">NL-AVG-GRONDSLAG-001</span>
-                      <span class="xsmall faint">lawful basis declared · evaluated 4 Aug by PS5</span>
+                      <span class="xsmall faint">lawful basis declared · evaluated 4 Aug by the standards evaluator</span>
                     </span>
                   </div>
                   <div class="row" style="gap: 8px; align-items: flex-start;">
@@ -1169,7 +1173,7 @@ tekening, gemiddeld 14,2 dagen per project.
                         <span class="xsmall"><span class="mono" style="color: var(--accent);">met</span> <span class="mono faint">NL-AVG-GRONDSLAG-001</span> <span class="faint">· legitimate_interest, accepted by Boekhoudkantoor Y</span></span>
                         <span class="xsmall faint"><span class="mono">n/a</span> <span class="mono">NL-WKB-GEREEDMELDING-001</span> · applies_when not satisfied</span>
                       </div>
-                      <span class="xsmall faint">Verdicts recorded 4 Aug 09:20 by PS5 against this version's digest. The service recorded them; it did not compute one.</span>
+                      <span class="xsmall faint">Verdicts recorded 4 Aug 09:20 by the standards evaluator against this version's digest. The service recorded them; it did not compute one.</span>
                     </div>
                   </div>
                   <div class="check fail">
@@ -1321,13 +1325,13 @@ tekening, gemiddeld 14,2 dagen per project.
               <!-- deployment (not in this service) -->
               <rect x="702" y="44" width="176" height="56" rx="4" fill="none" stroke="var(--ink-faint)" stroke-dasharray="3 3"></rect>
               <text x="714" y="63" font-size="10.5" fill="var(--ink-faint)" font-weight="600">app-0071</text>
-              <text x="714" y="78" font-size="9" fill="var(--ink-faint)">deployment · PS13</text>
+              <text x="714" y="78" font-size="9" fill="var(--ink-faint)">deployment · the instance register</text>
               <text x="714" y="91" font-size="9" fill="var(--ink-faint)">forward edge arrives with it</text>
 
               <!-- conformance -->
               <rect x="702" y="150" width="176" height="52" rx="4" fill="none" stroke="var(--ink-faint)" stroke-dasharray="3 3"></rect>
               <text x="714" y="169" font-size="10.5" fill="var(--ink-faint)" font-weight="600">conformance</text>
-              <text x="714" y="184" font-size="9" fill="var(--ink-faint)">PS12 · assessed, not asserted</text>
+              <text x="714" y="184" font-size="9" fill="var(--ink-faint)">standards engine · assessed, not asserted</text>
 
               <!-- the pinned-version callout -->
               <line x1="322" y1="108" x2="322" y2="150" stroke="var(--accent)" stroke-width="1" stroke-dasharray="2 3"></line>
@@ -1685,7 +1689,7 @@ available — see the elicitation construct
                   <dt>pack</dt><dd class="mono">nl-construction</dd>
                   <dt>pinned</dt><dd class="mono">3.2.0 <span class="xsmall faint">published 12 Jul</span></dd>
                   <dt>upgrade</dt><dd class="mono">notify</dd>
-                  <dt>source</dt><dd class="xsmall faint">PS11 — read-only here. This service never authors a standard.</dd>
+                  <dt>source</dt><dd class="xsmall faint">the pack registry — read-only here. This service never authors a standard.</dd>
                 </dl>
               </div>
 

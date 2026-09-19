@@ -1,7 +1,7 @@
 ---
 title: Console design reference
 status: approved
-last_updated: 2026-08-06
+last_updated: 2026-09-18
 owners: [architect]
 related:
   - ../architecture.md
@@ -15,6 +15,18 @@ from the picker at the top.
 
 It is a design reference, not a prototype to be lifted. The tokens, the component vocabulary and
 the state treatments are what the implementation copies; the markup is not.
+
+**What is approved, as of 2026-09-18.** The design language, the mutability line, the state
+treatments, the type treatment, and the shape of each screen. **What is illustrative:** the content.
+The screens were built from the workspace this repository seeded in August (opportunity → business
+case → specification → intake assessment → pack binding, with standards). Since 2026-09-18 the
+shipped demo workspace is [`config/workspaces/aannemer-x.yaml`](../../../config/workspaces/aannemer-x.yaml)
+v2 — cause analysis, intake assessment, specification, change record — because maestro was
+re-scoped to an ops engine. The console renders any definition, so nothing here broke; but a
+redesign of the screens around maestro's first use case (a signal becomes a work item, an RCA run
+proposes a cause analysis, a person accepts it, a fix ships) is owed, and is tracked in
+`fps4/maestro/docs/ux.md`. Until then, read the mechanism from these screens and the words from the
+definition.
 
 ## What it fixes
 
@@ -44,8 +56,8 @@ are bytes, not prose, and the type treatment says so.
 | Diff | Facet diff and body diff together — a gate reads one, a human reads the other |
 | Decide | Requirements before outcomes, each outcome stating its consequence, attribution shown not collected |
 | Lineage | The pinned edge solid, everything else dashed, absent services dotted |
-| Catalogue | Standards as artifacts — ours in full text, external by citation and summary |
-| Standards & binding | Which standards this tenant accepted, by whom, when, against which pack version |
+| Catalogue | Standards as artifacts — ours in full text, external by citation and summary. Shown only for a workspace that declares `catalogue_refs` |
+| Standards & binding | Which standards this tenant accepted, by whom, when, against which pack version. Shown only for a workspace that declares `catalogue_refs` |
 | Search | Facet matches and body matches distinguished; the workspace boundary stated |
 | Workspace definition | The types, gates and lifecycle as data, including a declared omission |
 | Sign in | One card, one action, no chrome |

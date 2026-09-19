@@ -1,7 +1,7 @@
 ---
 title: Specifications next to the code
 status: draft
-last_updated: 2026-09-15
+last_updated: 2026-09-18
 owners: [architect]
 related:
   - ../design/decisions/0016-the-git-native-path.md
@@ -22,8 +22,8 @@ type: specification
 title: Materiaalstaat generator
 artifact: art-7q2k9…                        # after the first propose: revise this lineage
 classification: { lawful_basis: contract, retention: 7y, personal_data: false }
-links: [{ type: justified_by, target: art-c4se… }]
-class: generative
+class: descriptive                          # derived from the running code; a claim about it
+verification_interval: 90d
 personal_data_in_scope: false
 consequence_class: c2
 ---
@@ -55,7 +55,7 @@ export SPECS_URL=https://specs.example.com
 export SPECS_TOKEN=…                        # your token, or an agent's
 
 cd maestro-specs/api
-npm run specs -- propose ../../my-service/docs/spec.md --workspace maestro-platform
+npm run specs -- propose ../../my-service/docs/spec.md --workspace aannemer-x
 ```
 
 ```
@@ -74,8 +74,8 @@ each as recorded or unavailable. The last line is JSON, for a workflow step to p
 Then, when you are the one deciding:
 
 ```bash
-npm run specs -- packet specification_gate art-7q2k9…@3 --workspace maestro-platform
-npm run specs -- decide specification_gate art-7q2k9…@3 --workspace maestro-platform \
+npm run specs -- packet specification art-7q2k9…@3 --workspace aannemer-x
+npm run specs -- decide specification art-7q2k9…@3 --workspace aannemer-x \
   --outcome approve --reasoning "Reviewed in PR #42." --attr seat=owner --attr oversight_level=O2
 ```
 
@@ -110,7 +110,7 @@ jobs:
           command: propose
           url: ${{ vars.SPECS_URL }}
           token: ${{ secrets.SPECS_TOKEN }}        # the proposing principal — see below
-          workspace: maestro-platform
+          workspace: aannemer-x
           file: docs/spec.md
       - id: packet
         uses: fps4/maestro-specs/.github/actions/specs@main
@@ -118,8 +118,8 @@ jobs:
           command: packet
           url: ${{ vars.SPECS_URL }}
           token: ${{ secrets.SPECS_TOKEN }}
-          workspace: maestro-platform
-          gate: specification_gate
+          workspace: aannemer-x
+          gate: specification
           artifact: ${{ steps.propose.outputs.artifact }}
           ordinal: ${{ steps.propose.outputs.ordinal }}
       - uses: actions/github-script@v7
@@ -128,7 +128,7 @@ jobs:
             await github.rest.issues.createComment({
               ...context.repo, issue_number: context.issue.number,
               body: `Proposed \`${{ steps.propose.outputs.artifact }}@${{ steps.propose.outputs.ordinal }}\`.\n\n` +
-                    `${{ vars.SPECS_URL }}/gates/specification_gate/${{ steps.propose.outputs.artifact }}/${{ steps.propose.outputs.ordinal }}\n\n` +
+                    `${{ vars.SPECS_URL }}/gates/specification/${{ steps.propose.outputs.artifact }}/${{ steps.propose.outputs.ordinal }}\n\n` +
                     process.env.PACKET,
             });
         env:

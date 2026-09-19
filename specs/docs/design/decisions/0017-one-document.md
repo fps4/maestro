@@ -21,8 +21,9 @@ criteria as prose in the body and then again as objects in the facet panel, and 
 A non-technical author met custom fields; an agent kept two representations in sync; the CLI
 (ADR-0016) had to invent front-matter to carry facets at all.
 
-The maestro design had already moved past this — PS3 v0.5: *the body is EARS and a requirement is
-an object, addressable, versioned with its specification.* The build had not followed.
+The maestro design corpus of the time (retired 2026-09-18; git tag `corpus-2026-09` on
+`fps4/maestro`) had already moved past this: *the body is EARS and a requirement is an object,
+addressable, versioned with its specification.* The build had not followed.
 
 ## Decision
 

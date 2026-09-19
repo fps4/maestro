@@ -6,17 +6,15 @@ dist/
 .next/
 *.tsbuildinfo
 
-# Environment / secrets — only config/ds1/.env.base is committed
+# Environment / secrets. A deployment's values live in the tenant's configuration repository
+# (fps4/maestro-config-<tenant>), never here.
 .env
 .env.local
-config/ds1/.env
 
 # A workspace definition applied to a real deployment is tenant configuration, not product.
-# Only the two example definitions ship; see config/workspaces/README.md.
+# Only the demo tenant and the catalogue ship.
 config/workspaces/*
-!config/workspaces/README.md
-!config/workspaces/maestro-platform.yaml
-!config/workspaces/maestro-sdlc.yaml
+!config/workspaces/aannemer-x.yaml
 !config/workspaces/catalogue.yaml
 !config/workspaces/schemas/
 

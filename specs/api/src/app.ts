@@ -26,8 +26,8 @@ export interface App {
 export async function buildApp(config: Config): Promise<App> {
   const server = Fastify({
     logger: { level: config.LOG_LEVEL },
-    // Behind the shared reverse proxy on ds1, so the client address comes from the forwarded header
-    // rather than from the proxy's own socket.
+    // Always behind a proxy (API Gateway, or a reverse proxy locally), so the client address comes
+    // from the forwarded header rather than from the proxy's own socket.
     trustProxy: true,
     bodyLimit: config.BODY_CEILING_BYTES + 512 * 1024,
   });

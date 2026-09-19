@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "specification",
+  "description": "What exactly is built, and is it compliant?",
+  "type": "object",
+  "required": ["class", "acceptance_criteria", "personal_data_in_scope", "consequence_class"],
+  "additionalProperties": false,
+  "properties": {
+    "class": {
+      "enum": ["generative", "descriptive"],
+      "description": "Generative is authoritative and code derives from it. Descriptive is derived from code and is a claim about it — it can be wrong, silently, which is why the two are distinct and never interchangeable."
+    },
+    "acceptance_criteria": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["id", "text", "priority", "verify"],
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^AC-\\d+$" },
+          "text": { "type": "string", "minLength": 5 },
+          "priority": { "enum": ["must", "should", "could"] },
+          "verify": { "enum": ["test", "inspection", "demonstration", "analysis"] },
+          "source": { "type": "string" }
+        }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "in": { "type": "array", "items": { "type": "string" } },
+        "out": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "personal_data_in_scope": { "type": "boolean" },
+    "consequence_class": { "enum": ["c1", "c2", "c3", "c4"] },
+    "affected_roles": { "type": "array", "items": { "type": "string" } },
+    "verification_interval": {
+      "type": "string",
+      "description": "Descriptive only. Absent means it can rot unnoticed."
+    },
+    "verified_at": { "type": "string", "format": "date" }
+  }
+}

@@ -89,3 +89,11 @@ repository is the right call. Not before, and not for the platform's own reposit
 This is the first decision in this set recorded as `accepted` rather than `proposed`: the
 architect took it explicitly, and it constrains work rather than describing a design under
 review.
+
+---
+
+*Citations, 2026-09-18.* "D39", "platform-standards §4.4" and "PS3 §4.2" above refer to the maestro
+design corpus as it stood when this was decided. That corpus was retired on 2026-09-18 (git tag
+`corpus-2026-09` on `fps4/maestro`) and the MVP design written afresh; the decision stands unchanged.
+What "the platform's own specifications" means now is in `fps4/maestro/docs/components/specs-service.md`,
+and the EARS-plus-GIVEN/WHEN/THEN notation line is carried by this ADR alone.

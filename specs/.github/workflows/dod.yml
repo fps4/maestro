@@ -7,7 +7,8 @@ name: dod
 # across the socket — so every job does its work via `docker build` (the context is STREAMED to the
 # daemon) plus sibling containers on a per-run network.
 #
-# A successful run on main triggers deploy-ds1.
+# The move to GitHub-hosted runners is M1 work (../maestro/docs/roadmap.md); until then this gate
+# runs where it runs. Nothing deploys from it any more.
 
 on:
   push:

@@ -7,7 +7,7 @@
  * and makes it a proposed version, and the command a human runs to decide on one. The record stays
  * in the service; only the authoring moved to where the author already is.
  *
- *   specs propose docs/spec.md --workspace maestro-platform
+ *   specs propose docs/spec.md --workspace aannemer-x
  *   specs packet  specification_gate art-…@3
  *   specs decide  specification_gate art-…@3 --outcome approve --reasoning "…" --attr seat=owner
  *   specs withdraw art-…@2

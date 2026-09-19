@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "cause_analysis",
+  "description": "Why it broke, how far it reached, and what the fix is. The gate reads these; the narrative is the body.",
+  "type": "object",
+  "required": ["item", "severity", "cause", "blast_radius", "fix_plan", "consequence_class"],
+  "additionalProperties": false,
+  "properties": {
+    "item": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The work item this analyses. The analysis is a fact about the item; the item is the record of the incident."
+    },
+    "signal_fingerprint": {
+      "type": "string",
+      "description": "The dedup key of the signal that raised the item, so the analysis can be found from the alarm."
+    },
+    "severity": {
+      "enum": ["SEV1", "SEV2", "SEV3", "SEV4"],
+      "description": "As resolved from policy on the item. Proposing a different one here is a reclassification a person confirms; it does not change the item."
+    },
+    "cause": {
+      "type": "string",
+      "minLength": 20,
+      "description": "One sentence. What was wrong, not what was observed."
+    },
+    "cause_kind": {
+      "enum": ["defect", "configuration", "dependency", "capacity", "substrate", "operator", "unknown"]
+    },
+    "blast_radius": {
+      "type": "object",
+      "required": ["environment", "impact"],
+      "additionalProperties": false,
+      "properties": {
+        "environment": { "type": "string", "minLength": 1 },
+        "from": { "type": "string", "format": "date-time" },
+        "to": { "type": "string", "format": "date-time" },
+        "impact": { "type": "string", "minLength": 10, "description": "Who or what was affected, and how far." }
+      }
+    },
+    "contributing_factors": {
+      "type": "array",
+      "description": "The table under *Contributing factors* in the document.",
+      "items": {
+        "type": "object",
+        "required": ["factor", "evidence"],
+        "additionalProperties": false,
+        "properties": {
+          "factor": { "type": "string", "minLength": 5 },
+          "evidence": { "type": "string", "minLength": 5, "description": "A fact a reader can re-derive: a log line, a metric, a commit." }
+        }
+      }
+    },
+    "fix_plan": {
+      "type": "array",
+      "minItems": 1,
+      "description": "The table under *Fix plan* in the document. Each step names the kind of act, so the authority check can read it.",
+      "items": {
+        "type": "object",
+        "required": ["step", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "step": { "type": "string", "minLength": 5 },
+          "kind": { "enum": ["change", "configuration", "dependency_bump", "rollback", "no_action"] },
+          "evidence": { "type": "string", "description": "What will show this step was done — a merged change, a deploy event, an alarm back to OK." }
+        }
+      }
+    },
+    "recurrence": { "enum": ["first", "repeat"] },
+    "consequence_class": { "enum": ["c1", "c2", "c3", "c4"] }
+  }
+}

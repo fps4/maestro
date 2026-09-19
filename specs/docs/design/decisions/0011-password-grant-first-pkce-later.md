@@ -34,8 +34,8 @@ the browser cannot read, and reaches the api through a route handler that turns 
 
 **The stated benefit of being an Application in a shared identity deployment is not delivered yet.**
 A user signed in for another product still sees a login form here. That is a real gap against the
-architecture, written down in three places — here, in `config/ds1/.env.base`, and in `lib/auth.ts` —
-rather than discovered by someone wondering why SSO does not work.
+architecture, written down in two places — here and in `lib/auth.ts` — rather than discovered by
+someone wondering why SSO does not work.
 
 **This console handles a password.** With the authorization-code flow it never would. The mitigation
 is that it is posted directly to identity-service and never stored; the honest statement is that the

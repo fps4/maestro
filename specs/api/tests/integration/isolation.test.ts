@@ -12,12 +12,19 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { parse } from 'yaml';
 import { IsolationViolation } from '../../src/db/handle.js';
-import { parseWorkspaceDefinition } from '../../src/domain/workspace-definition.js';
 import { WorkspaceRegistry } from '../../src/services/workspaces.js';
 import { VERSIONS } from '../../src/db/collections.js';
-import { call, CONFIG_DIR, grantMembership, startHarness, token, type Harness } from './helpers.js';
+import {
+  applyDefinition,
+  call,
+  CONFIG_DIR,
+  FIXTURE_DIR,
+  grantMembership,
+  startHarness,
+  token,
+  type Harness,
+} from './helpers.js';
 import type { Version } from '../../src/domain/types.js';
 
 let harness: Harness;
@@ -31,19 +38,9 @@ beforeAll(async () => {
 
   // A second tenant in the same deployment, which is the situation isolation exists for.
   other = `other-iso`;
-  const registry = new WorkspaceRegistry(harness.app.store);
-  const raw = parse(await readFile(resolve(CONFIG_DIR, 'maestro-platform.yaml'), 'utf8')) as Record<
-    string,
-    unknown
-  >;
-  const definition = parseWorkspaceDefinition({ ...raw, workspace: other });
-  const facetSchemas: Record<string, object> = {};
-  for (const type of definition.types) {
-    facetSchemas[type.id] = JSON.parse(
-      await readFile(resolve(CONFIG_DIR, type.facet_schema), 'utf8'),
-    ) as object;
-  }
-  await registry.apply({ definition, facet_schemas: facetSchemas, applied_by: 'test' });
+  await applyDefinition(new WorkspaceRegistry(harness.app.store), resolve(FIXTURE_DIR, 'tenant.yaml'), {
+    workspace: other,
+  });
 
   // Put something in the other tenant worth stealing.
   const handle = await harness.app.store.handle(other);

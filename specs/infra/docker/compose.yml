@@ -1,10 +1,9 @@
-# The mstr-specs stack — local development, CI, and the ds1 deploy.
+# The mstr-specs stack — the local development loop and CI. It is not a deployment target: the
+# service deploys to AWS from a CDK stack (see ../maestro/docs/decisions/0002).
 #
 #   local:  make up
-#   ds1:    the deploy-ds1 workflow, which adds compose.ds1.networks.yml and an --env-file
 #
-# Every value comes from ${VAR} interpolation with a local-dev default inline, so the same file
-# serves both without a separate override for the common case.
+# Every value comes from ${VAR} interpolation with a local-dev default inline.
 
 name: mstr-specs
 
@@ -34,11 +33,11 @@ services:
         exec docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all --keyFile /etc/mongo-key/keyfile
     networks:
       default:
-        # A UNIQUE hostname, deliberately not the service name. On ds1 the api also joins
-        # identity-service's network, where a container is aliased `mongo` too — and Docker's DNS
-        # answers across every attached network, so plain `mongo` can resolve to *their* database.
-        # That presents as "Authentication failed" and looks like a wrong password rather than a
-        # wrong server.
+        # A UNIQUE hostname, deliberately not the service name. When the api also joins another
+        # stack's network (identity-service's, for a local SSO loop) a container there may be
+        # aliased `mongo` too — and Docker's DNS answers across every attached network, so plain
+        # `mongo` can resolve to *their* database. That presents as "Authentication failed" and
+        # looks like a wrong password rather than a wrong server.
         aliases:
           - mstr-specs-mongo
     environment:
@@ -182,9 +181,9 @@ services:
       retries: 10
       start_period: 25s
 
-  # The console. Loopback-bound; on ds1 the shared reverse proxy fronts the domain and routes `/`
-  # here. It needs no `/api` rule: the Next server proxies `/api/*` to the api service itself, and
-  # that is what can turn the httpOnly session cookie into an Authorization header.
+  # The console. Loopback-bound. A reverse proxy in front of it needs no `/api` rule: the Next
+  # server proxies `/api/*` to the api service itself, and that is what can turn the httpOnly
+  # session cookie into an Authorization header.
   web:
     build:
       context: ../..

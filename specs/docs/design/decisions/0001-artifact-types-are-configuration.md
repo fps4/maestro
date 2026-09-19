@@ -12,10 +12,15 @@ related:
 
 ## Context
 
-Two consumers exist today and their vocabularies do not overlap at all. maestro has opportunities,
-business cases, specifications and intake assessments, moving through Explore, Assess, specification
-and release gates. maestro v1 has charters, functional specs, technical designs and implementations,
-moving through functional and technical gates.
+Two consumers exist today and their vocabularies do not overlap at all. maestro, when this was
+written, had opportunities, business cases, specifications and intake assessments, moving through
+Explore, Assess, specification and release gates. maestro v1 has charters, functional specs,
+technical designs and implementations, moving through functional and technical gates.
+
+*(2026-09-18: maestro was re-scoped to an ops engine and its chain became cause analysis, intake
+assessment, specification and change record, through RCA review, intake, specification and release.
+The change was a new workspace definition and no release of this service — which is this decision
+doing its job. The earlier chain remains the integration fixture.)*
 
 The mechanics *are* the same — a typed artifact, an immutable version, typed links to other
 artifacts, evaluable units with attributes, and a gate where a named human decides and an agent

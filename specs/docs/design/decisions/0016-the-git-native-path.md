@@ -56,7 +56,7 @@ in the workspace's words — *rests on a business case*.
 
 ## Consequences
 
-**The platform can carry its own specifications the way D39 intends.** A descriptive specification
+**The platform can carry its own specifications.** A descriptive specification
 of `identity-service` or of this service is a file in that repository, proposed by its pipeline,
 decided by its owner, and the record holds every version anyone decided on.
 

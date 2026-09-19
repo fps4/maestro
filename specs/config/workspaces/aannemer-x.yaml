@@ -1,0 +1,193 @@
+# The demo tenant — Aannemer X, fictional — with the four artifact types the maestro MVP uses
+# (../maestro/docs/components/specs-service.md). This is the definition the repository's own
+# pipeline deploys; a real tenant's definition lives in its private configuration repository.
+#
+#   signal ─▶ work item ─▶ Cause analysis ── RCA review ──▶ the fix is unlocked
+#   an application that already runs ─▶ Intake assessment ── Intake ──▶ level and tier are set
+#   Specification ── Specification ──▶ accepted; a Change record pins the version it implements ── Release
+#
+# Nothing below is in the code. A fifth artifact class costs a definition, not a release (ADR-0001).
+# Standards and packs are not declared here: no type sets `catalogue_refs`, so the console shows no
+# catalogue for this workspace. That surface waits for the regulated branch.
+
+workspace: aannemer-x
+definition_version: 2
+kind: tenant
+title: Aannemer X
+
+types:
+  # Proposed by an RCA run against a work item, read by the person who owns operations. Acceptance
+  # is what unlocks a fix run; nothing is changed on the strength of an unaccepted analysis.
+  - id: cause_analysis
+    title: Cause analysis
+    description: Why it broke, how far it reached, and what the fix is. A person accepts it before anything is fixed.
+    facet_schema: ./schemas/cause-analysis.json
+    body_format: markdown/v1
+    attachments:
+      max_size: 25MB
+      media_types: [image/png, image/jpeg, image/svg+xml, application/pdf]
+    draft_expiry: 30d
+    classification_required: true
+    links: []
+    # Two tables in the document are the two facets the gate reads: the same bytes are prose to the
+    # reviewer and structure to the gate (ADR-0017).
+    body_blocks:
+      - { facet: contributing_factors, heading: Contributing factors, shape: table }
+      - { facet: fix_plan, heading: Fix plan, shape: table }
+
+  # For an application that already exists. Its acceptance is what sets the onboarding level and
+  # criticality tier in the instance register — the two facts every authority check reads.
+  - id: intake_assessment
+    title: Intake assessment
+    description: For an application that already runs — is this ours to hold, at which level, at which tier?
+    facet_schema: ./schemas/intake-assessment.json
+    body_format: markdown/v1
+    draft_expiry: 90d
+    classification_required: true
+    links: []
+
+  # Descriptive for an application that already runs; what a change is measured against. May be a
+  # file next to the code, proposed from a pull request (ADR-0016).
+  - id: specification
+    title: Specification
+    description: What the application does and what it must satisfy — the thing a change is measured against.
+    facet_schema: ./schemas/specification.json
+    body_format: markdown/v1
+    attachments:
+      max_size: 25MB
+      media_types: [image/png, image/jpeg, image/svg+xml, application/pdf]
+    draft_expiry: 90d
+    classification_required: true
+    links:
+      - { id: follows_from, to: cause_analysis, label: Follows from the cause analysis }
+    body_blocks:
+      - { facet: acceptance_criteria, heading: Acceptance criteria, shape: table }
+
+  # A production change to a high-tier application: the change advisory board as one page. The pin
+  # is what keeps the trail honest — the record names the specification version as it read when
+  # the release was approved, not as it was rewritten afterwards.
+  - id: change_record
+    title: Change record
+    description: What ships to production, against which accepted specification, and how it comes back if it must.
+    facet_schema: ./schemas/change-record.json
+    body_format: markdown/v1
+    draft_expiry: 30d
+    classification_required: false
+    links:
+      - { id: implements, to: specification, pinned: true, label: Implements the specification }
+
+attribution_profiles:
+  - id: maestro_default
+    required: [accountable, acting, seat, oversight_level]
+    rules:
+      accountable: { must_resolve_to: principal, kind: human }
+      acting: { must_resolve_to: principal }
+    optional: [consequence_class]
+    field_labels:
+      accountable: Answerable for this decision
+      acting: Who recorded it
+      seat: Seat
+      oversight_level: Oversight level
+      consequence_class: Consequence class
+
+gates:
+  - id: rca_review
+    title: RCA review
+    description: Is this why it broke, and is the fix plan the right one? Accepting it is what lets the fix start.
+    decides_on: cause_analysis
+    owner: { resolver: role, role: operations }
+    outcomes: [accept, request_changes, reject]
+    outcome_labels: { accept: Accept the analysis, request_changes: Ask for more, reject: Reject }
+    reopens_on: request_changes
+    blocking: true
+    requires:
+      # An RCA run extracts most of these facets; a person confirms them before deciding on them.
+      confirmed_facets: true
+      evaluations: [sufficiency]
+      # An open question on an analysis holds the fix. Answering it is cheaper than a wrong fix.
+      questions_resolved: true
+    separation_of_duties: exclude_proposer
+    attribution_profile: maestro_default
+
+  - id: intake
+    title: Intake
+    description: Should we take this application on, at the level and tier the assessment proposes?
+    decides_on: intake_assessment
+    owner: { resolver: role, role: sponsor }
+    outcomes: [approve, request_changes, decline]
+    outcome_labels: { approve: Take it on, request_changes: Ask for changes, decline: Decline }
+    reopens_on: request_changes
+    blocking: true
+    requires:
+      confirmed_facets: true
+      evaluations: [sufficiency]
+    # No separation of duties declared. At this tenant the sponsor who raised the intake is the one
+    # who decides it; the exemption is visible rather than assumed.
+    attribution_profile: maestro_default
+
+  - id: specification
+    title: Specification
+    description: Is this what the application does and must satisfy? Changes are measured against it.
+    decides_on: specification
+    owner: { resolver: role, role: owner }
+    outcomes: [approve, request_changes, decline]
+    outcome_labels: { approve: Approve, request_changes: Ask for changes, decline: Decline }
+    reopens_on: request_changes
+    blocking: true
+    requires:
+      confirmed_facets: true
+      evaluations: [sufficiency]
+      questions_resolved: true
+    separation_of_duties: exclude_creator
+    attribution_profile: maestro_default
+
+  - id: release
+    title: Release
+    description: May this ship to production? Approving it is the change advisory decision, on one page.
+    decides_on: change_record
+    owner: { resolver: role, role: owner }
+    outcomes: [approve, request_changes, decline]
+    outcome_labels: { approve: Approve the release, request_changes: Ask for changes, decline: Decline }
+    reopens_on: request_changes
+    blocking: true
+    requires:
+      confirmed_facets: true
+      evaluations: [sufficiency]
+      questions_resolved: true
+    separation_of_duties: exclude_creator
+    attribution_profile: maestro_default
+
+# One lifecycle for every lineage in the workspace: under decision, accepted, closed. What "closed"
+# means differs by type — the work item closed, the application decommissioned, the change deployed
+# — and each is a consumer's event, so the transition is `system`, never a person's act here.
+lifecycle:
+  phases: [open, accepted, closed]
+  phase_labels:
+    open: Under decision
+    accepted: Accepted
+    closed: Closed
+  initial: open
+  transitions:
+    - { from: open, to: accepted, via_gate: rca_review, on: accept }
+    - { from: open, to: closed, via_gate: rca_review, on: reject }
+    - { from: open, to: open, via_gate: rca_review, on: request_changes }
+    - { from: open, to: accepted, via_gate: intake, on: approve }
+    - { from: open, to: closed, via_gate: intake, on: decline }
+    - { from: open, to: open, via_gate: intake, on: request_changes }
+    - { from: open, to: accepted, via_gate: specification, on: approve }
+    - { from: open, to: closed, via_gate: specification, on: decline }
+    - { from: open, to: open, via_gate: specification, on: request_changes }
+    - { from: open, to: accepted, via_gate: release, on: approve }
+    - { from: open, to: closed, via_gate: release, on: decline }
+    - { from: open, to: open, via_gate: release, on: request_changes }
+    # A new version of an accepted artifact is back under decision until someone accepts it.
+    - { from: accepted, to: open, via: propose }
+    - { from: accepted, to: closed, via: system }
+    # A descriptive specification is re-verified on a consumer's clock; the phase does not change.
+    - { from: accepted, to: accepted, via: system }
+
+# The port's local default (ADR-0015): each type's own facet schema, reported as findings. It is
+# the floor of "does this say enough", and it is why every gate here opens with nothing behind the
+# evaluator port. A standards engine is the regulated branch's, not the MVP's.
+evaluators:
+  - { id: sufficiency, builtin: facet_schema }

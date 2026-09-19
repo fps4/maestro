@@ -33,7 +33,7 @@ resolution. No local credential store, no fallback, no development shortcut that
 
 | Port | Local default | Production adapter |
 |---|---|---|
-| Record sink | Outbox collection, relayed to a log | Kafka, or an external durable spine |
+| Record sink | Outbox collection, drained locally | An external durable spine — in maestro, a relay to an S3 archive with SNS/SQS delivery *(amended 2026-09-18; was "Kafka, or an external durable spine")* |
 | Evaluator | `builtin: facet_schema` — the type's schema, as findings *(amended by ADR-0015; was "absent")* | HTTP callout, `${VAR}` resolved from the environment |
 | Notifier | Log line | HTTP webhook |
 | Object storage | MinIO | S3 |

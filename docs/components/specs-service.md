@@ -47,7 +47,7 @@ Configuration comes from `fps4/maestro-config-<tenant>/workspaces/*.yaml`. The r
 
 | Change | Milestone | Size |
 |---|---|---|
-| CDK stack; the relay as a scheduled Lambda; S3 adapter for object storage | M1 | small |
+| Terraform module; the relay as a scheduled Lambda; S3 adapter for object storage | M1 | small |
 | Today reads work-service and agent-service alongside its own decisions and questions | M2–M3 | small, in the console |
 | Move the DoD gate to GitHub-hosted runners (the self-hosted deployment configuration is already removed) | M1 | small |
 

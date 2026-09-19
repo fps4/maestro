@@ -70,7 +70,7 @@ Extracted from identity-service and specs-service; work-service, runtime-service
 
 ## 5. Deployment shape
 
-Per tenant, one CDK app:
+Per tenant, one Terraform root module composing the components' modules:
 
 | Piece | Service |
 |---|---|
@@ -84,7 +84,7 @@ Per tenant, one CDK app:
 | Notification | SES; Slack webhook |
 | Runner | GitHub Actions, GitHub-hosted, under an agent principal |
 
-The stack is parameterised by `fps4/maestro-config-<tenant>` ([tenancy-and-config.md](tenancy-and-config.md)). Nothing in the public repositories names a tenant.
+The root module lives in, and is parameterised by, `fps4/maestro-config-<tenant>` ([tenancy-and-config.md](tenancy-and-config.md)). Nothing in the public repositories names a tenant.
 
 ## 6. Repositories
 

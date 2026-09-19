@@ -58,6 +58,6 @@ moving the head. A sealed day refuses further appends.
 
 ## Status
 
-M1. Next in this package: the S3 store and the SNS FIFO delivery, the CDK constructs (archive bucket
+M1. Next in this package: the S3 store and the SNS FIFO delivery, the Terraform module (archive bucket
 with Object Lock, topic, relay and sealer schedules), and the segment-digest notification to the
 tenant's contact. The first relay wired to a component is specs-service's.

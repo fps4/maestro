@@ -51,7 +51,7 @@ An advisor who operates in several tenants authenticates once, carries an explic
 
 | Change | Milestone | Size |
 |---|---|---|
-| CDK stack | M1 | small |
+| Terraform module | M1 | small |
 | Principal lifecycle events (`PrincipalRegistered`, `PrincipalSuspended`, `SeatOccupancyChanged`) emitted by the registry to the spine | M1 | small, in the registry library shared by components |
 | An enumeration endpoint for principals in a realm, for the registry to reconcile | M2 | small |
 

@@ -11,7 +11,7 @@ This repository holds the design of maestro's MVP. Read `README.md`, then `docs/
 
 ## Pull requests
 
-- Always open PRs as drafts (`gh pr create --draft`). Never mark ready without explicit confirmation.
+- Open PRs ready for review (`gh pr create`, no `--draft`); the architect is the reviewer.
 - Squash-merge on the architect's word only; no auto-merge.
 - Commit messages end with the attribution line the session provides.
 

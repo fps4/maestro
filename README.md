@@ -34,4 +34,4 @@ Design and decisions for the MVP live here. Two components are built and running
 
 ## Licence
 
-MIT, applied when the repository goes public — the last step of the current refactor.
+MIT — see [LICENSE](LICENSE).

@@ -1,0 +1,37 @@
+{
+  "name": "@fps4/maestro-spine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The spine: maestro's record. The event envelope and its append rules, RFC 8785 canonicalisation, sealed daily segments chained by a Merkle root computed in code, the relay from a component's outbox, and a verifier that runs with every service off.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "spine-verify": "dist/cli/verify.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "verify": "tsx src/cli/verify.ts"
+  },
+  "dependencies": {
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@types/node": "^22.10.6",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^5.0.1"
+  }
+}

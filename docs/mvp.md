@@ -11,7 +11,7 @@
 | [work-service](components/work-service.md) | work items in six classes, authority at claim, clocks from policy, signals intake, the board | next |
 | [runtime-service](components/runtime-service.md) | the artifact ledger and the instance register, fed by deploy events | next |
 | [agent-service](components/agent-service.md) | runs, steps, transcripts — the record of what agents did; the runner is GitHub Actions + Claude Code | next |
-| [the spine](components/spine.md) | S3 archive as the system of record, SNS/SQS delivery, a relay from every outbox, a verifier | next, first |
+| [the spine](components/spine.md) | S3 archive as the system of record, SNS/SQS delivery, a relay from every outbox, a verifier | building (M1) |
 
 Plus the [signals contract](signals.md) — a Terraform module and a CDK construct an application applies to be observed — and a Claude Code plugin (`maestro-skills`) so every repository in an estate can talk to the components.
 

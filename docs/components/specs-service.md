@@ -13,7 +13,7 @@ What was agreed: artifacts drafted by anyone, versioned immutably, decided at ga
 | `specification` (an application's) | `specification` | the owner | a person or an agent |
 | `change_record` | `release` | the owner | a production deploy of a high-tier application |
 
-All four are workspace configuration — a type with facets and body blocks, a gate with its requirements and `accepts_on` outcome. No code.
+All four are workspace configuration — a type with facets and body blocks, a gate with its requirements and `accepts_on` outcome. No code. They are the demo workspace the repository ships (`config/workspaces/aannemer-x.yaml`, since 2026-09-18); a tenant's own definition lives in its configuration repository.
 
 ## What it already does that the MVP relies on
 
@@ -48,8 +48,7 @@ Configuration comes from `fps4/maestro-config-<tenant>/workspaces/*.yaml`. The r
 | Change | Milestone | Size |
 |---|---|---|
 | CDK stack; the relay as a scheduled Lambda; S3 adapter for object storage | M1 | small |
-| `cause_analysis` and `change_record` types in the demo workspace | M4 | configuration |
 | Today reads work-service and agent-service alongside its own decisions and questions | M2–M3 | small, in the console |
-| Remove the self-hosted deployment configuration; retire the runner workflow | M1 | removal |
+| Move the DoD gate to GitHub-hosted runners (the self-hosted deployment configuration is already removed) | M1 | small |
 
 Nothing else. The OpenSpec block shape and the external reader role are [post-MVP](../beyond-mvp.md).

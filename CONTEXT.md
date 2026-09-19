@@ -18,7 +18,7 @@ One meaning per word, across every component and document. If a component needs 
 
 | Term | Meaning |
 |---|---|
-| **Artifact** | A thing specs-service holds: a specification, a business case, an intake assessment, a cause analysis. Its **type** is configuration, not code. |
+| **Artifact** | A thing specs-service holds: a cause analysis, an intake assessment, a specification, a change record. Its **type** is configuration, not code. |
 | **Draft** | The mutable working copy of an artifact. Edited by anyone authorised, agents included. |
 | **Version** | An immutable snapshot of a draft, proposed to a gate. Versions are the record. |
 | **Facet** | A structured, evaluable field of an artifact (a status, a list, a table). Facets are evaluated; the **body** is read. |
@@ -71,3 +71,15 @@ One meaning per word, across every component and document. If a component needs 
 | **Projection** | Any component's database. Rebuildable from the archive; dropped and rebuilt as a build gate. |
 | **Export** | The archive, its manifests, and the verifier — readable with every service off. The exit. |
 | **Classification** | A label on every payload and transcript saying what it may contain and how long it is kept. |
+
+## Surfaces
+
+| Term | Meaning |
+|---|---|
+| **Today** | The one page a person opens: what only they can decide, questions on their versions, items they owe, and what agents are doing. Never a feed. |
+| **Register** | specs-service's ledger of everything in flight in a workspace: lineage, phase, state, open questions, last decision. Not the **instance register**, which is runtime-service's record of what runs where; its surface is the Estate. |
+| **Decision page** | One column a decider reads top to bottom and acts on; the same packet an agent reads over MCP. |
+| **Frontier** | work-service's ledger of what is owed now: by whom, acting as whom, due when, with the next human touchpoint. |
+| **Board** | The kanban over work-service's state machine, by milestone and application. Two views of one query with the frontier. |
+| **Run page** | One run: plan, timeline, ceiling, refusals, next human touchpoint. |
+| **Estate** | runtime-service's view of every application × environment: digest, level, tier, last deploy, open items. |

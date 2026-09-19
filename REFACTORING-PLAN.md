@@ -1,7 +1,7 @@
 # Refactoring plan — from the design corpus to the MVP docs
 
-**Created:** 2026-09-18 · **Rulings taken:** 2026-09-18, all ten (§2) · **Phases 1–2 merged to `main`** (PR #1, PR #2, 2026-09-18) · **Owner:** the architect
-**How to use:** feed this file to a fresh session. §0 is everything a session needs to know, §2 holds the rulings, §3 is the target tree and what each document says, §4 is the ordered work with checkboxes. Tick boxes as work lands. This file is deleted in the last PR of the refactor. **Next: phase 3 (§4), then phase 4.**
+**Created:** 2026-09-18 · **Rulings taken:** 2026-09-18, all ten (§2) · **Phases 1–2 merged to `main`** (PR #1, PR #2, 2026-09-18) · **Phase 3 in draft PRs** (maestro-specs #14, maestro — this branch) · **Owner:** the architect
+**How to use:** feed this file to a fresh session. §0 is everything a session needs to know, §2 holds the rulings, §3 is the target tree and what each document says, §4 is the ordered work with checkboxes. Tick boxes as work lands. This file is deleted in the last PR of the refactor. **Next: merge the two phase-3 PRs, then phase 4.**
 
 ---
 
@@ -168,6 +168,7 @@ docs/
   governance-model.md            ceilings, oversight levels, capability grants, consequence class — as work-service
                                  reads them at claim; nothing about packs or standards
   build-standards.md             the CI floor (Q9) and the conformance job that runs it
+  ux.md                          the rules every screen obeys, the screens per component, what the redraw must show
   beyond-mvp.md                  the post-MVP backlog (intake agent, customer tenants) and branch R with the four seams;
                                  one page; the only place E/F/R are described
   components/
@@ -246,11 +247,14 @@ Each phase is one draft PR on `refactor/mvp-docs` unless noted. Phases 2 and 3 c
 - [x] `docs/operations-model.md`, `docs/governance-model.md`, `docs/build-standards.md`
 - [x] the architect's review of PR #1; merged 2026-09-18. PR #2 (app1 naming, no client names) merged the same day
 
-**Phase 3 — cross-repository** *(one small PR per repo)*
-- [ ] `../maestro-specs/docs/design/architecture.md`: isolation (tenant = deployment default), ports (spine = archive + queue), stack (AWS deployment)
-- [ ] `../maestro-specs`: re-point the corpus references — `docs/design/decisions/0017`, `0018` (citations of the old design → tag `corpus-2026-09` or the new docs), `config/workspaces/maestro-platform.yaml` line 1, `docs/design/ui/console-mock.html` old service labels; `git grep -nE '\bT[0-9]{1,2}\b|\bPS[0-9]{1,2}\b|conceptual-design|technical-design'` finds them
-- [ ] `../maestro-specs`: remove `config/ds1/` (ds1 retires; it carries hostnames) — same PR
-- [ ] memory: `maestro-aws-alternative-and-roadmap`, `specs-service-accessibility-rebuild` point at the new `docs/`
+**Phase 3 — cross-repository** *(one PR per repo; both drafts, 2026-09-18)*
+- [x] `../maestro-specs/docs/design/architecture.md` 1.2: §1.1 in the MVP's words, §5 spine (relay → S3 archive, SNS/SQS; Kafka gone), §6 tenant = deployment default, §9 AWS deployment shape — **PR #14**
+- [x] `../maestro-specs`: corpus references re-pointed — ADR-0016/0017 edited (proposed), ADR-0018 given a dated citation note (accepted, immutable), ADR-0001 annotated, ADR-0002's record-sink row amended, the console mock's masthead and PS-numbers, README, GLOSSARY, guide — PR #14. (`git grep -P` — the pattern needs Perl word boundaries; `-E` finds nothing.)
+- [x] `../maestro-specs`: `config/ds1/`, `deploy-ds1.yml`, `compose.ds1.networks.yml` removed; the `dod` gate stays on the self-hosted runner until M1 moves it — PR #14
+- [x] **added 2026-09-18 (the architect's ruling on the UI):** the demo workspace re-seeded to the MVP's four types (`config/workspaces/aannemer-x.yaml` v2; the old chain is the integration fixture; 178 tests green); the console shows the catalogue only when the workspace declares `catalogue_refs`; catalogue code and ADR-0008/0009 kept — PR #14
+- [x] **added:** `docs/ux.md` here — the surface rules, the screen inventory, the acceptance for the redraw; `CONTEXT.md` gains *Surfaces*; `components/specs-service.md` updated — this PR
+- [x] memory: `maestro-aws-alternative-and-roadmap`, `specs-service-accessibility-rebuild` point at the new `docs/`; `ux-redraw-after-refactor` added (2026-09-18)
+- *Not in the refactor:* the redraw of the design canvas around UC1 (Today, frontier, work item; the board, run page and estate for the first time) is a design session after phase 4 — acceptance in `docs/ux.md`.
 
 **Phase 4 — public** *(last PR in each repo; the architect flips visibility)*
 - [ ] set the `FORBIDDEN_PATTERNS` repository secret on `fps4/maestro` and `fps4/maestro-specs` (one regex per line: the tenant's and application's names, from the tenant repository's README) — `scripts/check-public.sh` reads it

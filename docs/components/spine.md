@@ -1,6 +1,6 @@
 # The spine
 
-**Repository:** `fps4/maestro`, in [`spine/`](../../spine/) · **Status:** building — the core is in code (below); the S3 and SNS adapters, the CDK stack and the first component's relay follow in M1 · **Decision:** [ADR-0003](../decisions/0003-the-spine-is-an-archive-and-a-queue.md)
+**Repository:** `fps4/maestro`, in [`spine/`](../../spine/) · **Status:** building — the core is in code (below); the S3 and SNS adapters, the Terraform module and the first component's relay follow in M1 · **Decision:** [ADR-0003](../decisions/0003-the-spine-is-an-archive-and-a-queue.md)
 
 The record every component writes to and every auditor reads from. An S3 archive as the system of record, SNS/SQS for delivery, a relay from every outbox, and a verifier that runs with every service off. [Figure 3](../diagrams.md#figure-3--the-spine).
 

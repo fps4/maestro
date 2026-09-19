@@ -24,7 +24,7 @@ Plus the [signals contract](signals.md) — a Terraform module and a CDK constru
 
 ## Substrate
 
-**Serverless AWS.** Every component is a Lambda behind API Gateway (Fastify unchanged, via the Web Adapter); consoles through OpenNext and CloudFront; relays and clocks are scheduled Lambdas; infrastructure as CDK; CI on GitHub-hosted runners. `docker compose` is the local development loop and nothing else.
+**Serverless AWS.** Every component is a Lambda behind API Gateway (Fastify unchanged, via the Web Adapter); consoles through OpenNext and CloudFront; relays and clocks are scheduled Lambdas; infrastructure as Terraform ([ADR-0016](decisions/0016-terraform-is-the-infrastructure-language.md)); CI on GitHub-hosted runners. `docker compose` is the local development loop and nothing else.
 
 **MongoDB Atlas Flex** is the database ([ADR-0005](decisions/0005-atlas-flex-is-the-mvp-database.md)): a connection string, no code change, pay per use. No component knows which database it runs on beyond the driver.
 
@@ -38,7 +38,7 @@ Each component writes its events to a transactional outbox. A scheduled relay dr
 
 ## Tenancy
 
-**Tenant = deployment** ([ADR-0007](decisions/0007-tenant-is-a-deployment-by-default.md)). One CDK stack, one identity realm, one archive prefix per tenant. Workspace isolation inside a deployment stays available for a tenant with several estates. Tenant configuration lives outside the public repositories, in `fps4/maestro-config-<tenant>` ([tenancy-and-config.md](tenancy-and-config.md)).
+**Tenant = deployment** ([ADR-0007](decisions/0007-tenant-is-a-deployment-by-default.md)). One Terraform root module and state, one identity realm, one archive prefix per tenant. Workspace isolation inside a deployment stays available for a tenant with several estates. Tenant configuration lives outside the public repositories, in `fps4/maestro-config-<tenant>` ([tenancy-and-config.md](tenancy-and-config.md)).
 
 ## The first application
 

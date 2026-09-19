@@ -2,7 +2,7 @@
 
 ## Tenant = deployment
 
-A tenant is one deployment of maestro: one CDK stack, one identity realm, one archive prefix, one database cluster. Serverless removes the cost floor that would otherwise argue for sharing, so the simplest isolation story is also the cheapest ([ADR-0007](decisions/0007-tenant-is-a-deployment-by-default.md)).
+A tenant is one deployment of maestro: one Terraform root module and state, one identity realm, one archive prefix, one database cluster. Serverless removes the cost floor that would otherwise argue for sharing, so the simplest isolation story is also the cheapest ([ADR-0007](decisions/0007-tenant-is-a-deployment-by-default.md)).
 
 Inside a deployment, every component isolates by **workspace** — a database per workspace, a handle bound once per request, no query naming a workspace. A tenant with several estates uses several workspaces; a tenant with one uses one. The code cannot tell the two apart.
 
@@ -24,7 +24,8 @@ Same layout in every tenant repository:
 
 ```
 README.md                 who, contacts, which components at which tag
-cdk.context.json          account, region, domain, database endpoint name
+terraform.tfvars          account, region, domain, database endpoint name
+backend.hcl               the state bucket, in the tenant's account
 workspaces/*.yaml         workspace definitions in the tenant's vocabulary (types, gates, labels)
 policy.yaml               severity × tier → clocks; agent ceilings; chase ladders; the SEV↔P mapping
 adapters.yaml             notifier targets by name (Slack channel id, SES sender); signal sources (topic ARNs)
@@ -32,7 +33,7 @@ applications/*.yaml       the tenant's applications: name, environments, tier, o
 secrets.md                the *names* of secrets in Secrets Manager / SSM — never values
 ```
 
-**How a deployment uses it.** The tenant repository's pipeline checks out each public component at a tag and runs `cdk deploy` with the repository root as context. The public repositories' own pipelines deploy only the demo tenant. `maestro-config-demo` proves the layout round-trips and may be public.
+**How a deployment uses it.** The tenant repository's pipeline checks out each public component at a tag, builds it, and runs `terraform apply` on the root module, which composes the components' modules ([ADR-0016](decisions/0016-terraform-is-the-infrastructure-language.md)). The public repositories' own pipelines deploy only the demo tenant. `maestro-config-demo` proves the layout round-trips and may be public.
 
 ## Guards in the public repositories
 

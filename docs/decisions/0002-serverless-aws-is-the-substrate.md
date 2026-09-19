@@ -1,6 +1,6 @@
 # ADR-0002 · Serverless AWS is the substrate; docker compose is the development loop only
 
-**Status:** accepted · 2026-09-18
+**Status:** accepted · 2026-09-18 · the *infrastructure as CDK* clause is superseded by [ADR-0016](0016-terraform-is-the-infrastructure-language.md)
 
 ## Context
 

@@ -1,0 +1,27 @@
+name: spine
+on:
+  pull_request:
+    paths: ['spine/**', '.github/workflows/spine.yml']
+  push:
+    branches: [main]
+    paths: ['spine/**', '.github/workflows/spine.yml']
+defaults:
+  run:
+    working-directory: spine
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: spine/package-lock.json
+      - run: npm ci
+      - name: Dependencies (build-standards §3)
+        run: npm audit --audit-level=high
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

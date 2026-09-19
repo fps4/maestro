@@ -15,7 +15,7 @@ It is not a platform that builds applications. It observes, commits, records, an
 | **work-service** | who owes what, by when, under whose authority — and whether it happened | `fps4/maestro-work` | next |
 | **runtime-service** | what is deployed where: the artifact ledger and the instance register | `fps4/maestro-runtime` | next |
 | **agent-service** | what agents did: runs, steps, transcripts | this repository, later | next |
-| **the spine** | the record: an S3 archive every component's events flow into, with a verifier | this repository, later | next, first |
+| **the spine** | the record: an S3 archive every component's events flow into, with a verifier | this repository, [`spine/`](spine/) | building (M1) |
 
 Each component runs alone: one required dependency (identity-service), every other integration a port with a local default, configuration as the domain model, a console, an API and an MCP server. Together they are maestro.
 

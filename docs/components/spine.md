@@ -1,6 +1,6 @@
 # The spine
 
-**Repository:** `fps4/maestro` · **Status:** next, first · **Decision:** [ADR-0003](../decisions/0003-the-spine-is-an-archive-and-a-queue.md)
+**Repository:** `fps4/maestro`, in [`spine/`](../../spine/) · **Status:** building — the core is in code (below); the S3 and SNS adapters, the CDK stack and the first component's relay follow in M1 · **Decision:** [ADR-0003](../decisions/0003-the-spine-is-an-archive-and-a-queue.md)
 
 The record every component writes to and every auditor reads from. An S3 archive as the system of record, SNS/SQS for delivery, a relay from every outbox, and a verifier that runs with every service off. [Figure 3](../diagrams.md#figure-3--the-spine).
 
@@ -65,8 +65,16 @@ Each component declares its own types and no more. First wave:
 
 ## The relay and the archive
 
-- **Relay:** a scheduled Lambda per component drains the outbox in `seq` order, writes each event to the archive's day file, publishes to SNS FIFO with message group = workspace, and advances the checkpoint. Idempotent; at-least-once into the queue, exactly-once into the archive by `(workspace, seq)`.
-- **Archive:** `s3://<tenant-archive>/<workspace>/<yyyy-mm-dd>/events.jsonl` plus a **segment manifest** sealed at day end:
+- **Relay:** a scheduled Lambda per component drains the outbox in `seq` order, writes each batch to the archive's current day, publishes to SNS FIFO with message group = workspace, and acknowledges the outbox. Idempotent; at-least-once into the queue, exactly-once into the archive by `(workspace, seq)`. It never skips: an event that fails the append rules stops its workspace where it stands, stays undelivered, and is named in the relay's report — relay lag is the alarm.
+- **Archive:** one prefix per workspace and day, every object written once:
+
+```
+s3://<tenant-archive>/<workspace>/<yyyy-mm-dd>/events-<first_seq>.jsonl   a relay batch — canonical event lines, seq order
+s3://<tenant-archive>/<workspace>/<yyyy-mm-dd>/segment.json               the manifest, once the day is sealed
+s3://<tenant-archive>/<workspace>/head.json                               the relay's pointer; not part of the record
+```
+
+The day is the archive's day — the UTC date the relay wrote the batch — not the date the events occurred; each event carries its own `occurred_at` and `recorded_at`. The day is a physical partition, and `seq` running contiguously across segments is what guarantees nothing fell between two of them. A day with no events has no segment. The sealer runs after midnight over every day before the current one and produces the **segment manifest**:
 
 ```yaml
 segment:
@@ -75,14 +83,15 @@ segment:
   first_seq:           148100
   last_seq:            148412
   event_count:         313
-  merkle_root:         sha256:4c1e…    # over JCS-canonical events in seq order
-  prev_segment_digest: sha256:1a0b…
-  segment_digest:      sha256:7e41…
+  merkle_root:         sha256:4c1e…    # RFC 6962 tree over the leaves
+  leaves:              [ sha256:…, … ] # one per event, in seq order: what names a tampered event
+  prev_segment_digest: sha256:1a0b…    # null for the workspace's first segment
+  segment_digest:      sha256:7e41…    # over the manifest with this field absent
   sealed_at:           2026-09-19T00:07:11Z
   sealer_version:      1
 ```
 
-Canonicalisation is JCS (RFC 8785). The chain is computed by the sealer in code — never by a vendor primitive — and Object Lock is defence in depth only. Each day's `segment_digest` is delivered to the tenant's named contact through the notifier, so the tenant holds evidence maestro cannot revise.
+Canonicalisation is JCS (RFC 8785); a leaf is the RFC 6962 leaf hash of an event's canonical line, and the root is the RFC 6962 tree over the leaves, so a single event can later be shown to belong to a sealed day without the rest of it. The chain is computed by the sealer in code — never by a vendor primitive — and Object Lock is defence in depth only. Each day's `segment_digest` is delivered to the tenant's named contact through the notifier, so the tenant holds evidence maestro cannot revise.
 
 ## Projections
 
@@ -94,14 +103,18 @@ Every component database is a projection: a consumer with a checkpoint and a ver
 |---|---|---|
 | `append(event)` | service-to-service only | the only write; idempotency key required |
 | `read(workspace, subject?, from_seq)` | API, MCP | ordered replay from the archive |
-| `verify(workspace, period_range)` | API, MCP, **CLI with no service** | recomputes roots and the chain; returns pass or the first divergent `seq` |
+| `verify(workspace, period_range)` | API, MCP, **CLI with no service** | recomputes every leaf, every root and the chain; returns pass or the period, the first divergent `seq` and why |
 | `export(workspace)` | API | archive + manifests + the verifier binary — the exit deliverable, exercised in M1's gate |
 
 MCP exposes read, verify and export — never append.
 
+## In code
+
+[`spine/`](../../spine/) is the package every component's relay and every verifier is built from: `@fps4/maestro-spine`, TypeScript on Node 22, one runtime dependency. Its `domain/` is pure — the envelope and the six rules (`checkEvent`), JCS, the RFC 6962 tree, `seal` and `verify` — and an import lint keeps it so, because the verifier has to run with every service off. Around it: the archive store port with filesystem and in-memory adapters (S3 follows), `append` (exactly-once by `(workspace, seq)`, refuses a gap, completes a batch a crashed run left half-written), `sealDay` / `sealBefore`, the delivery port with an in-process default (SNS follows), the outbox port a component implements, and `relayOnce`. `spine-verify <root> --workspace <ws> [--from] [--to]` is the CLI — exit 0 and the verified range, or exit 1 with the period, the first divergent `seq` and the reason. The tests are the gates below where a store is enough: order, idempotence, the half-written batch, the refusal at append, the tampered copy.
+
 ## Build gates (M1)
 
-1. specs-service's outbox relays to S3 and SNS; a consumer queue receives in order per workspace.
+1. specs-service's outbox relays to S3 and SNS; a consumer queue receives in order per workspace. *(In code against the in-memory store and in-process delivery; the adapters and the component's relay are next.)*
 2. A workspace database is dropped and rebuilt from the archive alone; every read returns identically.
-3. The verifier, run from a laptop with every service off, passes on a sealed range and names the first divergent `seq` on a tampered copy.
-4. An event with an agent in `accountable`, or an identity-provider subject anywhere, is rejected at append.
+3. The verifier, run from a laptop with every service off, passes on a sealed range and names the first divergent `seq` on a tampered copy. *(In code, over a filesystem archive.)*
+4. An event with an agent in `accountable`, or an identity-provider subject anywhere, is rejected at append. *(In code.)*

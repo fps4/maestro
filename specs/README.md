@@ -199,3 +199,7 @@ no way to decide.
 **Not built yet:** the TypeScript SDK, export, and redaction. The catalogue holds no
 real standards — the pack registry does not exist, and a fixture presented as a standard would be
 worse than an empty shelf.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). The tree holds code, the design and one fictional tenant; a real tenant's configuration lives in its own private repository, and CI fails on anything that identifies one (`scripts/check-public.sh`).

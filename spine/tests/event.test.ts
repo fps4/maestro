@@ -73,6 +73,24 @@ describe('the append rules', () => {
     expect(issues[0]).toMatchObject({ field: 'body.class' });
   });
 
+  it('a payload lives on S3 or under a file root, never anywhere else', () => {
+    const digest = { payload_digest: `sha256:${'a'.repeat(64)}` };
+    expect(
+      checkEvent(event(1, { payload_ref: 's3://tenant-archive/version/art-1@1.json', ...digest }), resolve),
+    ).toEqual([]);
+    expect(
+      checkEvent(
+        event(1, { payload_ref: 'file:///srv/payloads/ws-x/version/art-1@1.json', ...digest }),
+        resolve,
+      ),
+    ).toEqual([]);
+    expect(
+      checkEvent(event(1, { payload_ref: 'https://example.invalid/x', ...digest }), resolve).map(
+        (i) => i.field,
+      ),
+    ).toContain('payload_ref');
+  });
+
   it('payload_ref and payload_digest come together', () => {
     const issues = checkEvent(event(1, { payload_ref: 's3://tenant-archive/work-item/wrk-8841@7' }), resolve);
     expect(issues.map((i) => i.field)).toContain('payload_digest');

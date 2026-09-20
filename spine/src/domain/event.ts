@@ -23,7 +23,9 @@ const IDENTIFIER = /^[a-z][a-z0-9_]{0,63}$/; // subject_type, seat: snake_case t
 const TYPE_NAME = /^[A-Z][A-Za-z0-9]{0,63}$/; // WorkItemClosed, GateDecisionRecorded, …
 const SUBJECT_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/+=-]{0,255}$/;
 const CONSEQUENCE_CLASS = /^c[0-9]$/;
-const PAYLOAD_REF = /^s3:\/\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]\/.+$/;
+// Where a payload lives: an S3 object on AWS, a file under a payload root on the laptop — the same
+// split as the archive's own S3 and filesystem stores. A locator, never the content.
+const PAYLOAD_REF = /^(s3:\/\/[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]\/.+|file:\/\/\/.+)$/;
 
 /**
  * The floor every body obeys, whatever its type: a leaf is a number, a boolean, null, or a token —

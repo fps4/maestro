@@ -36,7 +36,7 @@ All four are workspace configuration — a type with facets and body blocks, a g
 | Console | Next.js → OpenNext → Lambda + CloudFront |
 | Database | Atlas Flex, one database per workspace |
 | Object storage | S3 (attachments, body overflow) |
-| Record sink | outbox → relay → the spine |
+| Record sink | outbox holding the spine's envelope, built at the act (`maestro-specs` ADR-0019) → the spine's relay, as a scheduled Lambda → the archive and the FIFO topic |
 | Evaluator | HTTP adapter; `${VAR}` resolved from the environment |
 | Notifier | SES; Slack webhook |
 | MCP | stateless HTTP per request — Lambda-shaped already |

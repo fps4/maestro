@@ -1,17 +1,41 @@
 {
   "name": "@fps4/maestro-spine",
   "version": "0.1.0",
-  "private": true,
   "description": "The spine: maestro's record. The event envelope and its append rules, RFC 8785 canonicalisation, sealed daily segments chained by a Merkle root computed in code, the relay from a component's outbox, and a verifier that runs with every service off.",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fps4/maestro.git",
+    "directory": "spine"
+  },
+  "homepage": "https://github.com/fps4/maestro/tree/main/spine#readme",
+  "bugs": {
+    "url": "https://github.com/fps4/maestro/issues"
+  },
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": ">=22.14"
   },
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
   "bin": {
     "spine-verify": "dist/cli/verify.js"
+  },
+  "files": [
+    "dist",
+    "!dist/lambda",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -21,7 +45,8 @@
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "verify": "tsx src/cli/verify.ts"
+    "verify": "tsx src/cli/verify.ts",
+    "prepublishOnly": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1136.0",

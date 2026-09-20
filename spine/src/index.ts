@@ -40,6 +40,7 @@ export { verify, type Verdict, type SegmentInput } from './domain/verify.js';
 export { type ArchiveStore, type ArchiveHead, partName, partSeq } from './archive/port.js';
 export { MemoryArchive } from './archive/memory.js';
 export { FsArchive } from './archive/fs.js';
+export { S3Archive, type S3ArchiveOptions, type S3Sender } from './archive/s3.js';
 export {
   append,
   readDay,
@@ -52,7 +53,11 @@ export {
 } from './archive/writer.js';
 
 export { type Delivery, InProcessDelivery } from './delivery/port.js';
+export { SnsFifoDelivery, type SnsFifoDeliveryOptions, type SnsSender, SNS_BATCH } from './delivery/sns.js';
 
 export { type OutboxSource } from './relay/port.js';
 export { MemoryOutbox } from './relay/memory.js';
 export { relayOnce, relayUntilDrained, utcDay, type RelayDeps, type RelayReport } from './relay/relay.js';
+
+export { runSealer, digestNotice, type SealerDeps, type SealerReport } from './lambda/sealer.js';
+export { relayHandler, type RelayComponent } from './lambda/relay.js';

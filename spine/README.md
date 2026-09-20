@@ -6,10 +6,12 @@ The spine in code: maestro's record. What it is and why is in
 
 ```
 src/domain/     pure — the envelope and its append rules, JCS (RFC 8785), the RFC 6962 tree, seal, verify
-src/archive/    the store port; filesystem and in-memory adapters; append / sealDay / verifyRange over a store
-src/delivery/   the delivery port; the in-process default
+src/archive/    the store port; filesystem, in-memory and S3 adapters; append / sealDay / verifyRange over a store
+src/delivery/   the delivery port; the in-process default and SNS FIFO
 src/relay/      the outbox port a component implements; relayOnce
+src/lambda/     the sealer's handler; the relay handler a component builds from its outbox; metrics
 src/cli/        spine-verify
+terraform/      the module: archive bucket, topics, the sealer on its schedule
 ```
 
 `domain/` imports nothing that does I/O, and an ESLint rule keeps it that way: the verifier ships as
@@ -20,6 +22,8 @@ the exit deliverable and runs from a laptop with every service off.
 ```sh
 npm ci
 npm test              # the gates: order, idempotence, the half-written batch, the refusal, the tampered copy
+npm run bundle        # dist/lambda/sealer.zip — reproducible; what the Terraform module deploys
+npm run sbom          # dist/lambda/sealer.cdx.json (CycloneDX)
 npm run verify -- ./archive --workspace ws-aannemer-x --from 2026-09-01 --to 2026-09-18
 ```
 
@@ -29,12 +33,30 @@ A component emits through its own transactional outbox and exposes it through `O
 ```ts
 import { FsArchive, InProcessDelivery, relayOnce } from '@fps4/maestro-spine';
 
-await relayOnce({ source: myOutbox, archive: new FsArchive('./archive'), delivery: new InProcessDelivery(), resolve });
+await relayOnce({
+  source: myOutbox,
+  archive: new FsArchive('./archive'),
+  delivery: new InProcessDelivery(),
+  resolve,
+});
 ```
 
 where `resolve` is the component's principal registry (`id → { kind }`). Validate at emit with
 `assertEvent(event, resolve, types)` so nothing the relay will refuse ever reaches the outbox; the
 relay checks again. `sealBefore(archive, today)` closes every earlier day into a chained segment.
+
+On AWS the same relay is a scheduled Lambda the component's own module deploys:
+
+```ts
+import { relayHandler } from '@fps4/maestro-spine';
+
+export const handler = relayHandler({ component: 'specs', source: myOutbox, resolve, types });
+```
+
+It reads `ARCHIVE_BUCKET`, `ARCHIVE_PREFIX` and `EVENTS_TOPIC_ARN` from the environment — the
+module's `relay_environment` output — and needs the `relay_policy_json` output attached to its role.
+Each run logs one line in CloudWatch's embedded metric format (`maestro/spine`: `Archived`,
+`Published`, `Refused`), so relay refusals are an alarm without a metrics client.
 
 ## The event
 
@@ -56,8 +78,54 @@ The day is the UTC date the relay wrote the batch. `append` is exactly-once by `
 it skips what is already archived, refuses a gap, and completes a part a crashed run left without
 moving the head. A sealed day refuses further appends.
 
+On S3 the layout is the same under a bucket and an optional prefix. Write-once is the conditional
+put (`If-None-Match: *`); the bucket has Object Lock with a default retention, so what was written
+cannot be removed even by a principal that could overwrite it. The store contract in
+`tests/stores.test.ts` runs against all three adapters; set `SPINE_S3_TEST_BUCKET` to run it against
+a real bucket or a MinIO with conditional writes.
+
+## Delivery
+
+`SnsFifoDelivery` publishes to a FIFO topic in batches of ten: message group = workspace, so a
+subscribed FIFO queue receives a workspace's events in `seq` order; deduplication id = `event_id`,
+so a repeated run publishes nothing twice; the body is the canonical line the archive holds, with
+`type`, `type_version`, `subject_type` and `workspace_id` as attributes for subscription filters.
+
+## The sealer
+
+`runSealer` seals every day before today across every workspace and sends each segment's digest to
+the digests topic — a readable notice for an inbox, the manifest without its leaves for a queue — so
+the tenant holds evidence maestro cannot revise. The Lambda entry point is `src/lambda/sealer.ts`,
+bundled by `npm run bundle`.
+
+## The Terraform module
+
+`terraform/` deploys the spine's AWS half; a tenant's root calls it ([ADR-0016](../docs/decisions/0016-terraform-is-the-infrastructure-language.md),
+[ADR-0017](../docs/decisions/0017-the-tenant-repository-runs-the-pipeline.md)):
+
+| Resource                   | Notes                                                                                                                                                   |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| archive bucket             | Object Lock on, versioned, encrypted, never public, `prevent_destroy`; policy denies plaintext transport and `s3:BypassGovernanceRetention` to everyone |
+| `<name>-spine-events.fifo` | the delivery topic; deduplication by the relay's id                                                                                                     |
+| `<name>-spine-digests`     | one email subscription per `digest_contacts` entry                                                                                                      |
+| `<name>-spine-sealer`      | Node 22 on arm64, from `sealer_package`; EventBridge Scheduler at `cron(7 0 * * ? *)` UTC; role reads and writes the archive, never deletes             |
+| two alarms                 | `-errors` (the sealer failed) and `-silent` (it has not run in a day) → `alarm_actions`                                                                 |
+
+Inputs a tenant sets: `archive_bucket_name`, `digest_contacts`, `sealer_package`; optionally
+`object_lock_mode` (`GOVERNANCE` by default — an account administrator can still clean up a
+mistake; `COMPLIANCE` makes every object immovable for `object_lock_retention_days`, by anyone),
+`archive_prefix`, `alarm_actions`. Outputs for the components' modules: `relay_policy_json`,
+`relay_environment`, `reader_policy_json`, the topic ARNs.
+
+```sh
+npm run bundle
+cd terraform && terraform init -backend=false && terraform test   # mocked provider; Terraform ≥ 1.11
+```
+
+`examples/demo/` shows a root calling the module with the demo tenant's placeholder values. Nothing
+in this repository deploys to an account.
+
 ## Status
 
-M1. Next in this package: the S3 store and the SNS FIFO delivery, the Terraform module (archive bucket
-with Object Lock, topic, relay and sealer schedules), and the segment-digest notification to the
-tenant's contact. The first relay wired to a component is specs-service's.
+M1. Next: specs-service's outbox exposed as an `OutboxSource` and its relay deployed from
+`maestro-specs`' own module against this one; the reusable tenant workflow and `deploy.sh`.

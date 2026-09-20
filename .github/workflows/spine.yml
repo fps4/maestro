@@ -25,3 +25,32 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: Lambda bundle
+        run: npm run bundle
+      - name: SBOM (build-standards §4)
+        run: npm run sbom
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spine-sealer
+          path: |
+            spine/dist/lambda/sealer.zip
+            spine/dist/lambda/sealer.cdx.json
+          if-no-files-found: error
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: spine/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive -diff
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+      - name: Module tests (mocked provider)
+        run: terraform test
+      - name: Example root validates
+        working-directory: spine/terraform/examples/demo
+        run: terraform init -backend=false -input=false && terraform validate

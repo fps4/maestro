@@ -23,7 +23,8 @@ The tenant repository holds the caller (a dozen lines), its GitHub **environment
 ### 2. Runners
 
 - **Public repositories: GitHub-hosted, always.** ADR-0002 stands there, and the reason is now sharper than cost: a self-hosted runner attached to a public repository runs strangers' code. `maestro-specs`' DoD job moves to GitHub-hosted in M1 (already planned), and the org runner group stops admitting public repositories.
-- **Tenant repositories are private and choose their runner** through the workflow's input. fps4's own tenant runs on the **ds1 runner**; a tenant with its own runners names them; a tenant with none uses GitHub-hosted. The demo tenant's repository is public and therefore GitHub-hosted, against the demo account.
+- **Tenant repositories are private and choose their runner** through the workflow's input. fps4's own tenant runs on the **ds1 runner**; a tenant with its own runners names them; a tenant with none uses GitHub-hosted.
+- **The demo tenant is the public AWS example.** `fps4/maestro-config-demo` is public, GitHub-hosted, and deploys the demo account; it is bound by the public-repository guards like any other, so its account id and role ARN live in the repository's GitHub environment (`vars` and `secrets`, surfaced as `TF_VAR_…`), never in `terraform.tfvars`, which holds only region, domain and names.
 - **No credentials on any runner.** Whatever the runner, the job assumes the tenant's deploy role through **GitHub's OIDC provider**, with the trust policy scoped to `repo:fps4/maestro-config-<tenant>:environment:<env>`. Revoking a runner is editing a trust policy. ds1 holds no AWS keys.
 
 ### 3. Targets
@@ -40,7 +41,8 @@ deploy/local/    LocalStack on ds1 — provider endpoints overridden, local back
 ### 4. State: one authority, three copies, none in a repository
 
 - **Authoritative: the S3 backend in the tenant's account.** Versioned bucket, SSE, no public access, Terraform's native lockfile, a bucket policy admitting the deploy role and fps4's break-glass principal only. The bucket is the one thing created by hand and is named in `backend.hcl`.
-- **The mirror.** After every apply the pipeline runs `terraform state pull` and writes the result **outside the checkout**, encrypted with `age` to a key that does not live on the runner: on ds1, `/srv/maestro/state/<tenant>/<utc-timestamp>.tfstate.age`, mode 0600 — the off-cloud copy; on a GitHub-hosted runner, an encrypted workflow artefact with the run's retention. A laptop run mirrors to the same layout under the operator's home.
+- **The mirror.** After every apply the pipeline runs `terraform state pull` and writes the result **outside the checkout**, encrypted with [`age`](https://age-encryption.org) to a recipient whose private key does not live on the runner — the runner holds the public half only, so a compromised host cannot read what it mirrored. On ds1: `/srv/maestro/state/<tenant>/<utc-timestamp>.tfstate.age`, mode 0600 — the off-cloud copy. On a GitHub-hosted runner: the same file as a workflow artefact. A laptop run mirrors to the same layout under the operator's home.
+- **Retention: seven days, and the newest is never pruned.** Mirrors older than seven days are removed on the next run except the most recent one, whatever its age — it is the recovery point. The artefact variant sets `retention-days: 7`.
 - **History.** The bucket's versions are the third copy. Recovery from any of the three is `terraform state push`.
 - **Never in a repository.** `*.tfstate*` is gitignored in every tenant repository and the guards fail on one landing anywhere.
 
@@ -49,7 +51,7 @@ deploy/local/    LocalStack on ds1 — provider endpoints overridden, local back
 - One script is the pipeline: `scripts/deploy.sh` runs identically on ds1, on GitHub-hosted, and on a laptop; the workflow is a thin caller. A tenant that cannot use GitHub Actions runs the script from its own pipeline with the same inputs.
 - The ds1 runner returns for private repositories only. Its upkeep is fps4's, as today; it gains an `age` recipient and a state path, nothing else.
 - LocalStack's gaps are named, not hidden; the demo tenant's account is what proves a module on real AWS on every merge.
-- The state mirror is tenant-identifying and encrypted; the encryption key is a secret of the tenant repository's environment, and its holder is named in the tenant's `README.md`.
+- The state mirror is tenant-identifying and encrypted; the `age` recipient is a variable of the tenant repository's environment, the private key is held by a named person in the tenant's `README.md` and is never a repository secret.
 - ADR-0002's runner clause now reads: GitHub-hosted for the public repositories; a tenant's choice for its own. Its "docker compose is not a deployment target" holds unchanged.
 
 ## What would reopen it

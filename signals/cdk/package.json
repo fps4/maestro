@@ -1,0 +1,49 @@
+{
+  "name": "@fps4/maestro-signals",
+  "version": "0.1.0",
+  "description": "The application-side half of maestro's signals contract as a CDK construct: the ops-signals topic and its policy, the tag schema, an alarm-action helper, and an optional heartbeat so silence is detectable.",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fps4/maestro.git",
+    "directory": "signals/cdk"
+  },
+  "homepage": "https://github.com/fps4/maestro/tree/main/signals#readme",
+  "bugs": {
+    "url": "https://github.com/fps4/maestro/issues"
+  },
+  "engines": {
+    "node": ">=22.14"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "heartbeat",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "aws-cdk-lib": "^2.186.0",
+    "constructs": "^10.0.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@types/node": "^22.10.6",
+    "aws-cdk-lib": "^2.186.0",
+    "constructs": "^10.0.0",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^5.0.1"
+  }
+}

@@ -42,7 +42,7 @@ An advisor who operates in several tenants authenticates once, carries an explic
 | Piece | |
 |---|---|
 | Service | Express → Lambda Web Adapter → HTTP API Gateway; one realm per tenant deployment |
-| Console | OpenNext → Lambda + CloudFront |
+| Console | OpenNext → Lambda + CloudFront, through [`console/terraform`](../../console/README.md) — built per tenant, `NEXT_PUBLIC_*` at build |
 | Database | Atlas Flex |
 | Seed | `config/seed.yaml` stays gitignored; per-tenant seed comes from `maestro-config-<tenant>` |
 | Backups | the existing encrypted backup job as a scheduled Lambda to S3 |

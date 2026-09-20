@@ -75,7 +75,7 @@ Per tenant, one Terraform root module composing the components' modules:
 | Piece | Service |
 |---|---|
 | APIs | Lambda (Web Adapter) + HTTP API Gateway, one function per component |
-| Consoles | OpenNext → Lambda + CloudFront |
+| Consoles | OpenNext → Lambda (Function URL behind CloudFront, OAC) + S3 assets — [`console/terraform`](../console/README.md) |
 | Relays and clocks | EventBridge Scheduler → Lambda |
 | Record | S3 (archive, transcripts, attachments), SNS FIFO, SQS FIFO |
 | Database | Atlas Flex via private endpoint |

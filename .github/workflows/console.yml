@@ -1,0 +1,28 @@
+name: console
+on:
+  pull_request:
+    paths: ['console/**', '.github/workflows/console.yml']
+  push:
+    branches: [main]
+    paths: ['console/**', '.github/workflows/console.yml']
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: console/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive -diff
+      - run: terraform init -backend=false -input=false
+      - name: Module tests (mocked providers, both configurations)
+        run: terraform test
+      # The module declares configuration_aliases, which `terraform validate` cannot satisfy in the
+      # module's own directory; the example root passes both configurations and validates the module
+      # as its child.
+      - name: Module and example root validate
+        working-directory: console/terraform/examples/demo
+        run: terraform init -backend=false -input=false && terraform validate

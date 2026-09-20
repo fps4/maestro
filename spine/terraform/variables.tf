@@ -42,7 +42,7 @@ variable "digest_contacts" {
 }
 
 variable "sealer_package" {
-  description = "Path to the sealer's zip, produced by `npm run bundle` in spine/ (dist/lambda/sealer.zip)."
+  description = "Path to the sealer's zip, produced by `npm run bundle` in spine/ (bundle/sealer.zip)."
   type        = string
 }
 

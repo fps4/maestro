@@ -121,11 +121,12 @@ Against a real `identity-service`, register the service as an Application with t
 client-credentials principal for agents — `identity-service/config/seed.mstr-specs.yaml` is the
 structural seed a deployment registers.
 
-Deployment is serverless AWS as a CDK stack, run from a tenant's private configuration repository
-(`fps4/maestro-config-<tenant>` — [`../maestro/docs/tenancy-and-config.md`](../maestro/docs/tenancy-and-config.md));
-this repository's own pipeline will deploy the demo tenant only. The stack is M1 of maestro's
-roadmap. Nothing in this repository deploys anywhere yet, and the earlier self-hosted deployment is
-gone.
+Deployment is serverless AWS as a Terraform module this repository will ship (`terraform/`), composed
+by a tenant's private configuration repository (`fps4/maestro-config-<tenant>` —
+[`../maestro/docs/tenancy-and-config.md`](../maestro/docs/tenancy-and-config.md)) and applied by the
+tenant's own pipeline; maestro's ADR-0016 and ADR-0017. The module is M1 of maestro's roadmap. Nothing
+in this repository deploys anywhere — its CI runs on GitHub-hosted runners and ends at the gate — and
+the earlier self-hosted deployment is gone.
 
 Health at `GET /health`.
 

@@ -2,13 +2,11 @@ name: dod
 
 # The Definition-of-Done gate. Every item here is blocking; see CONTRIBUTING.md.
 #
-# Runs on the shared self-hosted ds1 runner, which is itself containerized and talks to the *host*
-# Docker socket. That rules out `container:` jobs and host bind-mounts — paths do not translate
-# across the socket — so every job does its work via `docker build` (the context is STREAMED to the
-# daemon) plus sibling containers on a per-run network.
-#
-# The move to GitHub-hosted runners is M1 work (../maestro/docs/roadmap.md); until then this gate
-# runs where it runs. Nothing deploys from it any more.
+# Runs on GitHub-hosted runners (fps4/maestro ADR-0017: a self-hosted runner on a public repository
+# runs strangers' code). The shape — every job via `docker build` plus sibling containers on a
+# per-run network — dates from the containerised ds1 runner, where `container:` jobs and bind-mounts
+# did not translate across the host socket; it works unchanged here and keeps the gate identical
+# to what a laptop can run. Nothing deploys from it.
 
 on:
   push:
@@ -23,15 +21,11 @@ concurrency:
   group: dod-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  # The ds1 runner predates Node 24; pin the checkout JS action to the node20 it has.
-  ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: "true"
-
 jobs:
   secret-scan:
     # The floor: no credentials committed. The gitleaks binary rather than the Action, which needs
     # a paid organisation licence; the repository is baked into the image so the scan works here.
-    runs-on: [self-hosted, ds1]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: gitleaks
@@ -50,7 +44,7 @@ jobs:
     # The tag is per run so parallel runs cannot clobber each other, and it is removed afterwards:
     # the runner is a shared host, and a tag per run that nobody deletes is a disk that fills at the
     # rate of the team's commits. Layers stay cached; only the tag goes.
-    runs-on: [self-hosted, ds1]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t ms-api:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/api.Dockerfile .
@@ -60,7 +54,7 @@ jobs:
 
   web-build:
     # Same shape for the console: typecheck, lint, tests and the production build.
-    runs-on: [self-hosted, ds1]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t ms-web:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/web.Dockerfile .
@@ -76,7 +70,7 @@ jobs:
     # A standalone mongod would not do: the transactional outbox needs multi-document transactions,
     # and the service refuses to start without a replica set. Testing against a configuration the
     # service refuses to run on would prove nothing.
-    runs-on: [self-hosted, ds1]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build the CI image
@@ -133,7 +127,7 @@ jobs:
     # gate deciding on a declared type, no type with two pinned links, no profile under which
     # nobody would be answerable. The definitions ARE the domain model (ADR-0001), so this is the
     # equivalent of typechecking them.
-    runs-on: [self-hosted, ds1]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build the CI image
@@ -149,7 +143,7 @@ jobs:
   dependency-scan:
     # Known vulnerabilities in what we ship. High and above fails; the report is printed either way
     # so a moderate finding is visible without blocking.
-    runs-on: [self-hosted, ds1]
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build the CI image

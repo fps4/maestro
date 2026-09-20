@@ -1,0 +1,45 @@
+name: spine-publish
+
+# Publishes @fps4/maestro-spine to npm on a tag `spine-v<version>`, through npm's trusted
+# publishing: GitHub's OIDC token is the credential, provenance is attached automatically, and no
+# npm token exists anywhere. The trusted publisher on npmjs.com names this repository, this
+# workflow file and the `npm` environment. The tag must match package.json's version.
+
+on:
+  push:
+    tags: ['spine-v*']
+
+permissions:
+  contents: read
+  id-token: write
+
+defaults:
+  run:
+    working-directory: spine
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+          cache-dependency-path: spine/package-lock.json
+      - name: npm ≥ 11.5.1 (trusted publishing)
+        run: npm install -g npm@latest && npm --version
+      - name: The tag names the version in package.json
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          [ "${GITHUB_REF_NAME}" = "spine-v${version}" ] || { echo "::error::tag ${GITHUB_REF_NAME} but package.json says ${version}"; exit 1; }
+      - run: npm ci
+      - run: npm audit --audit-level=high
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Publish
+        run: npm publish --access public

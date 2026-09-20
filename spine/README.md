@@ -22,8 +22,8 @@ the exit deliverable and runs from a laptop with every service off.
 ```sh
 npm ci
 npm test              # the gates: order, idempotence, the half-written batch, the refusal, the tampered copy
-npm run bundle        # dist/lambda/sealer.zip — reproducible; what the Terraform module deploys
-npm run sbom          # dist/lambda/sealer.cdx.json (CycloneDX)
+npm run bundle        # bundle/sealer.zip — reproducible; what the Terraform module deploys
+npm run sbom          # bundle/sealer.cdx.json (CycloneDX)
 npm run verify -- ./archive --workspace ws-aannemer-x --from 2026-09-01 --to 2026-09-18
 ```
 

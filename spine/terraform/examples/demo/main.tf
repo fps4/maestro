@@ -26,7 +26,7 @@ module "spine" {
   name                = "aannemer-x"
   archive_bucket_name = "aannemer-x-maestro-archive"
   digest_contacts     = ["ops@aannemer-x.example"]
-  sealer_package      = "${path.module}/../../../dist/lambda/sealer.zip"
+  sealer_package      = "${path.module}/../../../bundle/sealer.zip"
 
   tags = { "maestro:tenant" = "aannemer-x" }
 }

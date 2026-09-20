@@ -1,6 +1,6 @@
 {
   "name": "@fps4/maestro-spine",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "The spine: maestro's record. The event envelope and its append rules, RFC 8785 canonicalisation, sealed daily segments chained by a Merkle root computed in code, the relay from a component's outbox, and a verifier that runs with every service off.",
   "license": "MIT",
   "repository": {
@@ -30,9 +30,6 @@
   },
   "files": [
     "dist",
-    "!dist/lambda/*/",
-    "!dist/lambda/*.zip",
-    "!dist/lambda/*.cdx.json",
     "README.md",
     "LICENSE"
   ],
@@ -42,7 +39,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "bundle": "node scripts/bundle.mjs",
-    "sbom": "cyclonedx-npm --omit dev --output-format JSON --output-file dist/lambda/sealer.cdx.json --output-reproducible",
+    "sbom": "cyclonedx-npm --omit dev --output-format JSON --output-file bundle/sealer.cdx.json --output-reproducible",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",

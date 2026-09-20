@@ -1,6 +1,7 @@
 // Bundle each Lambda entry point into one ESM file and zip it, reproducibly: fixed mtimes, no
 // extra attributes, so the same source gives the same bytes and Terraform's source_code_hash only
-// changes when the code does. Output: dist/lambda/<name>/index.mjs and dist/lambda/<name>.zip.
+// changes when the code does. Output: bundle/<name>/index.mjs and bundle/<name>.zip — outside dist/,
+// which is the npm package; the bundle is what Terraform deploys, not what a consumer imports.
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { mkdir, rm, utimes } from 'node:fs/promises';
@@ -10,7 +11,7 @@ const FUNCTIONS = { sealer: 'src/lambda/sealer.ts' };
 const EPOCH = new Date('2020-01-01T00:00:00Z');
 
 for (const [name, entry] of Object.entries(FUNCTIONS)) {
-  const dir = resolve('dist/lambda', name);
+  const dir = resolve('bundle', name);
   await rm(dir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true });
   await build({
@@ -29,7 +30,7 @@ for (const [name, entry] of Object.entries(FUNCTIONS)) {
     logLevel: 'warning',
   });
   await utimes(resolve(dir, 'index.mjs'), EPOCH, EPOCH);
-  const zip = resolve('dist/lambda', `${name}.zip`);
+  const zip = resolve('bundle', `${name}.zip`);
   await rm(zip, { force: true });
   execFileSync('zip', ['-X', '-q', '-j', zip, resolve(dir, 'index.mjs')]);
   console.log(`${zip}`);

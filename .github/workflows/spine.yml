@@ -33,8 +33,8 @@ jobs:
         with:
           name: spine-sealer
           path: |
-            spine/dist/lambda/sealer.zip
-            spine/dist/lambda/sealer.cdx.json
+            spine/bundle/sealer.zip
+            spine/bundle/sealer.cdx.json
           if-no-files-found: error
   terraform:
     runs-on: ubuntu-latest

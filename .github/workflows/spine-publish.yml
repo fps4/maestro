@@ -41,5 +41,13 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - name: The tarball imports on its own
+        # What `files` leaves out is invisible to the tests, which import from src. Pack, unpack,
+        # install, import: the published module resolves every export or nothing is published.
+        run: |
+          dir="$(mktemp -d)"
+          npm pack --pack-destination "$dir" >/dev/null
+          tar xzf "$dir"/*.tgz -C "$dir"
+          (cd "$dir/package" && npm install --omit=dev --ignore-scripts >/dev/null && node -e "import('./dist/index.js').then(m => console.log('imports ok:', Object.keys(m).length, 'exports'))")
       - name: Publish
         run: npm publish --access public

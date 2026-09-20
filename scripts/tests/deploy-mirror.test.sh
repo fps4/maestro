@@ -95,8 +95,9 @@ n1="$(newest_mirror)"
 [ "$n1" != "$c" ] || fail "no new mirror was written"
 echo "ok: run 1 — $(listing)"
 
-[ "$(stat -f %Lp "$n1" 2>/dev/null || stat -c %a "$n1")" = "600" ] || fail "mirror is not mode 0600"
-[ "$(stat -f %Lp "$dir" 2>/dev/null || stat -c %a "$dir")" = "700" ] || fail "directory is not mode 0700"
+# GNU stat first: its -f means file-system status and does not fail.
+[ "$(stat -c %a "$n1" 2>/dev/null || stat -f %Lp "$n1")" = "600" ] || fail "mirror is not mode 0600"
+[ "$(stat -c %a "$dir" 2>/dev/null || stat -f %Lp "$dir")" = "700" ] || fail "directory is not mode 0700"
 age -d -i "$tmp/key.txt" "$n1" | grep -q '"serial":7' || fail "mirror does not decrypt to the pulled state"
 ! grep -q serial "$n1" || fail "mirror holds plaintext"
 echo "ok: encrypted to the recipient, 0600 in a 0700 directory"

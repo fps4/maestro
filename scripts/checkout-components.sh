@@ -32,6 +32,8 @@ while IFS=$'\t' read -r name ref; do
 
   while IFS= read -r lock; do
     pkg="$(dirname "$lock")"
+    # A lockfile is a package only beside its package.json; a stray one is not built.
+    [ -f "$pkg/package.json" ] || { echo "checkout-components: $pkg has a lockfile but no package.json; skipped"; continue; }
     echo "checkout-components: build $pkg"
     (cd "$pkg" && npm ci --no-audit --no-fund --silent && npm run build --if-present && npm run bundle --if-present)
   done < <(find "$dir" -maxdepth 2 -name package-lock.json -not -path '*/node_modules/*' | sort)

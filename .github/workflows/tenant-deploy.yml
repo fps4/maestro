@@ -1,0 +1,162 @@
+name: tenant-deploy
+
+# The tenant pipeline's shape (ADR-0017). A tenant repository calls this with its runner, target,
+# component tags and secrets; nothing tenant-identifying lives here. Two jobs: `plan` on every
+# call, `apply` on a push to the caller's default branch, behind the caller's environment gate.
+# Both call scripts/deploy.sh, which a person holding the role can run the same way. The scripts
+# come from the maestro component at the tag the caller names — pin `uses:` to the same tag.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: "The runner, as JSON: a double-quoted string for a hosted label, or an array of labels for a tenant's own runners"
+        type: string
+        default: '"ubuntu-latest"'
+      target:
+        description: aws (the tenant's account, deploy/aws) or local (a LocalStack stand-in, deploy/local)
+        type: string
+        default: aws
+      tenant:
+        description: The tenant's name; the mirror is written under <mirror_dir>/<tenant>/
+        type: string
+        required: true
+      environment:
+        description: The caller's environment whose required reviewer gates the apply
+        type: string
+        default: production
+      components:
+        description: 'JSON map of component to git tag, e.g. {"maestro":"spine-v0.1.2"}: each fps4/<component> is checked out under components/<component>/ and built. maestro is required.'
+        type: string
+        required: true
+      region:
+        description: The region the deploy role is assumed in
+        type: string
+        default: eu-west-1
+      mirror_dir:
+        description: Where a self-hosted runner writes the state mirror (ADR-0017 §4)
+        type: string
+        default: /srv/maestro/state
+      root:
+        description: The directory holding one root module per target
+        type: string
+        default: deploy
+    secrets:
+      aws_role_arn:
+        description: The deploy role assumed through GitHub's OIDC provider; required for target aws
+        required: false
+      state_recipient:
+        description: The age public key the state mirror is encrypted to; required for the apply
+        required: false
+
+# The OIDC token is the only credential; no runner holds a key. The caller grants the same.
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  MAESTRO_TENANT: ${{ inputs.tenant }}
+  TF_IN_AUTOMATION: "1"
+
+jobs:
+  plan:
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    services:
+      localstack:
+        # An empty image is skipped by the runner, which is how one job serves both targets. 4.4.0
+        # is the last Community image that starts without an auth token; the Docker socket is
+        # mounted because LocalStack creates a Lambda function by preparing a container for it.
+        image: ${{ inputs.target == 'local' && 'localstack/localstack:4.4.0' || '' }}
+        ports: ["4566:4566"]
+        volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+        options: --health-cmd "curl -fsS localhost:4566/_localstack/health" --health-interval 5s --health-timeout 5s --health-retries 30
+    steps:
+      - if: fromJSON(inputs.components).maestro == ''
+        run: echo "::error::components must name maestro at a tag; the scripts come from it" && exit 1
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: fps4/maestro
+          ref: ${{ fromJSON(inputs.components).maestro }}
+          path: components/maestro
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Components at their tags
+        env:
+          COMPONENTS: ${{ inputs.components }}
+        run: components/maestro/scripts/checkout-components.sh
+      - name: The deploy role, through OIDC
+        if: inputs.target == 'aws'
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.region }}
+      - name: Plan
+        run: components/maestro/scripts/deploy.sh plan --root "${{ inputs.root }}/${{ inputs.target }}" | tee plan.txt
+      - name: The plan is the review artefact (ADR-0016)
+        if: always()
+        run: |
+          { echo "## terraform plan — ${{ inputs.tenant }} / ${{ inputs.target }}"; echo '```'; cat plan.txt 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: Apply to the stand-in
+        # A change reaches `local` on every pull request (ADR-0017 §3); the container goes with the job.
+        if: inputs.target == 'local'
+        run: components/maestro/scripts/deploy.sh apply --root "${{ inputs.root }}/${{ inputs.target }}"
+
+  apply:
+    needs: plan
+    if: github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && inputs.target == 'aws'
+    runs-on: ${{ fromJSON(inputs.runner) }}
+    environment: ${{ inputs.environment }}
+    # One apply per tenant at a time; the backend's lock is the second line.
+    concurrency:
+      group: tenant-deploy-${{ inputs.tenant }}
+      cancel-in-progress: false
+    env:
+      MAESTRO_STATE_RECIPIENT: ${{ secrets.state_recipient }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: fps4/maestro
+          ref: ${{ fromJSON(inputs.components).maestro }}
+          path: components/maestro
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - env:
+          COMPONENTS: ${{ inputs.components }}
+        run: components/maestro/scripts/checkout-components.sh
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.aws_role_arn }}
+          aws-region: ${{ inputs.region }}
+      - name: Where the mirror goes
+        # A self-hosted runner keeps the off-cloud copy at the mirror path; a hosted runner has no
+        # such place, so its mirror is a workflow artefact kept seven days (ADR-0017 §4).
+        run: |
+          echo "MAESTRO_STATE_DIR=${{ runner.environment == 'github-hosted' && format('{0}/maestro-state', runner.temp) || inputs.mirror_dir }}" >> "$GITHUB_ENV"
+          command -v age >/dev/null || { sudo apt-get update -q && sudo apt-get install -y -q age; }
+      - name: Plan, apply, mirror
+        # The plan applied is made here, after the reviewer's approval at the environment gate: a
+        # plan file binds to the checkout and the state that made it.
+        run: |
+          components/maestro/scripts/deploy.sh plan --root "${{ inputs.root }}/aws" | tee plan.txt
+          components/maestro/scripts/deploy.sh apply --root "${{ inputs.root }}/aws"
+      - if: always()
+        run: |
+          { echo "## terraform apply — ${{ inputs.tenant }}"; echo '```'; cat plan.txt 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - name: The mirror as an artefact, on a hosted runner
+        if: runner.environment == 'github-hosted'
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-mirror-${{ inputs.tenant }}
+          path: ${{ env.MAESTRO_STATE_DIR }}
+          retention-days: 7
+          if-no-files-found: error

@@ -66,7 +66,7 @@ export class PrincipalDirectory {
     }
 
     const record: PrincipalRecord = {
-      id: mintPrincipalId(),
+      id: mintPrincipalId(input.kind),
       kind: input.kind,
       display_name: input.display_name,
       issuer: input.issuer,

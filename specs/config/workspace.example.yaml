@@ -10,6 +10,18 @@
 workspace: maestro-v1-core
 definition_version: 3            # stamped on every version written under it; history is never rewritten
 
+# How much a thing matters if wrong (maestro: consequence class). Carried on every event this
+# workspace records; a type may override it. Read in full only by the regulated branch.
+consequence_class: c2
+
+# The seat an act is authorised under, and the oversight level the record carries for it
+# (maestro-specs ADR-0019). Defaults: author and reviewer O1 — an agent may act, a human acts on
+# it; decider, workspace_admin and auditor O0 — a human's. `decider` cannot be raised.
+seats:
+  author: { oversight_level: O1 }
+  reviewer: { oversight_level: O1 }
+  decider: { oversight_level: O0 }
+
 # ---------------------------------------------------------------------------
 # Artifact types
 # ---------------------------------------------------------------------------

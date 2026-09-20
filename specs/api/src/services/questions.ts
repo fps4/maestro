@@ -15,18 +15,35 @@
  * workspace's own retention, and the spine learns that a question was asked, answered and closed.
  */
 
-import { createHash } from 'node:crypto';
 import { QUESTIONS, VERSIONS } from '../db/collections.js';
-import { emit } from '../db/outbox.js';
+import type { Recorder } from '../db/outbox.js';
 import type { WorkspaceHandle } from '../db/handle.js';
+import { digestOf } from '../domain/digest.js';
 import { mintQuestionId } from '../domain/ids.js';
 import type { Answer, Question, Version } from '../domain/types.js';
 import { NotFound, Refused, type Actor } from './artifacts.js';
 
-const digestOf = (text: string) => `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`;
-
 export class QuestionService {
-  constructor(private readonly handle: WorkspaceHandle) {}
+  constructor(
+    private readonly handle: WorkspaceHandle,
+    private readonly recorder?: Recorder,
+  ) {}
+
+  private record(): Recorder {
+    if (!this.recorder) throw new Error('This service was built without a recorder and cannot write.');
+    return this.recorder;
+  }
+
+  /**
+   * Asking and answering are anyone's acts: the seat is the first the actor holds. Resolving is
+   * a human's, in `reviewer` — the person who needed the answer closes the loop (ADR-0014).
+   */
+  private seatOf(actor: Actor): 'reviewer' | 'author' | 'workspace_admin' | 'auditor' {
+    for (const seat of ['reviewer', 'author', 'workspace_admin', 'auditor'] as const) {
+      if (actor.roles.includes(seat)) return seat;
+    }
+    throw new Refused(`\`${actor.principal}\` holds no role in this workspace.`);
+  }
 
   private questions() {
     return this.handle.collection<Question>(QUESTIONS);
@@ -61,7 +78,7 @@ export class QuestionService {
   async ask(artifact: string, ordinal: number, text: string, actor: Actor): Promise<Question> {
     const trimmed = text.trim();
     if (trimmed.length === 0) throw new Refused('A question needs some text.');
-    await this.versionOrThrow(artifact, ordinal);
+    const version = await this.versionOrThrow(artifact, ordinal);
 
     const now = new Date().toISOString();
     const question: Question = {
@@ -78,13 +95,13 @@ export class QuestionService {
 
     await this.handle.transaction(async (session) => {
       await this.questions().insertOne(question, { session });
-      await emit(this.handle.db, session, [
+      await this.record().emit(session, [
         {
-          workspace: this.handle.workspace,
-          kind: 'QuestionRaised',
+          type: 'QuestionRaised',
           subject: { artifact, ordinal },
-          actor: actor.principal,
-          payload: { question: question.id, text_digest: digestOf(trimmed), asked_kind: actor.kind },
+          artifact_type: version.type,
+          seat: this.seatOf(actor),
+          body: { question: question.id, text_digest: digestOf(trimmed), asked_kind: actor.kind },
           occurred_at: now,
         },
       ]);
@@ -104,6 +121,7 @@ export class QuestionService {
     if (question.resolved_at) {
       throw new Refused('This question is closed. Ask a new one if something is still unclear.');
     }
+    const version = await this.versionOrThrow(question.artifact, question.ordinal);
 
     const now = new Date().toISOString();
     const answer: Answer = {
@@ -121,13 +139,13 @@ export class QuestionService {
         { session, returnDocument: 'after', projection: { _id: 0 } },
       );
       if (!updated) throw new Refused('This question was closed while you were answering.');
-      await emit(this.handle.db, session, [
+      await this.record().emit(session, [
         {
-          workspace: this.handle.workspace,
-          kind: 'QuestionAnswered',
+          type: 'QuestionAnswered',
           subject: { artifact: question.artifact, ordinal: question.ordinal },
-          actor: actor.principal,
-          payload: { question: id, answer: answer.id, text_digest: digestOf(trimmed), kind: actor.kind },
+          artifact_type: version.type,
+          seat: this.seatOf(actor),
+          body: { question: id, answer: answer.id, text_digest: digestOf(trimmed), kind: actor.kind },
           occurred_at: now,
         },
       ]);
@@ -144,6 +162,7 @@ export class QuestionService {
     }
     const question = await this.get(id);
     if (question.resolved_at) return question;
+    const version = await this.versionOrThrow(question.artifact, question.ordinal);
 
     const now = new Date().toISOString();
     return this.handle.transaction(async (session) => {
@@ -153,13 +172,13 @@ export class QuestionService {
         { session, returnDocument: 'after', projection: { _id: 0 } },
       );
       if (!updated) return question;
-      await emit(this.handle.db, session, [
+      await this.record().emit(session, [
         {
-          workspace: this.handle.workspace,
-          kind: 'QuestionResolved',
+          type: 'QuestionResolved',
           subject: { artifact: question.artifact, ordinal: question.ordinal },
-          actor: actor.principal,
-          payload: { question: id, answers: question.answers.length },
+          artifact_type: version.type,
+          seat: this.seatOf(actor),
+          body: { question: id, answers: question.answers.length },
           occurred_at: now,
         },
       ]);

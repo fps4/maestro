@@ -37,7 +37,7 @@ beforeAll(async () => {
   harness = await startHarness('loop');
   author = await grantMembership(harness, harness.tenant, 'p-visser', ['author']);
   sponsor = await grantMembership(harness, harness.tenant, 'j-dekker', ['author', 'sponsor']);
-  await grantMembership(harness, harness.tenant, 'agt-case-shaper', ['author']);
+  await grantMembership(harness, harness.tenant, 'agt-case-shaper', ['author'], sponsor);
   await grantMembership(harness, harness.catalogue, 'j-dekker', ['author', 'standards_owner']);
 }, 60_000);
 
@@ -375,7 +375,13 @@ describe('gates', () => {
     // boundary, before the profile's kind rule is consulted.
     const version = await proposedCase('Agent accountable');
     await recordEvaluation(version.artifact, version.ordinal, version.digest);
-    const agentPrincipal = await grantMembership(harness, harness.tenant, 'agt-case-shaper', ['author']);
+    const agentPrincipal = await grantMembership(
+      harness,
+      harness.tenant,
+      'agt-case-shaper',
+      ['author'],
+      sponsor,
+    );
 
     const refused = await call<{ error: string; message: string }>(
       harness,
@@ -424,7 +430,7 @@ describe('gates', () => {
     // A control whose refusals are invisible is one nobody can audit, so the refusal reaches the
     // record sink like every other state change.
     const handle = await harness.app.store.handle(harness.tenant);
-    const refusal = await handle.db.collection('outbox').findOne({ kind: 'DecisionRefused' });
+    const refusal = await handle.db.collection('outbox').findOne({ type: 'DecisionRefused' });
     expect(refusal).not.toBeNull();
   });
 
@@ -641,16 +647,16 @@ describe('the record sink', () => {
   it('emits every state change in sequence, transactionally with the change', async () => {
     const handle = await harness.app.store.handle(harness.tenant);
     const events = await handle.db
-      .collection<{ sequence: number; kind: string; actor: string }>('outbox')
+      .collection<{ seq: number; type: string; acting: string; accountable: string }>('outbox')
       .find({})
-      .sort({ sequence: 1 })
+      .sort({ seq: 1 })
       .toArray();
 
     expect(events.length).toBeGreaterThan(0);
-    expect(events.map((e) => e.sequence)).toEqual([...events.map((e) => e.sequence)].sort((a, b) => a - b));
-    expect(new Set(events.map((e) => e.sequence)).size).toBe(events.length);
-    expect(events.every((e) => Boolean(e.actor))).toBe(true);
-    expect(new Set(events.map((e) => e.kind))).toContain('VersionProposed');
-    expect(new Set(events.map((e) => e.kind))).toContain('DecisionRecorded');
+    expect(events.map((e) => e.seq)).toEqual([...events.map((e) => e.seq)].sort((a, b) => a - b));
+    expect(new Set(events.map((e) => e.seq)).size).toBe(events.length);
+    expect(events.every((e) => Boolean(e.acting) && /^prn-h-/.test(e.accountable))).toBe(true);
+    expect(new Set(events.map((e) => e.type))).toContain('VersionProposed');
+    expect(new Set(events.map((e) => e.type))).toContain('DecisionRecorded');
   });
 });

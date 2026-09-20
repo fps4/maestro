@@ -6,10 +6,11 @@
  * rather than a workspace id. There is no code path that resolves a second one.
  */
 
+import { uuidv7 } from '@fps4/maestro-spine';
 import { MEMBERSHIPS } from '../db/collections.js';
 import type { Store } from '../db/client.js';
 import type { CatalogueHandle, WorkspaceHandle } from '../db/handle.js';
-import type { Principal } from '../domain/types.js';
+import { createRecorder, type Actor, type Recorder } from '../db/outbox.js';
 import type { PrincipalDirectory, PrincipalRecord } from '../services/principals.js';
 import type { LoadedWorkspace, WorkspaceRegistry } from '../services/workspaces.js';
 import type { VerifiedToken } from './verify.js';
@@ -26,6 +27,11 @@ export interface Membership {
   roles: string[];
   /** Gates this principal is explicitly assigned to, for `resolver: assignment`. */
   gates?: string[];
+  /**
+   * For an agent: the human answerable for what it does here (ADR-0019 §2). Granted with the
+   * membership, like the roles; an agent without one holds roles it cannot act in.
+   */
+  accountable?: string;
 }
 
 export interface RequestContext {
@@ -35,7 +41,10 @@ export interface RequestContext {
   catalogue: CatalogueHandle;
   roles: string[];
   gates: string[];
-  actor: { principal: string; kind: Principal['kind'] };
+  actor: Actor;
+  /** One per request; every event the request records carries it. */
+  correlation_id: string;
+  recorder: Recorder;
 }
 
 export interface ContextDeps {
@@ -86,14 +95,33 @@ export async function buildContext(
 
   const catalogue = await deps.store.catalogue();
 
+  const roles = [...new Set([...token.roles, ...(membership?.roles ?? [])])];
+  const actor: Actor = {
+    principal: principal.id,
+    kind: principal.kind,
+    roles,
+    ...(membership?.accountable ? { accountable: membership.accountable } : {}),
+  };
+  const correlation_id = uuidv7();
+  const recorder = createRecorder({
+    db: handle.db,
+    workspace: workspaceId,
+    definition: workspace.definition,
+    actor,
+    principals: async (ids) => deps.directory.getMany(ids),
+    correlation_id,
+  });
+
   return {
     principal,
     workspace,
     handle,
     catalogue,
-    roles: [...new Set([...token.roles, ...(membership?.roles ?? [])])],
+    roles,
     gates: membership?.gates ?? [],
-    actor: { principal: principal.id, kind: principal.kind },
+    actor,
+    correlation_id,
+    recorder,
   };
 }
 

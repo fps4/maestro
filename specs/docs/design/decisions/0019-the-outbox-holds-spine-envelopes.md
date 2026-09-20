@@ -1,7 +1,7 @@
 ---
 title: "0019: the outbox holds spine envelopes; seat occupancy names the answerable human"
-summary: "The record sink's events become maestro's spine envelope at emit time, inside the transaction, validated by the spine's own rules — not translated later by a relay. Four things the old event lacked are decided here: who is accountable when an agent acts (the human named in the agent's seat occupancy — no occupancy, no act), what seat and oversight level an event carries (the seat the operation was authorised under; its level from the occupancy), how free text leaves the body (a digest now, a payload reference when the object store exists), and the principal id format (maestro's, with the kind in it). The relay carries; it never decides."
-status: proposed
+summary: "The record sink's events become maestro's spine envelope at emit time, inside the transaction, validated by the spine's own rules — not translated later by a relay. Four things the old event lacked are decided here: who is accountable when an agent acts (the human its membership names — no answerable human, no act), what seat and oversight level an event carries (the seat the operation was authorised under; the level the definition declares for that seat), how free text leaves the body (a digest now, a payload reference when the object store exists), and the principal id format (maestro's, with the kind in it). The relay carries; it never decides."
+status: accepted
 last_updated: 2026-09-20
 date: 2026-09-20
 related:
@@ -52,40 +52,42 @@ the envelope. `sequence` becomes `seq`, still from the per-workspace counter in 
 The service depends on `@fps4/maestro-spine` for the envelope, the rules and the relay handler. The
 dependency is one package and it is the one whose rules we must not paraphrase.
 
-### 2. Who is accountable: the seat occupancy
+### 2. Who is accountable: the seat, and the membership
 
 Every act happens under a **seat** — the role the operation was authorised by: `author` (propose,
-withdraw), `reviewer` (raise, answer a question), `decider` (decide, resolve a question),
-`workspace_admin`. Every seat in a workspace has an **occupancy** per principal that may act in it,
-and the occupancy carries what the token never does (maestro, identity-service: *oversight level is
-never a token claim*):
+withdraw), `reviewer` / `author` (raise, answer a question — the first the actor holds), `decider`
+(decide), `workspace_admin`, `auditor`. The **definition declares the seats and their oversight
+levels** — configuration, the domain model (ADR-0001). The **membership names who occupies them**:
+its roles are the seats a principal may act in, and for an agent it names the human answerable
+for what the agent does here. That split is forced by a fact: principal ids are minted on first
+sight, so a definition — written before anyone has shown up — cannot name one. Occupancy is data
+granted in the workspace, like a role, and carries what the token never does (maestro,
+identity-service: *oversight level is never a token claim*):
 
 ```yaml
+# the definition
 seats:
   author:    { oversight_level: O1 }        # an agent may propose; a human acts on it
   reviewer:  { oversight_level: O1 }
-  decider:   { oversight_level: O0 }        # human only (ADR-0005); an agent occupancy is refused
-  workspace_admin: { oversight_level: O0 }
-occupancy:
-  - { seat: author, principal: prn-a-drafter-1, accountable: prn-h-jdekker }
+  decider:   { oversight_level: O0 }        # human only (ADR-0005); cannot be raised
+# a membership row
+{ principal: prn-a-drafter-1, roles: [author], accountable: prn-h-jdekker }
 ```
 
 - A **human** acting in a seat is answerable for the act: `accountable = acting`.
-- An **agent** acting in a seat is answerable to the human its occupancy names: `accountable` is that
-  human, resolved at the act and copied on. **An agent with no occupancy in the seat cannot act** —
-  the request is refused and the refusal recorded, the same line as a decision naming an agent
-  (ADR-0005). The occupancy's `accountable` must resolve to a human; the definition validator refuses
-  otherwise.
-- `oversight_level` is the seat's level in force at the act, copied on. A `decider` seat is `O0` and
-  admits no agent occupancy; the validator enforces both.
-- For a **decision**, the attribution profile's `accountable`, `acting`, `seat` and `oversight_level`
-  are the envelope's — the profile already requires the first two and may require the rest — and
-  they must agree with the occupancy (the decider is a human occupying `decider`).
+- An **agent** acting in a seat is answerable to the human its membership names: `accountable` is
+  that human, resolved at the act and copied on. **An agent with no answerable human cannot act** —
+  the request is refused (`403`) and the refusal is logged. It is *not* recorded: there is no human
+  to record it under, which is the point. (A decision refused for an agent *with* one is recorded,
+  as before.)
+- `oversight_level` is the seat's level in force at the act, copied on. A `decider` seat is `O0`,
+  admits no agent, and the definition validator refuses a definition that raises it.
+- For a **decision**, the attribution profile's `accountable`, `acting` and `oversight_level` are
+  the envelope's — the profile already requires the first two and may require the rest — over the
+  `decider` seat.
 
-Until identity-service's registry carries seat occupancy (maestro M1: `SeatOccupancyChanged`), the
-workspace definition declares it, as above. Configuration is the domain model (ADR-0001); when the
-registry takes over, the definition's `occupancy` block becomes a validation error rather than a
-source, and the events do not change shape.
+When identity-service's registry carries seat occupancy (maestro M1: `SeatOccupancyChanged`), the
+membership's `accountable` is read from there; the events do not change shape.
 
 ### 3. Consequence class
 
@@ -99,6 +101,9 @@ artifact type. Every event about a version carries its type's class; events not 
   `subject_seq` a per-subject counter kept in the outbox transaction — so one version's timeline
   (proposed, questioned, decided, superseded) is one subject stream, and a reader replaying it has
   optimistic concurrency for free.
+- **Workspace** in the spine's form: `workspace_id` is `ws-<id>` — a configured workspace is a bare
+  slug here (`aannemer-x`) and `ws-aannemer-x` on the record, deterministically; a minted one already
+  is. The outbox row keeps this service's id beside the envelope for the relay's acknowledgement.
 - **Type** is the kind as emitted today, `type_version: 1`: `VersionProposed`, `VersionWithdrawn`,
   `VersionSuperseded`, `DecisionRecorded`, `DecisionRefused`, `LinkPinned`, `QuestionRaised`,
   `QuestionAnswered`, `QuestionResolved`. maestro's first-wave table in `spine.md` used draft names
@@ -137,19 +142,20 @@ report names it, and relay lag is the alarm; nothing here retries past it or dro
   the transaction that made the change. There is no relay-time lookup to drift.
 - The **rebuild gate** (maestro M1: drop a workspace database, rebuild from the archive) becomes
   meaningful: everything the projection needs is in the envelope or referenced from it.
-- Agents need an occupancy before they can propose. That is a configuration line per agent per
-  workspace today, and a registry row later. An agent that shows up with a valid token and no
-  occupancy is refused — loudly, on the record.
+- Agents need an answerable human on their membership before they can propose. That is one field
+  on the membership row today (`accountable`), and a registry row later. An agent that shows up
+  with a valid token and none is refused — loudly, in the response and the log.
 - The `decider` seat cannot be occupied by an agent, which is ADR-0005 restated as a validator rule.
 - Existing outbox rows and principal ids are development data; there is nothing to migrate. Workspace
-  definitions gain `seats`, `occupancy` and `consequence_class`; the validator (`workspace:validate`,
-  a DoD gate) refuses a definition without them.
+  definitions gain `seats` (with defaults) and `consequence_class` (required); the validator
+  (`workspace:validate`, a DoD gate) refuses a definition without the latter or with a raised
+  `decider`.
 - The refusal event loses its prose. An operator reads the response or the log for the sentence; the
   record holds what was unmet, by id.
 
 ## When to revisit
 
-When identity-service's registry carries seat occupancy — the `occupancy` block leaves the definition
-and nothing else changes. When an event needs a subject that is not a version (a workspace-level act,
+When identity-service's registry carries seat occupancy — the membership's `accountable` is read from
+there and nothing else changes. When an event needs a subject that is not a version (a workspace-level act,
 a lineage-level act) — add the `subject_type`, not a second stream. When a body needs a sentence —
 it does not; it needs a `payload_ref`.

@@ -20,9 +20,22 @@ function token(bytes: number): string {
 }
 
 export const mintWorkspaceId = (): string => `ws-${token(8).toLowerCase()}`;
+
+/**
+ * The workspace as the spine names it: `ws-<id>`. A configured workspace is a bare slug here
+ * (`aannemer-x`); maestro's record calls it `ws-aannemer-x`. Deterministic and lossless for a
+ * slug that does not already start with `ws-` (ADR-0019 §4).
+ */
+export const spineWorkspaceId = (id: string): string => (id.startsWith('ws-') ? id : `ws-${id}`);
 export const mintArtifactId = (): string => `art-${token(10).toLowerCase()}`;
 export const mintDraftId = (): string => `dft-${token(10).toLowerCase()}`;
-export const mintPrincipalId = (): string => `prn-${token(12)}`;
+/**
+ * maestro's form: the kind is in the id — `prn-h-…` human, `prn-a-…` agent, `prn-w-…` workload
+ * (our `service`) — so the spine can tell a human from an agent without a registry call
+ * (ADR-0019). Lower-case after the letter, as the spine's grammar requires.
+ */
+export const mintPrincipalId = (kind: 'human' | 'agent' | 'service'): string =>
+  `prn-${kind === 'human' ? 'h' : kind === 'agent' ? 'a' : 'w'}-${token(12).toLowerCase()}`;
 export const mintAttachmentId = (): string => `att-${token(10).toLowerCase()}`;
 export const mintDecisionId = (): string => `dec-${token(12).toLowerCase()}`;
 export const mintQuestionId = (): string => `qst-${token(10).toLowerCase()}`;

@@ -89,7 +89,7 @@ beforeAll(async () => {
   harness = await startHarness('cli');
   await grantMembership(harness, harness.tenant, 'p-visser', ['author']);
   sponsor = await grantMembership(harness, harness.tenant, 'j-dekker', ['author', 'sponsor', 'owner']);
-  await grantMembership(harness, harness.tenant, 'agt-writer', ['author']);
+  await grantMembership(harness, harness.tenant, 'agt-writer', ['author'], sponsor);
   // The CLI speaks HTTP, so the harness has to actually listen.
   await harness.server.listen({ port: 0, host: '127.0.0.1' });
   const address = harness.server.server.address() as { port: number };

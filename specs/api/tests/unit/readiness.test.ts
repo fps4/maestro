@@ -30,6 +30,7 @@ const schema = {
 const def = parseWorkspaceDefinition({
   workspace: 'ws-test',
   definition_version: 1,
+  consequence_class: 'c2',
   types: [
     {
       id: 'business_case',
@@ -218,6 +219,7 @@ describe('evaluator declarations', () => {
     const base = {
       workspace: 'ws-test',
       definition_version: 1,
+      consequence_class: 'c2',
       types: [{ id: 't', facet_schema: './t.json', links: [] }],
       attribution_profiles: [
         {

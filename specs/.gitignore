@@ -29,3 +29,6 @@ coverage/
 # npm writes this on install; the lockfile is what we commit.
 api/.npmrc
 web/.npmrc
+
+# The local record sink's archive (RECORD_SINK=local writes here). The record is the spine's.
+archive/

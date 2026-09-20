@@ -37,14 +37,14 @@ export interface McpTool {
 const services = (ctx: RequestContext) => {
   const catalogue = new CatalogueReader(ctx.catalogue);
   return {
-    artifacts: new ArtifactService(ctx.handle, ctx.workspace),
+    artifacts: new ArtifactService(ctx.handle, ctx.workspace, ctx.recorder),
     lineage: new LineageService(ctx.handle, ctx.workspace),
     catalogue,
     acceptances: new AcceptanceService(ctx.handle, catalogue),
     // No URL signer over MCP: an attachment reference is reported as unresolved rather than handed
     // to an agent as a signed URL it has no business forwarding.
     packets: new PacketService(ctx.handle, ctx.workspace, undefined),
-    questions: new QuestionService(ctx.handle),
+    questions: new QuestionService(ctx.handle, ctx.recorder),
     evaluations: new EvaluationService(ctx.handle, ctx.workspace),
   };
 };

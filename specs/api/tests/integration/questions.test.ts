@@ -29,7 +29,7 @@ beforeAll(async () => {
   harness = await startHarness('questions');
   await grantMembership(harness, harness.tenant, 'p-visser', ['author']);
   sponsor = await grantMembership(harness, harness.tenant, 'j-dekker', ['author', 'sponsor', 'owner']);
-  await grantMembership(harness, harness.tenant, 'agt-explainer', ['author']);
+  await grantMembership(harness, harness.tenant, 'agt-explainer', ['author'], sponsor);
   acceptedCase = await acceptBusinessCase();
 }, 60_000);
 
@@ -269,15 +269,15 @@ describe('questions on a version', () => {
   it('reach the record sink as events carrying a digest of the text, never the text', async () => {
     const handle = await harness.app.store.handle(harness.tenant);
     const events = await handle.db
-      .collection<{ kind: string; payload: Record<string, unknown> }>('outbox')
-      .find({ kind: { $in: ['QuestionRaised', 'QuestionAnswered', 'QuestionResolved'] } })
+      .collection<{ type: string; body: Record<string, unknown> }>('outbox')
+      .find({ type: { $in: ['QuestionRaised', 'QuestionAnswered', 'QuestionResolved'] } })
       .toArray();
-    expect(new Set(events.map((e) => e.kind))).toEqual(
+    expect(new Set(events.map((e) => e.type))).toEqual(
       new Set(['QuestionRaised', 'QuestionAnswered', 'QuestionResolved']),
     );
     for (const event of events) {
-      expect(JSON.stringify(event.payload)).not.toMatch(/per project|baseline|subcontracted/);
-      if (event.kind !== 'QuestionResolved') expect(event.payload.text_digest).toMatch(/^sha256:/);
+      expect(JSON.stringify(event.body)).not.toMatch(/per project|baseline|subcontracted/);
+      if (event.type !== 'QuestionResolved') expect(event.body.text_digest).toMatch(/^sha256:/);
     }
   });
 

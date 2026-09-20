@@ -14,6 +14,18 @@ definition_version: 1
 kind: catalogue
 title: Standards catalogue
 
+# How much a thing matters if wrong (maestro: consequence class). Carried on every event this
+# workspace records; a type may override it. Read in full only by the regulated branch.
+consequence_class: c1
+
+# The seat an act is authorised under, and the oversight level the record carries for it
+# (maestro-specs ADR-0019). Defaults: author and reviewer O1 — an agent may act, a human acts on
+# it; decider, workspace_admin and auditor O0 — a human's. `decider` cannot be raised.
+seats:
+  author: { oversight_level: O1 }
+  reviewer: { oversight_level: O1 }
+  decider: { oversight_level: O0 }
+
 types:
   # Ours. The body IS the standard, and it carries the know-how — why we hold it, what counts as
   # satisfying it, how to satisfy it cheaply. That is the part an agent needs and a citation cannot

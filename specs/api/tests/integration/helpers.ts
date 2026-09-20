@@ -7,8 +7,10 @@
  * observable from a unit test.
  */
 
+import { mkdtempSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { dirname, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
 import type { FastifyInstance } from 'fastify';
@@ -51,6 +53,7 @@ export function testConfig(suffix: string): Config {
     AUTH_MODE: 'dev',
     CATALOGUE_WORKSPACE: `cat-${suffix}`,
     RECORD_SINK: 'local',
+    RECORD_ARCHIVE_DIR: mkdtempSync(join(tmpdir(), `specs-archive-${suffix}-`)),
     LOG_LEVEL: 'silent',
   } as NodeJS.ProcessEnv);
 }
@@ -119,12 +122,17 @@ export async function applyDefinition(
   await registry.apply({ definition, facet_schemas: facetSchemas, applied_by: 'test' });
 }
 
-/** Membership is granted in the workspace, not by the token — so tests must grant it too. */
+/**
+ * Membership is granted in the workspace, not by the token — so tests must grant it too. An agent
+ * (`agt-…`) needs the human answerable for it named on the membership, or it cannot act
+ * (ADR-0019 §2): pass that human's id as `accountable`.
+ */
 export async function grantMembership(
   harness: Harness,
   workspace: string,
   principalDisplayName: string,
   roles: string[],
+  accountable?: string,
 ): Promise<string> {
   // Resolving through the directory is what mints the local principal id, exactly as a first
   // request would.
@@ -139,8 +147,12 @@ export async function grantMembership(
 
   const handle = await harness.app.store.handle(workspace);
   await handle
-    .collection<{ principal: string; roles: string[] }>(MEMBERSHIPS)
-    .updateOne({ principal: principal.id }, { $set: { roles } }, { upsert: true });
+    .collection<{ principal: string; roles: string[]; accountable?: string }>(MEMBERSHIPS)
+    .updateOne(
+      { principal: principal.id },
+      { $set: { roles, ...(accountable ? { accountable } : {}) } },
+      { upsert: true },
+    );
   return principal.id;
 }
 

@@ -84,6 +84,11 @@ export function digestVersion(subject: DigestSubject): string {
 }
 
 /** Content addressing for an attachment's bytes. Identical bytes across ten versions store once. */
+/** The digest of a text that stays out of the record: a question, a reason. */
+export function digestOf(text: string): string {
+  return `sha256:${createHash('sha256').update(text, 'utf8').digest('hex')}`;
+}
+
 export function digestBytes(bytes: Uint8Array): string {
   return `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
 }

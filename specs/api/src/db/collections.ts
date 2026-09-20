@@ -61,8 +61,9 @@ const WORKSPACE_INDEXES: Record<string, IndexDef[]> = {
   [MEMBERSHIPS]: [{ keys: { principal: 1 }, options: { unique: true } }],
   [OUTBOX]: [
     // The relay reads pending events in the order they were written; ordering is the guarantee.
-    { keys: { delivered: 1, sequence: 1 } },
-    { keys: { sequence: 1 }, options: { unique: true } },
+    { keys: { delivered: 1, seq: 1 } },
+    { keys: { seq: 1 }, options: { unique: true } },
+    { keys: { event_id: 1 }, options: { unique: true } },
   ],
   [ACCEPTANCES]: [{ keys: { standard: 1, scope: 1, project: 1 } }, { keys: { status: 1 } }],
   [QUESTIONS]: [

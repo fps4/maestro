@@ -11,7 +11,8 @@
 
 import type { ClientSession } from 'mongodb';
 import { ARTIFACTS, DRAFTS, VERSIONS, WITHOUT_BODY } from '../db/collections.js';
-import { emit } from '../db/outbox.js';
+import { digestOf } from '../domain/digest.js';
+import type { Actor, Recorder } from '../db/outbox.js';
 import type { WorkspaceHandle } from '../db/handle.js';
 import { mintArtifactId, mintDraftId } from '../domain/ids.js';
 import { confirmFacet, invalidateConfirmations } from '../domain/facets.js';
@@ -31,8 +32,6 @@ import type {
   EffectiveWindow,
   Facets,
   Link,
-  PrincipalId,
-  PrincipalKind,
   ProvenanceMap,
   Version,
 } from '../domain/types.js';
@@ -52,10 +51,7 @@ export class Refused extends Error {
   }
 }
 
-export interface Actor {
-  principal: PrincipalId;
-  kind: PrincipalKind;
-}
+export type { Actor } from '../db/outbox.js';
 
 export interface CreateDraftInput {
   type: string;
@@ -84,10 +80,17 @@ export interface SaveDraftInput {
 }
 
 export class ArtifactService {
+  /** `recorder` is per request; a read-only caller (a packet, a lineage) may omit it. */
   constructor(
     private readonly handle: WorkspaceHandle,
     private readonly workspace: LoadedWorkspace,
+    private readonly recorder?: Recorder,
   ) {}
+
+  private record(): Recorder {
+    if (!this.recorder) throw new Error('This service was built without a recorder and cannot write.');
+    return this.recorder;
+  }
 
   private drafts() {
     return this.handle.collection<Draft>(DRAFTS);
@@ -411,7 +414,7 @@ export class ArtifactService {
       // the same intent, and the whole point of the split is that only one of them is a record.
       await this.drafts().deleteOne({ id: draftId }, { session });
 
-      await this.emitVersionProposed(session, version, actor);
+      await this.emitVersionProposed(session, version);
       return version;
     });
   }
@@ -440,13 +443,14 @@ export class ArtifactService {
         { session, returnDocument: 'after', projection: { _id: 0 } },
       );
       if (!updated) throw new Refused(`\`${artifactId}@${ordinal}\` is no longer proposed.`);
-      await emit(this.handle.db, session, [
+      // The reason is prose and stays on the version; the record carries its digest (ADR-0019 §4).
+      await this.record().emit(session, [
         {
-          workspace: this.handle.workspace,
-          kind: 'VersionWithdrawn',
+          type: 'VersionWithdrawn',
           subject: { artifact: artifactId, ordinal },
-          actor: actor.principal,
-          payload: { ...(reason ? { reason } : {}) },
+          artifact_type: version.type,
+          seat: 'author',
+          body: reason ? { reason_digest: digestOf(reason) } : {},
           occurred_at: now,
         },
       ]);
@@ -462,14 +466,14 @@ export class ArtifactService {
       .toArray();
   }
 
-  private async emitVersionProposed(session: ClientSession, version: Version, actor: Actor) {
-    await emit(this.handle.db, session, [
+  private async emitVersionProposed(session: ClientSession, version: Version) {
+    await this.record().emit(session, [
       {
-        workspace: this.handle.workspace,
-        kind: 'VersionProposed',
+        type: 'VersionProposed',
         subject: { artifact: version.artifact, ordinal: version.ordinal },
-        actor: actor.principal,
-        payload: {
+        artifact_type: version.type,
+        seat: 'author',
+        body: {
           type: version.type,
           digest: version.digest,
           definition_version: version.definition_version,

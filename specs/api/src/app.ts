@@ -9,7 +9,7 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import type { Config } from './config.js';
 import { Store } from './db/client.js';
-import { loggingSink, httpSink, relayOnce, type SinkTarget } from './db/outbox.js';
+import { createRelay, sinkFor, type Relay } from './relay/relay.js';
 import { createVerifier } from './auth/verify.js';
 import { registerRoutes } from './http/routes.js';
 import { registerMcp } from './mcp/route.js';
@@ -20,6 +20,8 @@ import { signedUrlFactory } from './services/attachments.js';
 export interface App {
   server: FastifyInstance;
   store: Store;
+  /** The relay the sink configured, or null under `RECORD_SINK=off`. */
+  relay: Relay | null;
   stop(): Promise<void>;
 }
 
@@ -48,13 +50,16 @@ export async function buildApp(config: Config): Promise<App> {
   await registerRoutes(server, deps);
   await registerMcp(server, deps);
 
-  const relay = startRelay(server, store, config);
+  const sink = sinkFor(config);
+  const relay = sink ? createRelay(store, directory, sink) : null;
+  const timer = relay ? startRelay(server, relay, config) : null;
 
   return {
     server,
     store,
+    relay,
     async stop() {
-      clearInterval(relay);
+      if (timer) clearInterval(timer);
       await server.close();
       await store.close();
     },
@@ -62,30 +67,24 @@ export async function buildApp(config: Config): Promise<App> {
 }
 
 /**
- * Drain the outbox on an interval.
+ * Drain the outbox on an interval — the laptop's relay. On AWS the same relay runs as a scheduled
+ * Lambda (`relay/lambda.ts`) and this process runs with `RECORD_SINK=off`.
  *
  * Failures are logged and the events stay pending — the relay never skips one to make progress,
  * which is what makes "stop the sink, keep writing, and every record arrives in order on recovery"
- * true rather than nearly true.
+ * true rather than nearly true. A refused event stops its workspace and is named in the report.
  */
-function startRelay(server: FastifyInstance, store: Store, config: Config): NodeJS.Timeout {
-  const target: SinkTarget =
-    config.RECORD_SINK === 'http'
-      ? httpSink(config.RECORD_SINK_URL!)
-      : loggingSink((line) => server.log.info(line));
-
+function startRelay(server: FastifyInstance, relay: Relay, config: Config): NodeJS.Timeout {
   return setInterval(() => {
     void (async () => {
       try {
-        for (const workspace of await store
-          .control()
-          .collection<{ id: string }>('workspaces')
-          .find()
-          .toArray()) {
-          const handle = await store.handle(workspace.id);
-          const delivered = await relayOnce(handle.db, target);
-          if (delivered > 0) server.log.debug({ msg: 'record sink', workspace: workspace.id, delivered });
-        }
+        const report = await relay.once();
+        if (report.archived > 0) server.log.debug({ msg: 'record sink', ...report });
+        if (report.refused.length > 0)
+          server.log.error({
+            msg: 'record sink refused an event; its workspace is stopped',
+            refused: report.refused,
+          });
       } catch (error) {
         server.log.error({
           msg: 'record sink relay failed; events stay pending',

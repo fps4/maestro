@@ -373,7 +373,7 @@ port with a working local default.
 
 | Port | Local default | Production adapter | Consumer |
 |---|---|---|---|
-| **Record sink** | Outbox collection, drained locally | maestro's spine: a scheduled relay drains the outbox to an S3 archive; SNS/SQS deliver to consumers; replay reads the archive | maestro — the archive becomes the record and this database a projection |
+| **Record sink** | Outbox collection holding the spine's envelope, relayed to a filesystem archive | maestro's spine: a scheduled relay drains the outbox to an S3 archive; SNS/SQS deliver to consumers; replay reads the archive | maestro — the archive becomes the record and this database a projection (ADR-0019) |
 | **Evaluator** | `builtin: facet_schema` — the type's own schema, one finding per required facet (ADR-0015) | HTTP callout, `${VAR}` resolved from the environment; result recorded on the version | maestro: the builtin floor in the MVP; a standards engine only in its regulated branch. maestro v1: spec-lint, EARS check |
 | **Notifier** | Log line | HTTP webhook (Slack); SES | Gate awaiting a decision; changes requested |
 | **Object storage** | MinIO | S3 | Attachments, and body overflow |
@@ -486,7 +486,8 @@ Per-workspace database:
 | `decisions` | Immutable gate decisions |
 | `evaluations` | Verdicts recorded against versions |
 | `memberships` | Who may author, who may decide |
-| `outbox` | Pending record-sink emissions |
+| `outbox` | The record sink: spine envelopes with the relay's bookkeeping (ADR-0019) |
+| `counters` | The workspace's `seq` and each subject's `subject_seq`, allocated in the emitting transaction |
 
 Control database: `workspaces`, `workspace_definitions`, `principals`.
 

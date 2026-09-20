@@ -51,7 +51,7 @@ beforeAll(async () => {
   harness = await startHarness('document');
   await grantMembership(harness, harness.tenant, 'p-visser', ['author']);
   sponsor = await grantMembership(harness, harness.tenant, 'j-dekker', ['author', 'sponsor', 'owner']);
-  await grantMembership(harness, harness.tenant, 'agt-writer', ['author']);
+  await grantMembership(harness, harness.tenant, 'agt-writer', ['author'], sponsor);
 
   const facets = {
     declared_outcome: {

@@ -11,7 +11,7 @@
  */
 
 import { ARTIFACTS, DECISIONS, DRAFTS, EVALUATIONS, VERSIONS } from '../db/collections.js';
-import { emit } from '../db/outbox.js';
+import type { Act, Recorder } from '../db/outbox.js';
 import type { WorkspaceHandle } from '../db/handle.js';
 import { assertAttribution, checkAttribution } from '../domain/attribution.js';
 import { gateIsOpen, gateRequirements, mayDecide } from '../domain/gates.js';
@@ -52,7 +52,13 @@ export class DecisionService {
   constructor(
     private readonly handle: WorkspaceHandle,
     private readonly workspace: LoadedWorkspace,
+    private readonly recorder?: Recorder,
   ) {}
+
+  private record(): Recorder {
+    if (!this.recorder) throw new Error('This service was built without a recorder and cannot write.');
+    return this.recorder;
+  }
 
   private gateOrThrow(id: string) {
     const gate = gateIn(this.workspace.definition, id);
@@ -144,11 +150,16 @@ export class DecisionService {
     const open = gateIsOpen(requirements);
 
     if (!verdict.allowed || !open || attributionIssues.length > 0) {
-      await this.recordRefusal(input, actor, {
-        may_decide: verdict.allowed,
-        may_decide_reason: verdict.reason,
+      // The sentences go to the response and the log; the record keeps what was unmet, by id
+      // (ADR-0019 §4).
+      await this.recordRefusal(input, actor, version.type, {
+        refused_for: [
+          ...(!verdict.allowed ? (['may_not_decide'] as const) : []),
+          ...(!open ? (['gate_closed'] as const) : []),
+          ...(attributionIssues.length > 0 ? (['attribution'] as const) : []),
+        ],
         unmet: requirements.filter((r) => r.blocking && !r.satisfied).map((r) => r.id),
-        attribution_issues: attributionIssues,
+        attribution_fields: attributionIssues.map((i) => i.field),
       });
       if (!verdict.allowed) throw new Refused(verdict.reason);
       if (attributionIssues.length > 0)
@@ -277,13 +288,53 @@ export class DecisionService {
         await this.handle.collection<Draft>(DRAFTS).insertOne(draft, { session });
       }
 
-      await emit(this.handle.db, session, [
+      // The decision's own attribution is the profile's — accountable, acting and whatever else it
+      // required — and it must agree with the seat: a decider is a human in `decider`.
+      const declared = {
+        accountable: input.attribution.accountable,
+        acting: input.attribution.acting,
+        oversight_level: input.attribution.oversight_level,
+      };
+      const consequences: Act[] = [
+        ...(superseded !== undefined
+          ? [
+              {
+                type: 'VersionSuperseded',
+                subject: { artifact: input.artifact, ordinal: superseded },
+                artifact_type: version.type,
+                seat: 'decider' as const,
+                body: { by_ordinal: input.ordinal },
+                occurred_at: now,
+                attribution: declared,
+              },
+            ]
+          : []),
+        ...(accepted && links.some((l) => l.pinned_to != null)
+          ? [
+              {
+                type: 'LinkPinned',
+                subject: { artifact: input.artifact, ordinal: input.ordinal },
+                artifact_type: version.type,
+                seat: 'decider' as const,
+                body: {
+                  links: links
+                    .filter((l) => l.pinned_to != null)
+                    .map((l) => ({ type: l.type, target: l.target, pinned_to: l.pinned_to })),
+                },
+                occurred_at: now,
+                attribution: declared,
+              },
+            ]
+          : []),
+      ];
+      await this.record().emit(session, [
         {
-          workspace: this.handle.workspace,
-          kind: 'DecisionRecorded',
-          subject: { artifact: input.artifact, ordinal: input.ordinal, decision: decision.id },
-          actor: actor.principal,
-          payload: {
+          type: 'DecisionRecorded',
+          subject: { artifact: input.artifact, ordinal: input.ordinal },
+          artifact_type: version.type,
+          seat: 'decider',
+          body: {
+            decision: decision.id,
             gate: gate.id,
             outcome: input.outcome,
             state,
@@ -294,31 +345,9 @@ export class DecisionService {
             ...(reopenedDraft ? { reopened_draft: reopenedDraft } : {}),
           },
           occurred_at: now,
+          attribution: declared,
         },
-        ...(superseded !== undefined
-          ? [
-              {
-                workspace: this.handle.workspace,
-                kind: 'VersionSuperseded' as const,
-                subject: { artifact: input.artifact, ordinal: superseded },
-                actor: actor.principal,
-                payload: { by_ordinal: input.ordinal },
-                occurred_at: now,
-              },
-            ]
-          : []),
-        ...(accepted && links.some((l) => l.pinned_to != null)
-          ? [
-              {
-                workspace: this.handle.workspace,
-                kind: 'LinkPinned' as const,
-                subject: { artifact: input.artifact, ordinal: input.ordinal },
-                actor: actor.principal,
-                payload: { links: links.filter((l) => l.pinned_to != null) },
-                occurred_at: now,
-              },
-            ]
-          : []),
+        ...consequences,
       ]);
 
       return decision;
@@ -333,16 +362,25 @@ export class DecisionService {
    * goes through the ordinary outbox path so it is sequenced with everything else; there is no
    * state change to be atomic with, but the sequence still has to be allocated properly.
    */
-  private async recordRefusal(input: DecideInput, actor: Actor, detail: Record<string, unknown>) {
+  private async recordRefusal(
+    input: DecideInput,
+    actor: Actor,
+    artifactType: string,
+    detail: { refused_for: string[]; unmet: string[]; attribution_fields: string[] },
+  ) {
     const now = new Date().toISOString();
+    // An agent has no seat to be refused in: `decider` is O0, so the recorder would refuse the
+    // refusal. The attempt is logged by the caller's refusal and stays off the record — there is
+    // no answerable human to write it under, which is the point (ADR-0019 §2).
+    if (actor.kind !== 'human') return;
     await this.handle.transaction(async (session) => {
-      await emit(this.handle.db, session, [
+      await this.record().emit(session, [
         {
-          workspace: this.handle.workspace,
-          kind: 'DecisionRefused',
+          type: 'DecisionRefused',
           subject: { artifact: input.artifact, ordinal: input.ordinal },
-          actor: actor.principal,
-          payload: { gate: input.gate, outcome: input.outcome, ...detail },
+          artifact_type: artifactType,
+          seat: 'decider',
+          body: { gate: input.gate, outcome: input.outcome, ...detail },
           occurred_at: now,
         },
       ]);

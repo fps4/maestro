@@ -17,6 +17,7 @@ import {
 } from '../auth/context.js';
 import { Unauthenticated, type TokenVerifier } from '../auth/verify.js';
 import { AttributionRefused } from '../domain/attribution.js';
+import { ActRefused } from '../db/outbox.js';
 import { DocumentError } from '../domain/document.js';
 import { FacetValidationError } from '../domain/facets.js';
 import { PinRefused } from '../domain/links.js';
@@ -101,8 +102,8 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
   function services(ctx: RequestContext) {
     const reader = new CatalogueReader(ctx.catalogue);
     return {
-      artifacts: new ArtifactService(ctx.handle, ctx.workspace),
-      decisions: new DecisionService(ctx.handle, ctx.workspace),
+      artifacts: new ArtifactService(ctx.handle, ctx.workspace, ctx.recorder),
+      decisions: new DecisionService(ctx.handle, ctx.workspace, ctx.recorder),
       lineage: new LineageService(ctx.handle, ctx.workspace),
       catalogue: reader,
       acceptances: new AcceptanceService(ctx.handle, reader),
@@ -344,14 +345,14 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
   app.get('/v1/workspaces/:ws/artifacts/:id/versions/:ordinal/questions', async (request) => {
     const { ws: workspace, id, ordinal } = versionParams.parse(request.params);
     const ctx = await context(request, workspace);
-    return { questions: await new QuestionService(ctx.handle).list(id, ordinal) };
+    return { questions: await new QuestionService(ctx.handle, ctx.recorder).list(id, ordinal) };
   });
 
   app.post('/v1/workspaces/:ws/artifacts/:id/versions/:ordinal/questions', async (request, reply) => {
     const { ws: workspace, id, ordinal } = versionParams.parse(request.params);
     const { text } = questionText.parse(request.body);
     const ctx = await context(request, workspace);
-    const question = await new QuestionService(ctx.handle).ask(id, ordinal, text, ctx.actor);
+    const question = await new QuestionService(ctx.handle, ctx.recorder).ask(id, ordinal, text, ctx.actor);
     return reply.code(201).send({ question });
   });
 
@@ -363,7 +364,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
       const { ws: workspace, question } = questionParams.parse(request.params);
       const { text } = questionText.parse(request.body);
       const ctx = await context(request, workspace);
-      const updated = await new QuestionService(ctx.handle).answer(question, text, ctx.actor);
+      const updated = await new QuestionService(ctx.handle, ctx.recorder).answer(question, text, ctx.actor);
       return reply.code(201).send({ question: updated });
     },
   );
@@ -373,7 +374,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     async (request) => {
       const { ws: workspace, question } = questionParams.parse(request.params);
       const ctx = await context(request, workspace);
-      return { question: await new QuestionService(ctx.handle).resolve(question, ctx.actor) };
+      return { question: await new QuestionService(ctx.handle, ctx.recorder).resolve(question, ctx.actor) };
     },
   );
 
@@ -555,6 +556,9 @@ export function errorHandler(error: Error, _request: FastifyRequest, reply: Fast
   if (error instanceof Unauthenticated)
     return reply.code(401).send({ error: 'unauthenticated', message: error.message });
   if (error instanceof Forbidden) return reply.code(403).send({ error: 'forbidden', message: error.message });
+  // An agent with no answerable human, or in a human's seat: refused at the act, on the record's terms.
+  if (error instanceof ActRefused)
+    return reply.code(403).send({ error: 'forbidden', message: error.message });
   if (error instanceof NotFound) return reply.code(404).send({ error: 'not_found', message: error.message });
   if (error instanceof StaleRevision) {
     return reply.code(409).send({

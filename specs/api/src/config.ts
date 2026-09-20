@@ -44,10 +44,18 @@ const schema = z.object({
   S3_SECRET_KEY: z.string().optional(),
   S3_FORCE_PATH_STYLE: booleanish.default('true'),
 
-  /** `local` writes the outbox and relays to the log. Point it elsewhere and that becomes the record. */
-  RECORD_SINK: z.enum(['local', 'http']).default('local'),
-  RECORD_SINK_URL: z.string().optional(),
+  /**
+   * The record sink (ADR-0019 §6). `local` relays the outbox to a filesystem archive with
+   * in-process delivery — the laptop's spine. `s3` is maestro's: the archive bucket and the FIFO
+   * topic the spine's Terraform module outputs, named the way the spine's handlers read them.
+   * `off` writes the outbox and relays nothing (a Lambda relay drains it instead).
+   */
+  RECORD_SINK: z.enum(['local', 's3', 'off']).default('local'),
+  RECORD_ARCHIVE_DIR: z.string().default('./archive'),
   RECORD_SINK_INTERVAL_MS: z.coerce.number().int().positive().default(2_000),
+  ARCHIVE_BUCKET: z.string().optional(),
+  ARCHIVE_PREFIX: z.string().optional(),
+  EVENTS_TOPIC_ARN: z.string().optional(),
 
   EVALUATOR_BASE: z.string().optional(),
 
@@ -87,8 +95,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       if (!value[key]) throw new Error(`AUTH_MODE=jwks requires ${key}`);
     }
   }
-  if (value.RECORD_SINK === 'http' && !value.RECORD_SINK_URL) {
-    throw new Error('RECORD_SINK=http requires RECORD_SINK_URL');
+  if (value.RECORD_SINK === 's3') {
+    for (const key of ['ARCHIVE_BUCKET', 'EVENTS_TOPIC_ARN'] as const) {
+      if (!value[key]) throw new Error(`RECORD_SINK=s3 requires ${key}`);
+    }
   }
 
   return {

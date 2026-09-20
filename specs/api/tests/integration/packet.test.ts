@@ -42,7 +42,7 @@ beforeAll(async () => {
   harness = await startHarness('packet');
   await grantMembership(harness, harness.tenant, 'p-visser', ['author']);
   sponsor = await grantMembership(harness, harness.tenant, 'j-dekker', ['author', 'sponsor']);
-  await grantMembership(harness, harness.tenant, 'agt-explainer', ['author']);
+  await grantMembership(harness, harness.tenant, 'agt-explainer', ['author'], sponsor);
   await grantMembership(harness, harness.catalogue, 'm-bakker', ['author', 'standards_owner']);
 }, 60_000);
 

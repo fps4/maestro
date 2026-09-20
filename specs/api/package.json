@@ -27,6 +27,7 @@
     "@aws-sdk/s3-request-presigner": "^3.716.0",
     "@fastify/cors": "^10.0.2",
     "@fastify/multipart": "^9.0.3",
+    "@fps4/maestro-spine": "^0.1.0",
     "@modelcontextprotocol/sdk": "^1.13.0",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",

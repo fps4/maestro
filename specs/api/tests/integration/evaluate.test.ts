@@ -28,8 +28,8 @@ const declared = (fields: object) =>
 
 beforeAll(async () => {
   harness = await startHarness('evaluate');
-  await grantMembership(harness, harness.tenant, 'p-visser', ['author']);
-  await grantMembership(harness, harness.tenant, 'agt-drafter', ['author']);
+  const visser = await grantMembership(harness, harness.tenant, 'p-visser', ['author']);
+  await grantMembership(harness, harness.tenant, 'agt-drafter', ['author'], visser);
 
   // A stub evaluator: answers `pass` with one finding, and remembers what it was sent.
   evaluator = createServer((req, res) => {

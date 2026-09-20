@@ -11,6 +11,7 @@ import {
 const def = parseWorkspaceDefinition({
   workspace: 'ws-test',
   definition_version: 1,
+  consequence_class: 'c2',
   types: [
     { id: 'business_case', title: 'Business case', facet_schema: './bc.json', links: [] },
     {
@@ -128,6 +129,7 @@ describe('acceptingOutcome', () => {
       parseWorkspaceDefinition({
         workspace: 'ws-test',
         definition_version: 1,
+        consequence_class: 'c2',
         types: [{ id: 'standard', facet_schema: './s.json', links: [] }],
         attribution_profiles: [
           {
@@ -153,6 +155,7 @@ describe('acceptingOutcome', () => {
     const base = {
       workspace: 'ws-test',
       definition_version: 1,
+      consequence_class: 'c2',
       types: [{ id: 'standard', facet_schema: './s.json', links: [] }],
       attribution_profiles: [
         {

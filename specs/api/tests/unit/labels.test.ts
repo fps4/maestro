@@ -7,6 +7,7 @@ function definition(overrides: Record<string, unknown> = {}) {
   return parseWorkspaceDefinition({
     workspace: 'ws-test',
     definition_version: 1,
+    consequence_class: 'c2',
     types: [
       {
         id: 'business_case',

@@ -49,6 +49,9 @@ const identifier = z
   .max(64)
   .regex(/^[a-z][a-z0-9_]*$/, 'must be lower snake_case');
 
+/** How much a thing matters if wrong. Carried on every event; read by the regulated branch. */
+const consequenceClass = z.string().regex(/^c[0-9]$/, 'must be c0–c9');
+
 const linkDeclaration = z.object({
   id: identifier,
   to: identifier,
@@ -90,6 +93,8 @@ const typeDeclaration = z.object({
   classification_required: z.boolean().default(false),
   /** Whether artifacts of this type may reference standards in the catalogue workspace. */
   catalogue_refs: z.boolean().default(false),
+  /** Overrides the workspace's consequence class for artifacts of this type. */
+  consequence_class: consequenceClass.optional(),
   links: z.array(linkDeclaration).default([]),
   /**
    * Typed blocks: a part of the body that is also a facet (ADR-0017). "The table under the
@@ -195,6 +200,36 @@ const lifecycle = z.object({
   transitions: z.array(transition),
 });
 
+/**
+ * A seat is the role an act is authorised under, and its oversight level is what the record
+ * carries for that act (ADR-0019). `decider` is O0: a human only, always (ADR-0005). The defaults
+ * are the four roles the service knows; a definition may lower a level, never admit an agent to
+ * `decider`.
+ */
+export const OVERSIGHT_LEVELS = ['O0', 'O1', 'O2', 'O3', 'O4'] as const;
+export const SEATS = ['author', 'reviewer', 'decider', 'workspace_admin', 'auditor'] as const;
+export type Seat = (typeof SEATS)[number];
+
+const seatDeclaration = z.object({ oversight_level: z.enum(OVERSIGHT_LEVELS) });
+
+const DEFAULT_SEATS: Record<Seat, z.infer<typeof seatDeclaration>> = {
+  author: { oversight_level: 'O1' },
+  reviewer: { oversight_level: 'O1' },
+  decider: { oversight_level: 'O0' },
+  workspace_admin: { oversight_level: 'O0' },
+  auditor: { oversight_level: 'O0' },
+};
+
+const seats = z
+  .object({
+    author: seatDeclaration.default(DEFAULT_SEATS.author),
+    reviewer: seatDeclaration.default(DEFAULT_SEATS.reviewer),
+    decider: seatDeclaration.default(DEFAULT_SEATS.decider),
+    workspace_admin: seatDeclaration.default(DEFAULT_SEATS.workspace_admin),
+    auditor: seatDeclaration.default(DEFAULT_SEATS.auditor),
+  })
+  .default(DEFAULT_SEATS);
+
 const attributionRule = z.object({
   must_resolve_to: z.literal('principal'),
   kind: z.enum(['human', 'agent', 'service']).optional(),
@@ -246,6 +281,9 @@ export const workspaceDefinitionSchema = z
      * reachable from nowhere else at all (ADR-0008).
      */
     kind: z.enum(['tenant', 'catalogue']).default('tenant'),
+    /** Every event about a version carries its type's class, or this one (ADR-0019). */
+    consequence_class: consequenceClass,
+    seats,
     types: z.array(typeDeclaration).min(1),
     attribution_profiles: z.array(attributionProfile).min(1),
     gates: z.array(gateDeclaration).default([]),
@@ -261,6 +299,15 @@ export const workspaceDefinitionSchema = z
 
     const fail = (path: (string | number)[], message: string) =>
       ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
+
+    // The decider seat is a human's, always. A definition that says otherwise is refused here so
+    // the rule is a property of the configuration rather than a check somebody could skip.
+    if (def.seats.decider.oversight_level !== 'O0') {
+      fail(
+        ['seats', 'decider', 'oversight_level'],
+        'the decider seat is O0: only a named human decides (ADR-0005)',
+      );
+    }
 
     def.types.forEach((type, i) => {
       // At most one pinned link per type. Two frozen references would make "the version that
@@ -434,6 +481,12 @@ export function typeIn(def: WorkspaceDefinition, id: string): TypeDeclaration | 
 
 export function gateIn(def: WorkspaceDefinition, id: string): GateDeclaration | undefined {
   return def.gates.find((g) => g.id === id);
+}
+
+/** The consequence class an event about an artifact of this type carries. */
+export function consequenceClassFor(def: WorkspaceDefinition, typeId: string | undefined): string {
+  const type = typeId ? def.types.find((t) => t.id === typeId) : undefined;
+  return type?.consequence_class ?? def.consequence_class;
 }
 
 export function profileIn(def: WorkspaceDefinition, id: string): AttributionProfile | undefined {

@@ -41,12 +41,12 @@ Two planes: a **Docs** plane you read, and a **Delivery** plane you track.
 | [0016](design/decisions/0016-the-git-native-path.md) | A specification may be a file next to the code; proposing is a command and a workflow step; deciding stays a person's act |
 | [0017](design/decisions/0017-one-document.md) | One document is the artifact; the facets are a projection of it, derived at save; typed blocks are declared, not coded |
 | [0018](design/decisions/0018-openspec-interoperate-not-adopt.md) | specs-service stays the record; OpenSpec is interoperated with (a block shape, one notation), not adopted — **accepted** |
-| [0019](design/decisions/0019-the-outbox-holds-spine-envelopes.md) | The outbox holds maestro's spine envelope, built and validated in the transaction; an agent acts under a seat occupancy that names the answerable human; free text leaves the body; principal ids carry the kind — *proposed* |
+| [0019](design/decisions/0019-the-outbox-holds-spine-envelopes.md) | The outbox holds maestro's spine envelope, built and validated in the transaction; an agent acts under a seat occupancy that names the answerable human; free text leaves the body; principal ids carry the kind — **accepted** |
 
 0001–0017 are `status: proposed`: the builds exist, but nothing has run against real content yet,
-so they remain a design under review rather than a record of commitments made. 0018 is the first
-`accepted` decision — taken explicitly by the architect, and constraining work rather than
-describing a design.
+so they remain a design under review rather than a record of commitments made. 0018 and 0019 are
+`accepted` — taken explicitly by the architect, and constraining work rather than describing a
+design.
 
 ## Conventions
 

@@ -113,7 +113,7 @@ every value has a local default:
   `AUTH_ISSUER` and `AUTH_AUDIENCE` pointing at your `identity-service` deployment
 - `MONGO_URI`, `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_CONTROL_DB`, `MONGO_DB_PREFIX`
 - `S3_ENDPOINT`, `S3_BUCKET` — MinIO locally
-- `RECORD_SINK` — `local` (default) or `http` with `RECORD_SINK_URL`
+- `RECORD_SINK` — `local` (default): the outbox relays to a filesystem archive at `RECORD_ARCHIVE_DIR` (`./archive`) — the laptop's spine, readable by `spine-verify` with everything off; `s3`: maestro's spine, with `ARCHIVE_BUCKET`, `ARCHIVE_PREFIX` and `EVENTS_TOPIC_ARN` as the spine's Terraform module outputs them; `off`: write the outbox, relay nothing (the scheduled relay Lambda drains it)
 - `EVALUATOR_BASE` — optional; without it, evaluations are recorded but never requested
 
 Against a real `identity-service`, register the service as an Application with the role catalogue

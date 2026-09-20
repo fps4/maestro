@@ -30,7 +30,7 @@ export default tseslint.config(
               message: 'domain/ must stay pure — no I/O layers.',
             },
             {
-              group: ['fastify', 'fastify/*', 'mongodb', 'jose', '@aws-sdk/*'],
+              group: ['fastify', 'fastify/*', 'jose', '@aws-sdk/*'],
               message: 'domain/ must stay pure — no framework or driver imports.',
             },
           ],
@@ -40,19 +40,24 @@ export default tseslint.config(
   },
   {
     // ADR-0006 is a compile-time guarantee only while every store access goes through a handle.
-    // A repository that takes a raw Db or a workspace id has re-opened the door a forgotten filter
-    // walks through, so the driver's client types are reachable from `db/` and nowhere else.
-    files: ['src/services/**/*.ts', 'src/http/**/*.ts', 'src/mcp/**/*.ts'],
+    // A service that holds the table's client can build any key, and a key that names another
+    // workspace is the door a forgotten filter walks through — so the DynamoDB client is reachable
+    // from `db/` and nowhere else (ADR-0021).
+    files: ['src/services/**/*.ts', 'src/http/**/*.ts', 'src/mcp/**/*.ts', 'src/auth/**/*.ts'],
     rules: {
       'no-restricted-imports': [
         'error',
         {
           paths: [
             {
-              name: 'mongodb',
-              importNames: ['MongoClient', 'Db'],
+              name: '@aws-sdk/client-dynamodb',
               message:
-                'Acquire a WorkspaceHandle or CatalogueHandle from db/handle.ts. No repository takes a raw client or a workspace id (ADR-0006).',
+                'Acquire a WorkspaceHandle or CatalogueHandle from db/handle.ts. No repository takes a raw client or a workspace id (ADR-0006, ADR-0021).',
+            },
+            {
+              name: '@aws-sdk/lib-dynamodb',
+              message:
+                'Acquire a WorkspaceHandle or CatalogueHandle from db/handle.ts. No repository takes a raw client or a workspace id (ADR-0006, ADR-0021).',
             },
           ],
         },

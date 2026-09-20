@@ -23,19 +23,25 @@ variable "web_adapter_layer_arn" {
   }
 }
 
+variable "table_name" {
+  description = "The service's record store, one DynamoDB table (maestro ADR-0018): its name. Defaults to `name`. Unique in the account and region; a rename is a `moved` block, never a new table."
+  type        = string
+  default     = null
+}
+
 variable "bucket_name" {
   description = "The service's own object store — attachments and payloads (ADR-0020). Globally unique, the tenant's to choose; the tenant's tfvars hold it. Versioned and encrypted, never Object-Locked: a payload must be erasable."
   type        = string
 }
 
 variable "environment" {
-  description = "Configuration the service reads from its environment (api/src/config.ts is the schema): AUTH_MODE and its AUTH_* URLs, MONGO_CONTROL_DB, MONGO_DB_PREFIX, CORS_ORIGINS, MCP_RESOURCE_URL, EVALUATOR_BASE, LOG_LEVEL, … Anything secret — MONGO_URI, MONGO_PASSWORD — goes through `secrets` instead. The module sets what it owns on top: the port, the bucket, RECORD_SINK=off on the API and the archive on the relay."
+  description = "Configuration the service reads from its environment (api/src/config.ts is the schema): AUTH_MODE and its AUTH_* URLs, CORS_ORIGINS, MCP_RESOURCE_URL, EVALUATOR_BASE, LOG_LEVEL, … Anything secret goes through `secrets` instead. The module sets what it owns on top: the table, the port, the bucket, RECORD_SINK=off on the API and the archive on the relay. No database credential exists: the table is reached by the function's role."
   type        = map(string)
   default     = {}
 }
 
 variable "secrets" {
-  description = "Environment variable name → Secrets Manager secret ARN, e.g. { MONGO_URI = aws_secretsmanager_secret.mongo_uri.arn }. The module reads each secret's current value and sets the variable on both functions. The value then sits in Terraform state — which ADR-0017 keeps in an encrypted, private bucket with an encrypted mirror; acceptable for M1. The follow-up is the Secrets Manager Lambda extension, which reads at runtime and keeps state free of values."
+  description = "Environment variable name → Secrets Manager secret ARN, e.g. { EVALUATOR_TOKEN = aws_secretsmanager_secret.evaluator_token.arn }. The module reads each secret's current value and sets the variable on both functions. The value then sits in Terraform state — which ADR-0017 keeps in an encrypted, private bucket with an encrypted mirror; acceptable for M1. The follow-up is the Secrets Manager Lambda extension, which reads at runtime and keeps state free of values. The record store needs none of this: no database credential exists (maestro ADR-0018)."
   type        = map(string)
   default     = {}
 }

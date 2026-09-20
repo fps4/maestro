@@ -17,6 +17,7 @@ import {
 } from '../auth/context.js';
 import { Unauthenticated, type TokenVerifier } from '../auth/verify.js';
 import { AttributionRefused } from '../domain/attribution.js';
+import { Conflict } from '../db/handle.js';
 import { ActRefused } from '../db/outbox.js';
 import { DocumentError } from '../domain/document.js';
 import { FacetValidationError } from '../domain/facets.js';
@@ -595,6 +596,9 @@ export function errorHandler(error: Error, _request: FastifyRequest, reply: Fast
   if (error instanceof PinRefused || error instanceof IllegalStateChange || error instanceof Refused) {
     return reply.code(422).send({ error: 'refused', message: error.message });
   }
+  // A write refused by its condition that no service turned into a sentence of its own: the record
+  // moved between the read and the write, and the caller reloads.
+  if (error instanceof Conflict) return reply.code(422).send({ error: 'refused', message: error.message });
   if (error instanceof z.ZodError) {
     return reply.code(400).send({
       error: 'invalid_request',

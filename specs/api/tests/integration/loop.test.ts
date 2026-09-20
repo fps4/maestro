@@ -430,8 +430,8 @@ describe('gates', () => {
     // A control whose refusals are invisible is one nobody can audit, so the refusal reaches the
     // record sink like every other state change.
     const handle = await harness.app.store.handle(harness.tenant);
-    const refusal = await handle.db.collection('outbox').findOne({ type: 'DecisionRefused' });
-    expect(refusal).not.toBeNull();
+    const refusal = (await handle.outbox.list()).find((e) => e.type === 'DecisionRefused');
+    expect(refusal).toBeDefined();
   });
 
   it('refuses a decision from someone who does not hold the gate’s role', async () => {
@@ -646,11 +646,7 @@ describe('the pin', () => {
 describe('the record sink', () => {
   it('emits every state change in sequence, transactionally with the change', async () => {
     const handle = await harness.app.store.handle(harness.tenant);
-    const events = await handle.db
-      .collection<{ seq: number; type: string; acting: string; accountable: string }>('outbox')
-      .find({})
-      .sort({ seq: 1 })
-      .toArray();
+    const events = await handle.outbox.list();
 
     expect(events.length).toBeGreaterThan(0);
     expect(events.map((e) => e.seq)).toEqual([...events.map((e) => e.seq)].sort((a, b) => a - b));

@@ -10,7 +10,7 @@ import { loadConfig } from '../../src/config.js';
 import { createS3 } from '../../src/services/attachments.js';
 
 const env = (overrides: Record<string, string>) =>
-  loadConfig({ SPECS_ENV: 'ci', ...overrides } as NodeJS.ProcessEnv);
+  loadConfig({ SPECS_ENV: 'ci', TABLE_NAME: 'specs', ...overrides } as NodeJS.ProcessEnv);
 
 describe('the S3 client gate', () => {
   it('is off without a bucket, whatever else is set', () => {

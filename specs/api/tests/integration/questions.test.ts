@@ -268,10 +268,9 @@ describe('questions on a version', () => {
 
   it('reach the record sink as events carrying a digest of the text, never the text', async () => {
     const handle = await harness.app.store.handle(harness.tenant);
-    const events = await handle.db
-      .collection<{ type: string; body: Record<string, unknown> }>('outbox')
-      .find({ type: { $in: ['QuestionRaised', 'QuestionAnswered', 'QuestionResolved'] } })
-      .toArray();
+    const events = (await handle.outbox.list()).filter((e) =>
+      ['QuestionRaised', 'QuestionAnswered', 'QuestionResolved'].includes(e.type),
+    );
     expect(new Set(events.map((e) => e.type))).toEqual(
       new Set(['QuestionRaised', 'QuestionAnswered', 'QuestionResolved']),
     );

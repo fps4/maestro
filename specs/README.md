@@ -67,7 +67,7 @@ And a draft is **one document**: markdown with front-matter, where a table under
   ([ADR-0004](docs/design/decisions/0004-facets-are-evaluated-bodies-are-read.md)).
 - **Not a workflow engine.** It holds lifecycle state and decisions. Orchestration is yours.
 - **Not an audit substrate — unless you want it to be.** Every state change is emitted to a record
-  sink. Point that at a durable spine and the spine is authoritative, and this database becomes a
+  sink. Point that at a durable spine and the spine is authoritative, and this table becomes a
   projection. In maestro that spine is an S3 archive fed by a relay from the outbox.
 
 ## Project Layout
@@ -78,7 +78,7 @@ maestro-specs/
  ├── web/              # The console (Next.js) — author, review, decide, read the standards
  ├── config/workspaces/  # THE domain model, as data: the demo tenant (aannemer-x) and the catalogue
  ├── infra/docker/     # Dockerfiles + compose — the local loop and CI, not a deployment target
- ├── terraform/        # The module a tenant's root deploys: the store, the API, the relay (M1)
+ ├── terraform/        # The module a tenant's root deploys: the table, the store, the API, the relay (M1)
  └── docs/             # design/ · design/ui/ (the approved console design) · decisions/
 ```
 
@@ -98,37 +98,41 @@ Gate → Decision            immutable, attributed to a named human. The service
 
 ## Quick Start
 
-Requires a **MongoDB replica set** — the transactional outbox needs multi-document transactions, so a
-standalone `mongod` is not supported, including in development. The compose stack provides one.
+The record store is **one DynamoDB table** (maestro's
+[ADR-0018](../maestro/docs/decisions/0018-dynamodb-is-the-mvp-database.md);
+[ADR-0021](docs/design/decisions/0021-the-store-is-dynamodb.md) here). Locally that is DynamoDB
+Local in the compose stack, with the table made from the same schema the Terraform module declares
+(`api/src/db/table.ts`); there is no database credential anywhere.
 
 ```bash
-make up        # mongo replica set, MinIO, api, web — api on :8020, console on :8021
+make up        # DynamoDB Local, MinIO, api, web — api on :8020, console on :8021
 make apply     # load config/workspaces/catalogue.yaml and aannemer-x.yaml
-make test      # after `make mongo`
+make test      # after `make dynamodb`; each test file makes and drops its own table
 ```
 
 `make help` lists the rest. Configuration is environment only — `api/src/config.ts` is the schema and
-every value has a local default:
+every value but the table's name has a local default:
 
 - `AUTH_MODE` — `dev` (default, no identity provider needed) or `jwks`, with `AUTH_JWKS_URL`,
   `AUTH_ISSUER` and `AUTH_AUDIENCE` pointing at your `identity-service` deployment
-- `MONGO_URI`, `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_CONTROL_DB`, `MONGO_DB_PREFIX`
+- `TABLE_NAME` — the table (required); `DYNAMODB_ENDPOINT` names DynamoDB Local, and unset it is the
+  SDK's endpoint for `AWS_REGION` with the runtime's own credentials (on AWS, the function's role)
 - `S3_BUCKET` — set it and object storage is on (attachments, and the payload store's `s3` adapter); `S3_ENDPOINT` names MinIO locally, and unset it is the SDK's default endpoint for `S3_REGION` (AWS); `S3_ACCESS_KEY`/`S3_SECRET_KEY` when the runtime's own credentials are not the ones to use
 - `RECORD_SINK` — `local` (default): the outbox relays to a filesystem archive at `RECORD_ARCHIVE_DIR` (`./archive`) — the laptop's spine, readable by `spine-verify` with everything off; `s3`: maestro's spine, with `ARCHIVE_BUCKET`, `ARCHIVE_PREFIX` and `EVENTS_TOPIC_ARN` as the spine's Terraform module outputs them; `off`: write the outbox, relay nothing (the scheduled relay Lambda drains it)
 - `PAYLOAD_STORE` — where the payloads go ([ADR-0020](docs/design/decisions/0020-the-payload-store-and-the-rebuild.md)): a version's text, a decision's reasoning, a question, an answer, an evaluator's findings — written before the event that names them by locator and digest. `local`: a directory at `RECORD_PAYLOAD_DIR` (`./payloads`); `s3`: this service's own bucket, `PAYLOAD_BUCKET` (default `S3_BUCKET`) under `PAYLOAD_PREFIX` (`payloads`), with the `S3_*` endpoint and credentials — versioned, never Object-Locked, so erasure stays possible. Unset, it follows the sink: `local` under `RECORD_SINK=local`, `s3` otherwise
 - `EVALUATOR_BASE` — optional; without it, evaluations are recorded but never requested
 
-**The rebuild gate.** The archive is the record and this database a projection of it, and that is
+**The rebuild gate.** The archive is the record and this table a projection of it, and that is
 checked rather than said: `npm run workspace:rebuild -- --workspace <id> [--force]` verifies the
-workspace's archive with the spine's verifier, refuses a populated target unless `--force` drops
-it, replays every event in order — fetching each payload by reference and checking it against the
-digest the event carries — and writes the projection back: artifacts, versions, decisions,
-evaluations, questions, the outbox and its counters, a reopened draft as it was at reopen.
-Memberships are grants, not record; re-apply them from the tenant's configuration afterwards.
-`tests/integration/rebuild.test.ts` runs the loop over HTTP, drops the database, rebuilds, and
-compares every collection and read — equal — and is a DoD gate. A database written by an older
-projection (`meta.projection_version` behind the code's `PROJECTION_VERSION`) refuses to serve
-until rebuilt; nothing migrates in place.
+workspace's archive with the spine's verifier, refuses a populated target unless `--force` deletes
+the workspace's prefix, replays every event in order — fetching each payload by reference and
+checking it against the digest the event carries — and writes the projection back: artifacts,
+versions, decisions, evaluations, questions, the outbox and its counters, a reopened draft as it
+was at reopen. Memberships are grants, not record; re-apply them from the tenant's configuration
+afterwards. `tests/integration/rebuild.test.ts` runs the loop over HTTP, drops the workspace,
+rebuilds, and compares every item and read — equal — and is a DoD gate. A workspace written by an
+older projection (its `meta` item behind the code's `PROJECTION_VERSION`) refuses to serve until
+rebuilt; nothing migrates in place.
 
 Against a real `identity-service`, register the service as an Application with the role catalogue
 (`author`, `reviewer`, `workspace_admin`, `auditor`), a public client for the console, and a
@@ -153,10 +157,11 @@ this repository deploys anywhere: its CI runs on GitHub-hosted runners and ends 
 
 | Resource | Notes |
 |---|---|
+| the table (`table_name`, default `name`) | the record store: one table keyed `pk`/`sk`, indexes `gsi1`, `gsi2` and the sparse `pending`, TTL on `expires_at` — what `api/src/db/table.ts` declares, and the service checks at boot; on demand, point-in-time recovery, encrypted, `prevent_destroy`; reached by each function's role, never by a credential |
 | the store (`bucket_name`) | attachments and payloads (ADR-0020); versioned, encrypted, never public, **never Object-Locked** — a payload must be erasable; `prevent_destroy`; plaintext transport denied |
-| `<name>-api` | the Fastify server, unchanged, as a zip on `nodejs22.x`/arm64 behind the [Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter) layer; handler `run.sh`; `RECORD_SINK=off` — it writes the outbox and relays nothing; role: its log and its bucket, nothing else |
+| `<name>-api` | the Fastify server, unchanged, as a zip on `nodejs22.x`/arm64 behind the [Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter) layer; handler `run.sh`; `RECORD_SINK=off` — it writes the outbox and relays nothing; role: its log, the item operations on its table and its indexes, its bucket, nothing else |
 | an HTTP API Gateway | one `$default` route, Lambda proxy in payload format 2.0, auto-deployed, access-logged; CORS is the application's (`CORS_ORIGINS`), not the gateway's |
-| `<name>-relay` | the spine's relay handler over this service's outbox ([ADR-0019](docs/design/decisions/0019-the-outbox-holds-spine-envelopes.md)); EventBridge Scheduler every minute, one invocation at a time; role: its log plus the spine's `relay_policy_json`, attached unchanged |
+| `<name>-relay` | the spine's relay handler over this service's outbox ([ADR-0019](docs/design/decisions/0019-the-outbox-holds-spine-envelopes.md)); EventBridge Scheduler every minute, one invocation at a time; role: its log and the table, plus the spine's `relay_policy_json`, attached unchanged |
 | four alarms | `<name>-api-5xx` (five server errors in five minutes), `<name>-relay-errors`, `<name>-relay-silent` (no run in fifteen minutes), `<name>-relay-refused` (the spine refused an event; that workspace's relay is stopped until a person looks) → `alarm_actions` |
 
 ### Inputs
@@ -166,9 +171,10 @@ this repository deploys anywhere: its CI runs on GitHub-hosted runners and ends 
 | `name` | `maestro-specs` | prefix for every named resource |
 | `api_package`, `relay_package` | — | the zips `npm run bundle` writes to `api/bundle/` |
 | `web_adapter_layer_arn` | — | the Web Adapter layer for the region, arm64; see below |
+| `table_name` | `name` | the table; unique in the account and region |
 | `bucket_name` | — | the store; globally unique, the tenant's to choose |
-| `environment` | `{}` | configuration the service reads (`api/src/config.ts` is the schema): `AUTH_MODE` and the `AUTH_*` URLs, `MONGO_CONTROL_DB`, `MONGO_DB_PREFIX`, `CORS_ORIGINS`, `MCP_RESOURCE_URL`, `EVALUATOR_BASE`, `LOG_LEVEL`, … `NODE_ENV` defaults to `production`, which refuses `AUTH_MODE=dev`; the module's own variables — the port, the bucket, `RECORD_SINK` — cannot be overridden |
-| `secrets` | `{}` | environment variable name → Secrets Manager secret ARN: `MONGO_URI`, `MONGO_PASSWORD`, … see below |
+| `environment` | `{}` | configuration the service reads (`api/src/config.ts` is the schema): `AUTH_MODE` and the `AUTH_*` URLs, `CORS_ORIGINS`, `MCP_RESOURCE_URL`, `EVALUATOR_BASE`, `LOG_LEVEL`, … `NODE_ENV` defaults to `production`, which refuses `AUTH_MODE=dev`; the module's own variables — the table, the port, the bucket, `RECORD_SINK` — cannot be overridden |
+| `secrets` | `{}` | environment variable name → Secrets Manager secret ARN, for whatever a tenant's evaluator or notifier needs; the record store needs none — see below |
 | `archive` | — | `{ relay_environment = module.spine.relay_environment, relay_policy_json = module.spine.relay_policy_json }` — the spine module's outputs, passed through |
 | `relay_schedule` | `rate(1 minute)` | the latency between an act and its record |
 | `api_memory_mb`, `api_timeout_seconds` | `1024`, `29` | the timeout is capped at 29 — API Gateway's ceiling |
@@ -177,7 +183,8 @@ this repository deploys anywhere: its CI runs on GitHub-hosted runners and ends 
 | `alarm_actions` | `[]` | ARNs the alarms notify — the tenant's ops-signals topic |
 | `tags` | `{}` | |
 
-Outputs: `api_url`, `api_id`, `bucket_name`, `bucket_arn`, `api_function_name`, `relay_function_name`.
+Outputs: `api_url`, `api_id`, `table_name`, `table_arn`, `bucket_name`, `bucket_arn`, `api_function_name`,
+`relay_function_name`.
 
 ### A tenant's root
 
@@ -194,12 +201,12 @@ module "spine" {
 module "specs" {
   source                = "github.com/fps4/maestro-specs//terraform?ref=<tag>"
   name                  = "aannemer-x-specs"
+  table_name            = "aannemer-x-maestro-specs"
   bucket_name           = "aannemer-x-maestro-specs"
   api_package           = "${path.module}/../build/specs/api.zip"
   relay_package         = "${path.module}/../build/specs/relay.zip"
   web_adapter_layer_arn = "arn:aws:lambda:eu-west-1:<aws-account-id>:layer:LambdaAdapterLayerArm64:30"
   environment           = { AUTH_MODE = "jwks", AUTH_JWKS_URL = "…", AUTH_ISSUER = "…", AUTH_AUDIENCE = "specs" }
-  secrets               = { MONGO_URI = aws_secretsmanager_secret.mongo_uri.arn }
   archive = {
     relay_environment = module.spine.relay_environment
     relay_policy_json = module.spine.relay_policy_json
@@ -216,15 +223,22 @@ account, so the ARN carries an account id and cannot be a default in a public re
 from the adapter's README, [*Lambda functions packaged as Zip package for AWS managed
 runtimes*](https://github.com/awslabs/aws-lambda-web-adapter#lambda-functions-packaged-as-zip-package-for-aws-managed-runtimes):
 the `LambdaAdapterLayerArm64` ARN for your region. The module sets `AWS_LAMBDA_EXEC_WRAPPER=/opt/bootstrap`,
-`PORT=8080`, `AWS_LWA_READINESS_CHECK_PATH=/health` and `AWS_LWA_ASYNC_INIT=true` (the server connects
-to the database before it listens, and a cold start may need longer than Lambda's ten-second init
+`PORT=8080`, `AWS_LWA_READINESS_CHECK_PATH=/health` and `AWS_LWA_ASYNC_INIT=true` (the server describes
+its table before it listens, and a cold start may need longer than Lambda's ten-second init
 budget); the handler is the bundle's `run.sh`.
 
-**Secrets.** The module reads each secret in `secrets` with `data.aws_secretsmanager_secret_version`
-and sets it as the named variable on both functions, so the value is also in Terraform state. ADR-0017
-keeps that state in an encrypted, private bucket with an encrypted mirror and never in a repository,
-which is acceptable for M1. The follow-up that keeps values out of state altogether is the Secrets
-Manager Lambda extension, reading at runtime.
+**The table and the code are one schema.** `api/src/db/table.ts` and `aws_dynamodb_table.records`
+in `terraform/main.tf` declare the same table — key, indexes, TTL — and must be changed together:
+the tests and the local loop create the table from the former, a tenant's pipeline applies the
+latter, and the service refuses to start on a table whose key or indexes differ from the code's.
+
+**Secrets.** The record store needs none: no database credential exists, and each function's role
+is its grant. For anything else — an evaluator's token, a notifier's webhook — the module reads
+each secret in `secrets` with `data.aws_secretsmanager_secret_version` and sets it as the named
+variable on both functions, so the value is also in Terraform state. ADR-0017 keeps that state in
+an encrypted, private bucket with an encrypted mirror and never in a repository, which is
+acceptable for M1. The follow-up that keeps values out of state altogether is the Secrets Manager
+Lambda extension, reading at runtime.
 
 ### Building the bundles
 
@@ -303,6 +317,12 @@ the way and closed: the catalogue's `publish` outcome would have recorded a stan
 and a specification with no pinned link could be accepted. 178 tests pass, including the loop
 through HTTP and through the CLI, the adversarial cross-workspace read, and the MCP surface with
 no way to decide.
+
+**The store is DynamoDB (2026-09-20).** maestro's ADR-0018 replaced Atlas with one table per
+component; [ADR-0021](docs/design/decisions/0021-the-store-is-dynamodb.md) records how this service
+took it: a prefix per workspace under the same handle, every query a key or an index, the outbox
+one transaction, the relay on a sparse index, search a filtered read, the rebuild a deleted prefix.
+The suite runs against DynamoDB Local; the rebuild gate passes on it.
 
 **Not built yet:** the TypeScript SDK, export, and redaction. The catalogue holds no
 real standards — the pack registry does not exist, and a fixture presented as a standard would be

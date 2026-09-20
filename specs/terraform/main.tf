@@ -1,12 +1,13 @@
-# specs-service on AWS (maestro ADR-0002, ADR-0016): the object store, the API behind an HTTP API
-# Gateway through the Lambda Web Adapter, and the relay that drains the outbox into the spine's
-# archive on a schedule. The spine's own module owns the archive and the topic; this one composes
-# with its outputs. A tenant's root calls both (ADR-0017).
+# specs-service on AWS (maestro ADR-0002, ADR-0016, ADR-0018): the table, the object store, the
+# API behind an HTTP API Gateway through the Lambda Web Adapter, and the relay that drains the
+# outbox into the spine's archive on a schedule. The spine's own module owns the archive and the
+# topic; this one composes with its outputs. A tenant's root calls both (ADR-0017).
 
 locals {
   tags       = merge({ "maestro:component" = "specs-service" }, var.tags)
   api_name   = "${var.name}-api"
   relay_name = "${var.name}-relay"
+  table_name = coalesce(var.table_name, var.name)
 
   # Each secret's current value, by the environment variable name it is set as.
   secret_env = { for name, secret in data.aws_secretsmanager_secret_version.secret : name => secret.secret_string }
@@ -17,13 +18,17 @@ locals {
     NODE_ENV = "production"
   }
 
-  # What the module owns and a tenant's `environment` cannot override: the port the adapter proxies
-  # to, the bucket the module made, and RECORD_SINK=off — the API writes the outbox and relays
-  # nothing; the relay function is the one relay.
-  api_environment = {
+  # What the module owns and a tenant's `environment` cannot override: the table the module made
+  # (the function's role is the grant; there is no credential to pass), the port the adapter
+  # proxies to, the bucket the module made, and RECORD_SINK=off — the API writes the outbox and
+  # relays nothing; the relay function is the one relay. AWS_REGION is the runtime's.
+  table_environment = {
+    TABLE_NAME = aws_dynamodb_table.records.name
+  }
+  api_environment = merge(local.table_environment, {
     AWS_LAMBDA_EXEC_WRAPPER      = "/opt/bootstrap"
     AWS_LWA_READINESS_CHECK_PATH = "/health"
-    AWS_LWA_ASYNC_INIT           = "true" # connect to the database past Lambda's 10 s init budget if need be
+    AWS_LWA_ASYNC_INIT           = "true" # describe the table past Lambda's 10 s init budget if need be
     PORT                         = "8080"
     HOST                         = "0.0.0.0"
     RECORD_SINK                  = "off"
@@ -31,12 +36,118 @@ locals {
     S3_REGION                    = aws_s3_bucket.store.region
     S3_FORCE_PATH_STYLE          = "false"
     PAYLOAD_BUCKET               = aws_s3_bucket.store.bucket
-  }
+  })
+
+  # What each function may do to the table: the item operations the service uses, on the table
+  # and its indexes, and nothing that alters the table itself. No Scan: every read the service
+  # makes is a key or an index (ADR-0021), and the rebuilder's drop of a workspace's prefix is an
+  # operator's act under the operator's own grant, never a function's.
+  table_actions = [
+    "dynamodb:GetItem",
+    "dynamodb:BatchGetItem",
+    "dynamodb:PutItem",
+    "dynamodb:UpdateItem",
+    "dynamodb:DeleteItem",
+    "dynamodb:Query",
+    "dynamodb:BatchWriteItem",
+    "dynamodb:TransactWriteItems",
+    # A ConditionCheck inside a transaction is its own action, and DynamoDB Local never enforces
+    # IAM: a grant without it passes every test and refuses every decide on AWS.
+    "dynamodb:ConditionCheckItem",
+    "dynamodb:DescribeTable",
+  ]
+  table_resources = [aws_dynamodb_table.records.arn, "${aws_dynamodb_table.records.arn}/index/*"]
 }
 
 data "aws_secretsmanager_secret_version" "secret" {
   for_each  = var.secrets
   secret_id = each.value
+}
+
+# --- the record store: one table ------------------------------------------------------------------
+
+# The service's record (maestro ADR-0018; ADR-0021 here): one table keyed pk/sk, a workspace's
+# items under `ws#<workspace>#`, control items under `ctl#`; two general indexes and the sparse
+# `pending` index the relay reads; TTL on `expires_at`. api/src/db/table.ts declares the same
+# table for DynamoDB Local and the tests, and the service checks the two agree at boot — a change
+# here is a change there. On demand, so an idle tenant pays for bytes only; point-in-time recovery
+# is the second line behind the archive and the rebuild (ADR-0020). The table is the tenant's
+# data: `prevent_destroy`, and a refactor moves it with a `moved` block.
+resource "aws_dynamodb_table" "records" {
+  name         = local.table_name
+  billing_mode = "PAY_PER_REQUEST"
+  hash_key     = "pk"
+  range_key    = "sk"
+  tags         = local.tags
+
+  attribute {
+    name = "pk"
+    type = "S"
+  }
+  attribute {
+    name = "sk"
+    type = "S"
+  }
+  attribute {
+    name = "gsi1pk"
+    type = "S"
+  }
+  attribute {
+    name = "gsi1sk"
+    type = "S"
+  }
+  attribute {
+    name = "gsi2pk"
+    type = "S"
+  }
+  attribute {
+    name = "gsi2sk"
+    type = "S"
+  }
+  attribute {
+    name = "pending_pk"
+    type = "S"
+  }
+  attribute {
+    name = "pending_sk"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name            = "gsi1"
+    hash_key        = "gsi1pk"
+    range_key       = "gsi1sk"
+    projection_type = "ALL"
+  }
+  global_secondary_index {
+    name            = "gsi2"
+    hash_key        = "gsi2pk"
+    range_key       = "gsi2sk"
+    projection_type = "ALL"
+  }
+  global_secondary_index {
+    name            = "pending"
+    hash_key        = "pending_pk"
+    range_key       = "pending_sk"
+    projection_type = "ALL"
+  }
+
+  ttl {
+    attribute_name = "expires_at"
+    enabled        = true
+  }
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  server_side_encryption {
+    enabled = true
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 # --- the object store: attachments and payloads ---------------------------------------------------
@@ -123,8 +234,8 @@ resource "aws_iam_role" "api" {
   tags = local.tags
 }
 
-# Its own log, its own bucket — attachments are put and read, payloads are put, read and erased —
-# and nothing else. The archive is the relay's.
+# Its own log, its own table, its own bucket — attachments are put and read, payloads are put,
+# read and erased — and nothing else. The archive is the relay's.
 resource "aws_iam_role_policy" "api" {
   name = "api"
   role = aws_iam_role.api.id
@@ -135,6 +246,11 @@ resource "aws_iam_role_policy" "api" {
         Effect   = "Allow"
         Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
         Resource = "${aws_cloudwatch_log_group.api.arn}:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = local.table_actions
+        Resource = local.table_resources
       },
       {
         Effect   = "Allow"
@@ -275,16 +391,25 @@ resource "aws_iam_role" "relay" {
   tags = local.tags
 }
 
+# Its own log and the table — the outbox it drains and acks, the workspaces it lists, the
+# principals it checks — and nothing else of its own. The archive is the spine's grant, below.
 resource "aws_iam_role_policy" "relay_logs" {
   name = "logs"
   role = aws_iam_role.relay.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [{
-      Effect   = "Allow"
-      Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
-      Resource = "${aws_cloudwatch_log_group.relay.arn}:*"
-    }]
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "${aws_cloudwatch_log_group.relay.arn}:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = local.table_actions
+        Resource = local.table_resources
+      },
+    ]
   })
 }
 
@@ -313,7 +438,7 @@ resource "aws_lambda_function" "relay" {
   tags                           = local.tags
 
   environment {
-    variables = merge(local.environment_defaults, var.environment, local.secret_env, var.archive.relay_environment)
+    variables = merge(local.environment_defaults, var.environment, local.secret_env, local.table_environment, var.archive.relay_environment)
   }
 
   logging_config {

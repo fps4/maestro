@@ -8,6 +8,15 @@ output "api_id" {
   value       = aws_apigatewayv2_api.api.id
 }
 
+output "table_name" {
+  description = "The record store: one table, the service's own. `workspace:apply` and `workspace:rebuild` take it as TABLE_NAME."
+  value       = aws_dynamodb_table.records.name
+}
+
+output "table_arn" {
+  value = aws_dynamodb_table.records.arn
+}
+
 output "bucket_name" {
   description = "The object store: attachments and payloads."
   value       = aws_s3_bucket.store.bucket

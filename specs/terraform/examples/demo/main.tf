@@ -1,7 +1,8 @@
 # The demo tenant's specs-service, as a root would call it: the spine's module at a tag, and this
 # one composed with its outputs. Placeholder values only (maestro ADR-0017): nothing here is deployed
 # by the public repositories. A real tenant's root lives in fps4/maestro-config-<tenant>, with the
-# database URI in Secrets Manager and the values below in its terraform.tfvars.
+# values below in its terraform.tfvars. No database credential exists: the module makes the table
+# and grants the functions (maestro ADR-0018).
 
 terraform {
   required_version = ">= 1.6"
@@ -40,14 +41,11 @@ module "spine" {
   tags = { "maestro:tenant" = "aannemer-x" }
 }
 
-resource "aws_secretsmanager_secret" "mongo_uri" {
-  name = "aannemer-x/specs/mongo-uri"
-}
-
 module "specs" {
   source = "../.."
 
   name                  = "aannemer-x-specs"
+  table_name            = "aannemer-x-maestro-specs"
   bucket_name           = "aannemer-x-maestro-specs"
   api_package           = "${path.module}/../../../api/bundle/api.zip"
   relay_package         = "${path.module}/../../../api/bundle/relay.zip"
@@ -61,10 +59,6 @@ module "specs" {
     CORS_ORIGINS  = "https://specs.aannemer-x.example"
   }
 
-  secrets = {
-    MONGO_URI = aws_secretsmanager_secret.mongo_uri.arn
-  }
-
   archive = {
     relay_environment = module.spine.relay_environment
     relay_policy_json = module.spine.relay_policy_json
@@ -75,4 +69,8 @@ module "specs" {
 
 output "api_url" {
   value = module.specs.api_url
+}
+
+output "table_name" {
+  value = module.specs.table_name
 }

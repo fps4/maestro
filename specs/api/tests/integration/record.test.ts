@@ -71,11 +71,7 @@ async function propose(as: string, title: string) {
 
 async function outbox(): Promise<SpineEvent[]> {
   const handle = await harness.app.store.handle(harness.tenant);
-  return handle.db
-    .collection<SpineEvent>('outbox')
-    .find({}, { projection: { _id: 0 } })
-    .sort({ seq: 1 })
-    .toArray();
+  return handle.outbox.list();
 }
 
 describe('the record', () => {

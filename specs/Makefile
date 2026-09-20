@@ -2,12 +2,15 @@
 
 COMPOSE := docker compose -f infra/docker/compose.yml -p mstr-specs
 
-.PHONY: help up down logs ps reset api web test lint typecheck fmt apply validate mongo-shell
+.PHONY: help up down logs ps reset api web test lint typecheck fmt apply validate dynamodb table
+
+# The local loop's store: DynamoDB Local on 8030, the table the api and the tests read.
+LOCAL_DB := TABLE_NAME=specs DYNAMODB_ENDPOINT=http://127.0.0.1:8030 AWS_REGION=local
 
 help: ## Show this help
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
 
-up: ## Build and start the whole stack (mongo replica set, minio, api, web)
+up: ## Build and start the whole stack (DynamoDB Local, minio, api, web)
 	$(COMPOSE) up -d --build
 	@echo "api  http://127.0.0.1:8020/health"
 	@echo "web  http://127.0.0.1:8021"
@@ -15,7 +18,7 @@ up: ## Build and start the whole stack (mongo replica set, minio, api, web)
 down: ## Stop the stack, keeping data
 	$(COMPOSE) down
 
-reset: ## Stop the stack and DELETE its data, including the replica-set keyfile
+reset: ## Stop the stack and DELETE its data
 	$(COMPOSE) down -v --remove-orphans
 
 logs: ## Follow the logs
@@ -24,23 +27,22 @@ logs: ## Follow the logs
 ps: ## Show container status
 	$(COMPOSE) ps -a
 
-# The database only. Everything else runs on the host during development, which is faster to
+# The store only. Everything else runs on the host during development, which is faster to
 # iterate against than a rebuilt image.
-mongo: ## Start just the MongoDB replica set
-	$(COMPOSE) up -d mongo mongo-init
+dynamodb: ## Start just DynamoDB Local (the tests make their own tables on it)
+	$(COMPOSE) up -d dynamodb
 
-api: ## Run the api on the host against the compose MongoDB
-	cd api && MONGO_URI='mongodb://127.0.0.1:27019/?directConnection=true' \
-		MONGO_USER=specs MONGO_PASSWORD=specs npm run dev
+table: ## Create the local loop's table on DynamoDB Local, from api/src/db/table.ts
+	cd api && $(LOCAL_DB) npm run table:create
+
+api: ## Run the api on the host against the compose DynamoDB Local (after `make table`)
+	cd api && $(LOCAL_DB) npm run dev
 
 web: ## Run the console on the host
 	cd web && npm run dev
 
-# `directConnection=true` matters from the host: without it the driver discovers the replica set
-# member by its in-network hostname (`mstr-specs-mongo`), which the host cannot resolve.
-test: ## Run every test (needs `make mongo` first)
-	cd api && MONGO_URI='mongodb://127.0.0.1:27019/?directConnection=true' \
-		MONGO_USER=specs MONGO_PASSWORD=specs npm test
+test: ## Run every test (needs `make dynamodb` first)
+	cd api && DYNAMODB_ENDPOINT=http://127.0.0.1:8030 npm test
 	cd web && npm test
 
 lint: ## Lint both packages
@@ -58,13 +60,6 @@ fmt: ## Format both packages
 validate: ## Validate every committed workspace definition (no database needed)
 	cd api && npm run workspace:validate
 
-apply: ## Apply the catalogue and the demo tenant to the running MongoDB
-	cd api && MONGO_URI='mongodb://127.0.0.1:27019/?directConnection=true' \
-		MONGO_USER=specs MONGO_PASSWORD=specs \
-		npm run workspace:apply -- ../config/workspaces/catalogue.yaml
-	cd api && MONGO_URI='mongodb://127.0.0.1:27019/?directConnection=true' \
-		MONGO_USER=specs MONGO_PASSWORD=specs \
-		npm run workspace:apply -- ../config/workspaces/aannemer-x.yaml
-
-mongo-shell: ## Open a mongosh against the running replica set
-	$(COMPOSE) exec mongo mongosh -u specs -p specs --authenticationDatabase admin
+apply: ## Apply the catalogue and the demo tenant to the local loop's table
+	cd api && $(LOCAL_DB) npm run workspace:apply -- ../config/workspaces/catalogue.yaml
+	cd api && $(LOCAL_DB) npm run workspace:apply -- ../config/workspaces/aannemer-x.yaml

@@ -1,14 +1,15 @@
 /**
- * The M1 gate (ADR-0020): a workspace's database is dropped and rebuilt from the archive and the
+ * The M1 gate (ADR-0020): a workspace's items are dropped and rebuilt from the archive and the
  * payloads alone, and every read returns identically.
  *
  * The loop is driven over HTTP the way people and agents drive it — an agent proposes under a
  * sponsor's accountability, verdicts are recorded, questions are asked, answered and closed, a
  * decision accepts with reasoning, a second version supersedes the first, a specification pins
  * to it, a version is withdrawn with a reason, a decision is refused and recorded, another asks
- * for changes and reopens a draft. Then the relay drains, the sealer seals, every record
- * collection is snapshotted, the database is dropped, the rebuilder runs, memberships are
- * re-granted (they are grants, not record — §5), and the snapshots are compared: equal.
+ * for changes and reopens a draft. Then the relay drains, the sealer seals, every record kind of
+ * item is snapshotted — keys and index attributes included — the workspace's prefix is dropped,
+ * the rebuilder runs, memberships are re-granted (they are grants, not record — §5), and the
+ * snapshots are compared: equal.
  */
 
 import { cpSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
@@ -16,8 +17,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { FsArchive, canonicalize, sealBefore } from '@fps4/maestro-spine';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { Store } from '../../src/db/client.js';
-import { META, PROJECTION_VERSION, ProjectionBehind } from '../../src/db/collections.js';
+import { ProjectionBehind, Store } from '../../src/db/client.js';
+import { PROJECTION_VERSION } from '../../src/db/handle.js';
+import { RECORD_KINDS } from '../../src/db/keys.js';
 import { spineWorkspaceId } from '../../src/domain/ids.js';
 import { RebuildRefused, RebuildService } from '../../src/services/rebuild.js';
 import { call, grantMembership, startHarness, token, type Harness } from './helpers.js';
@@ -55,17 +57,8 @@ const specFacets = {
 const provenanceOf = (fields: object, source: 'declared' | 'extracted', by: string) =>
   Object.fromEntries(Object.keys(fields).map((f) => [f, { source, by, at: '2026-08-01T00:00:00Z' }]));
 
-/** Every record collection, without the ids Mongo minted and the one timestamp a rebuild sets anew. */
-const RECORD = [
-  'artifacts',
-  'versions',
-  'decisions',
-  'evaluations',
-  'questions',
-  'outbox',
-  'counters',
-  'drafts',
-];
+/** Every record kind of item, whole, less the one timestamp a rebuild sets anew. */
+const RECORD = RECORD_KINDS;
 
 async function grants() {
   author = await grantMembership(harness, harness.tenant, 'p-visser', ['author']);
@@ -135,20 +128,14 @@ async function recordVerdict(as: string, evaluator: string, v: Proposed['version
 }
 
 async function snapshot(): Promise<Record<string, unknown[]>> {
-  const handle = await harness.app.store.handle(harness.tenant);
-  const out: Record<string, unknown[]> = {};
-  for (const name of RECORD) {
-    const docs = await handle.db.collection(name).find({}).toArray();
-    out[name] = docs
-      .map((doc) => {
-        const { _id, ...rest } = doc as Record<string, unknown>;
-        // Counters are keyed by a string `_id` the service chose; everything else by one Mongo minted.
-        const kept = typeof _id === 'string' ? { _id, ...rest } : rest;
-        if (name === 'outbox') delete kept.delivered_at;
-        return kept;
-      })
-      .sort((a, b) => (canonicalize(a) < canonicalize(b) ? -1 : 1));
+  const out: Record<string, unknown[]> = Object.fromEntries(RECORD.map((k) => [k, []]));
+  for await (const item of harness.app.store.dump(harness.tenant)) {
+    const { kind, ...rest } = item as Record<string, unknown>;
+    if (!out[kind as string]) continue;
+    if (kind === 'outbox') delete rest.delivered_at;
+    out[kind as string]!.push(rest);
   }
+  for (const kind of RECORD) out[kind]!.sort((a, b) => (canonicalize(a) < canonicalize(b) ? -1 : 1));
   return out;
 }
 
@@ -323,8 +310,14 @@ describe('the rebuild gate', () => {
     ]) {
       expect(types, `the loop emitted ${t}`).toContain(t);
     }
-    expect(before.drafts).toHaveLength(1); // the reopened one
+    expect(before.draft).toHaveLength(1); // the reopened one
     expect((before.outbox as Array<{ delivered: boolean }>).every((e) => e.delivered)).toBe(true);
+    // Delivered means off the pending index: the sparse attributes are gone, not merely false.
+    expect(
+      (before.outbox as Array<Record<string, unknown>>).every(
+        (e) => !('pending_pk' in e) && !('pending_sk' in e),
+      ),
+    ).toBe(true);
 
     // --- a populated target is refused without --force ---
     const rebuilder = new RebuildService(harness.app.store);
@@ -360,10 +353,7 @@ describe('the rebuild gate', () => {
     expect(await reads({ spec: spec1, bc: bc1, withdrawn: bc3 })).toEqual(readsBefore);
 
     const handle = await harness.app.store.handle(harness.tenant);
-    expect(await handle.db.collection(META).findOne({ _id: 'projection' } as never)).toEqual({
-      _id: 'projection',
-      projection_version: PROJECTION_VERSION,
-    });
+    expect(await handle.meta.get()).toEqual({ projection_version: PROJECTION_VERSION });
 
     // --- and a populated target is refused again, now that the rebuild populated it ---
     await expect(
@@ -401,18 +391,14 @@ describe('the rebuild gate', () => {
 
   it('refuses to serve a workspace whose projection is behind, until it is rebuilt', async () => {
     const handle = await harness.app.store.handle(harness.tenant);
-    await handle.db
-      .collection(META)
-      .updateOne({ _id: 'projection' } as never, { $set: { projection_version: 0 } });
+    await handle.meta.put({ projection_version: 0 });
     // A fresh Store, as a restarted service would open one.
     const store = await Store.connect(harness.config);
     try {
       await expect(store.handle(harness.tenant)).rejects.toBeInstanceOf(ProjectionBehind);
     } finally {
       await store.close();
-      await handle.db
-        .collection(META)
-        .updateOne({ _id: 'projection' } as never, { $set: { projection_version: PROJECTION_VERSION } });
+      await handle.meta.put({ projection_version: PROJECTION_VERSION });
     }
   });
 });

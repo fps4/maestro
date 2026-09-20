@@ -5,15 +5,13 @@
  *        ▲                                                            │
  *        └──────────────── request_changes reopens a draft ───────────┘
  *
- * Domain rules meet persistence here, and nothing above this layer knows about MongoDB. The rules
+ * Domain rules meet persistence here, and nothing above this layer knows about DynamoDB. The rules
  * themselves live in `domain/` as pure functions; this file is what makes them true of stored data.
  */
 
-import type { ClientSession } from 'mongodb';
-import { ARTIFACTS, DRAFTS, VERSIONS, WITHOUT_BODY } from '../db/collections.js';
 import { digestOf } from '../domain/digest.js';
 import type { Actor, Recorder } from '../db/outbox.js';
-import type { WorkspaceHandle } from '../db/handle.js';
+import { Conflict, withoutBody, type Transaction, type WorkspaceHandle } from '../db/handle.js';
 import {
   versionPayloadKey,
   writePayload,
@@ -27,6 +25,7 @@ import { parseDuration, typeIn, initialPhase } from '../domain/workspace-definit
 import { composeDocument, parseDocument } from '../domain/document.js';
 import { labelsFor } from '../domain/labels.js';
 import { draftReadiness, type Readiness } from '../domain/readiness.js';
+import { excerpt } from './render.js';
 import { phaseAfterPropose } from '../domain/lifecycle.js';
 import { assertRevision, nextState, proposeVersion, recordContribution } from '../domain/versioning.js';
 import type {
@@ -128,14 +127,10 @@ export class ArtifactService {
     return writePayload(this.payloads, versionPayloadKey(this.handle.workspace, subject, what), value);
   }
 
-  private drafts() {
-    return this.handle.collection<Draft>(DRAFTS);
-  }
-  private versions() {
-    return this.handle.collection<Version>(VERSIONS);
-  }
-  private artifacts() {
-    return this.handle.collection<Artifact>(ARTIFACTS);
+  /** The one place a stale write becomes the caller's sentence. */
+  private refuseConflict(error: unknown): never {
+    if (error instanceof Conflict) throw new Refused(error.message);
+    throw error;
   }
 
   private typeOrThrow(id: string) {
@@ -158,7 +153,7 @@ export class ArtifactService {
 
     let basedOn: number | undefined;
     if (input.artifact) {
-      const artifact = await this.artifacts().findOne({ id: input.artifact });
+      const artifact = await this.handle.artifacts.get(input.artifact);
       if (!artifact) throw new NotFound(`Artifact \`${input.artifact}\``);
       if (artifact.type !== input.type) {
         throw new Refused(
@@ -187,17 +182,15 @@ export class ArtifactService {
       ...(basedOn ? { based_on: basedOn } : {}),
       created_at: now,
       updated_at: now,
-      ...(type.draft_expiry
-        ? { expires_at: new Date(Date.now() + parseDuration(type.draft_expiry)).toISOString() }
-        : {}),
+      ...(type.draft_expiry ? { expires_at: expiryFrom(type.draft_expiry) } : {}),
     };
 
-    await this.drafts().insertOne(draft);
+    await this.handle.drafts.insert(draft);
     return draft;
   }
 
   async getDraft(id: string): Promise<Draft> {
-    const draft = await this.drafts().findOne({ id }, { projection: { _id: 0 } });
+    const draft = await this.handle.drafts.get(id);
     if (!draft) throw new NotFound(`Draft \`${id}\``);
     return draft;
   }
@@ -239,18 +232,12 @@ export class ArtifactService {
       ...(input.catalogue_refs ? { catalogue_refs: input.catalogue_refs } : {}),
       ...(input.classification ? { classification: input.classification } : {}),
       ...(input.effective ? { effective: input.effective } : {}),
-      ...(type.draft_expiry
-        ? { expires_at: new Date(Date.now() + parseDuration(type.draft_expiry)).toISOString() }
-        : {}),
+      ...(type.draft_expiry ? { expires_at: expiryFrom(type.draft_expiry) } : {}),
     };
 
     // Conditioned on the revision, so two concurrent saves cannot both win: the loser's condition
     // no longer matches and it is refused with the current state rather than overwriting silently.
-    const result = await this.drafts().findOneAndUpdate(
-      { id, revision: draft.revision },
-      { $set: update },
-      { returnDocument: 'after', projection: { _id: 0 } },
-    );
+    const result = await this.handle.drafts.save(id, draft.revision, update);
     if (!result)
       throw new Refused('This draft changed while you were saving. Reload and apply your edit again.');
     return result;
@@ -337,18 +324,12 @@ export class ArtifactService {
     let provenance = draft.provenance;
     for (const field of fields) provenance = confirmFacet(provenance, field, actor.principal, now);
 
-    const result = await this.drafts().findOneAndUpdate(
-      { id, revision: draft.revision },
-      {
-        $set: {
-          provenance,
-          revision: draft.revision + 1,
-          updated_at: now,
-          contributors: recordContribution(draft.contributors, actor.principal, actor.kind, now),
-        },
-      },
-      { returnDocument: 'after', projection: { _id: 0 } },
-    );
+    const result = await this.handle.drafts.save(id, draft.revision, {
+      provenance,
+      revision: draft.revision + 1,
+      updated_at: now,
+      contributors: recordContribution(draft.contributors, actor.principal, actor.kind, now),
+    });
     if (!result) throw new Refused('This draft changed while you were confirming. Reload and try again.');
     return result;
   }
@@ -370,14 +351,11 @@ export class ArtifactService {
   }
 
   async discardDraft(id: string): Promise<void> {
-    await this.drafts().deleteOne({ id });
+    await this.handle.drafts.delete(id);
   }
 
-  async listDrafts(): Promise<Draft[]> {
-    return this.drafts()
-      .find({}, { projection: { _id: 0, ...WITHOUT_BODY } })
-      .sort({ updated_at: -1 })
-      .toArray();
+  async listDrafts(): Promise<Array<ReturnType<typeof withoutBody<Draft>>>> {
+    return this.handle.drafts.list();
   }
 
   // --- propose ---
@@ -387,7 +365,7 @@ export class ArtifactService {
    *
    * Everything here happens in one transaction with the outbox emission, so the stored state and
    * the emitted stream cannot disagree. A divergence between them is the alertable condition that
-   * compensates for MongoDB having no check constraints.
+   * compensates for the store having no check constraints.
    */
   async propose(draftId: string, actor: Actor, bodyCeilingBytes: number): Promise<Version> {
     const draft = await this.getDraft(draftId);
@@ -401,9 +379,9 @@ export class ArtifactService {
     const now = new Date().toISOString();
 
     // The ordinal is read before the transaction so the payload can be written before it
-    // (ADR-0020 §1); the unique index on (artifact, ordinal) and the re-read below make a race
-    // a refusal rather than a second @n.
-    const seen = draft.artifact ? await this.artifacts().findOne({ id: artifactId }) : null;
+    // (ADR-0020 §1); the version's key is (artifact, ordinal) and the artifact's update is
+    // conditioned on the ordinal read, so a race is a refusal rather than a second @n.
+    const seen = draft.artifact ? await this.handle.artifacts.get(artifactId) : null;
     if (draft.artifact && !seen) throw new NotFound(`Artifact \`${artifactId}\``);
 
     const ordinal = (seen?.latest_ordinal ?? 0) + 1;
@@ -419,52 +397,50 @@ export class ArtifactService {
     });
     const payload = await this.payload(version, 'version.json', versionPayloadOf(version));
 
-    return this.handle.transaction(async (session) => {
-      const artifact = draft.artifact
-        ? await this.artifacts().findOne({ id: artifactId }, { session })
-        : null;
-      if (draft.artifact && !artifact) throw new NotFound(`Artifact \`${artifactId}\``);
-      if ((artifact?.latest_ordinal ?? 0) + 1 !== ordinal) {
-        throw new Refused(
-          `\`${artifactId}\` moved on while this draft was being proposed. Propose it again.`,
-        );
-      }
+    const moved = `\`${artifactId}\` moved on while this draft was being proposed. Propose it again.`;
+    return this.handle
+      .transaction(async (tx) => {
+        const artifact = draft.artifact ? await this.handle.artifacts.get(artifactId) : null;
+        if (draft.artifact && !artifact) throw new NotFound(`Artifact \`${artifactId}\``);
+        if ((artifact?.latest_ordinal ?? 0) + 1 !== ordinal) throw new Refused(moved);
 
-      await this.versions().insertOne(version, { session });
+        await this.handle.versions.insert(version, tx);
 
-      const phase = artifact
-        ? (phaseAfterPropose(this.workspace.definition, artifact.phase) ?? artifact.phase)
-        : initialPhase(this.workspace.definition);
+        const phase = artifact
+          ? (phaseAfterPropose(this.workspace.definition, artifact.phase) ?? artifact.phase)
+          : initialPhase(this.workspace.definition);
 
-      if (artifact) {
-        await this.artifacts().updateOne(
-          { id: artifactId },
-          { $set: { latest_ordinal: ordinal, phase, title: version.title, updated_at: now } },
-          { session },
-        );
-      } else {
-        await this.artifacts().insertOne(
-          {
-            id: artifactId,
-            workspace: this.handle.workspace,
-            type: draft.type,
-            title: version.title,
-            phase,
-            latest_ordinal: ordinal,
-            created_at: now,
-            updated_at: now,
-          },
-          { session },
-        );
-      }
+        if (artifact) {
+          await this.handle.artifacts.update(
+            artifactId,
+            { latest_ordinal: ordinal, phase, title: version.title, updated_at: now },
+            tx,
+            { expectLatest: artifact.latest_ordinal, onConflict: moved },
+          );
+        } else {
+          await this.handle.artifacts.insert(
+            {
+              id: artifactId,
+              workspace: this.handle.workspace,
+              type: draft.type,
+              title: version.title,
+              phase,
+              latest_ordinal: ordinal,
+              created_at: now,
+              updated_at: now,
+            },
+            tx,
+          );
+        }
 
-      // The draft is consumed by the proposal. Keeping it would leave two live representations of
-      // the same intent, and the whole point of the split is that only one of them is a record.
-      await this.drafts().deleteOne({ id: draftId }, { session });
+        // The draft is consumed by the proposal. Keeping it would leave two live representations
+        // of the same intent, and the whole point of the split is that only one of them is a record.
+        await this.handle.drafts.delete(draftId, tx);
 
-      await this.emitVersionProposed(session, version, payload);
-      return version;
-    });
+        await this.emitVersionProposed(tx, version, payload);
+        return version;
+      })
+      .catch((error) => this.refuseConflict(error));
   }
 
   /**
@@ -489,38 +465,34 @@ export class ArtifactService {
     const payload = reason
       ? await this.payload({ artifact: artifactId, ordinal }, 'withdrawal.json', { reason })
       : undefined;
-    return this.handle.transaction(async (session) => {
-      const updated = await this.versions().findOneAndUpdate(
-        { artifact: artifactId, ordinal, state: 'proposed' },
-        { $set: { state, decided_at: now } },
-        { session, returnDocument: 'after', projection: { _id: 0 } },
-      );
-      if (!updated) throw new Refused(`\`${artifactId}@${ordinal}\` is no longer proposed.`);
-      await this.record().emit(session, [
-        {
-          type: 'VersionWithdrawn',
-          subject: { artifact: artifactId, ordinal },
-          artifact_type: version.type,
-          seat: 'author',
-          body: reason ? { reason_digest: digestOf(reason) } : {},
-          occurred_at: now,
-          ...(payload ? { payload } : {}),
-        },
-      ]);
-      return updated;
-    });
+    return this.handle
+      .transaction(async (tx) => {
+        await this.handle.versions.update(artifactId, ordinal, { state, decided_at: now }, tx, {
+          expectState: 'proposed',
+        });
+        await this.record().emit(tx, [
+          {
+            type: 'VersionWithdrawn',
+            subject: { artifact: artifactId, ordinal },
+            artifact_type: version.type,
+            seat: 'author',
+            body: reason ? { reason_digest: digestOf(reason) } : {},
+            occurred_at: now,
+            ...(payload ? { payload } : {}),
+          },
+        ]);
+        return { ...version, state, decided_at: now };
+      })
+      .catch((error) => this.refuseConflict(error));
   }
 
   /** The versions of a lineage still awaiting a decision. */
-  async proposedVersions(artifactId: string): Promise<Version[]> {
-    return this.versions()
-      .find({ artifact: artifactId, state: 'proposed' }, { projection: { _id: 0, ...WITHOUT_BODY } })
-      .sort({ ordinal: 1 })
-      .toArray();
+  async proposedVersions(artifactId: string): Promise<Array<ReturnType<typeof withoutBody<Version>>>> {
+    return this.handle.versions.ofArtifactInState(artifactId, 'proposed');
   }
 
-  private async emitVersionProposed(session: ClientSession, version: Version, payload: PayloadRef) {
-    await this.record().emit(session, [
+  private async emitVersionProposed(tx: Transaction, version: Version, payload: PayloadRef) {
+    await this.record().emit(tx, [
       {
         type: 'VersionProposed',
         subject: { artifact: version.artifact, ordinal: version.ordinal },
@@ -543,38 +515,28 @@ export class ArtifactService {
   // --- reads ---
 
   async getArtifact(id: string): Promise<Artifact> {
-    const artifact = await this.artifacts().findOne({ id }, { projection: { _id: 0 } });
+    const artifact = await this.handle.artifacts.get(id);
     if (!artifact) throw new NotFound(`Artifact \`${id}\``);
     return artifact;
   }
 
   async getVersion(artifact: string, ordinal: number): Promise<Version> {
-    const version = await this.versions().findOne({ artifact, ordinal }, { projection: { _id: 0 } });
+    const version = await this.handle.versions.get(artifact, ordinal);
     if (!version) throw new NotFound(`Version \`${artifact}@${ordinal}\``);
     return version;
   }
 
-  async listVersions(artifact: string): Promise<Version[]> {
-    return this.versions()
-      .find({ artifact }, { projection: { _id: 0, ...WITHOUT_BODY } })
-      .sort({ ordinal: -1 })
-      .toArray();
+  async listVersions(artifact: string): Promise<Array<ReturnType<typeof withoutBody<Version>>>> {
+    return this.handle.versions.ofArtifact(artifact);
   }
 
   async acceptedVersion(artifact: string): Promise<Version | null> {
-    return this.versions().findOne({ artifact, state: 'accepted' }, { projection: { _id: 0 } });
+    return this.handle.versions.accepted(artifact);
   }
 
   /** Accepted ordinals for a set of artifacts, for resolving links in one round trip. */
   async acceptedOrdinals(artifacts: string[]): Promise<Map<string, number>> {
-    if (artifacts.length === 0) return new Map();
-    const rows = await this.versions()
-      .find(
-        { artifact: { $in: artifacts }, state: 'accepted' },
-        { projection: { _id: 0, artifact: 1, ordinal: 1 } },
-      )
-      .toArray();
-    return new Map(rows.map((r) => [r.artifact, r.ordinal]));
+    return this.handle.artifacts.acceptedOrdinals(artifacts);
   }
 
   /**
@@ -586,29 +548,17 @@ export class ArtifactService {
   async register(): Promise<
     Array<Artifact & { latest_state?: Version['state']; latest_digest?: string; open_draft?: string }>
   > {
-    const artifacts = await this.artifacts()
-      .find({}, { projection: { _id: 0 } })
-      .sort({ updated_at: -1 })
-      .toArray();
+    const artifacts = await this.handle.artifacts.list();
     if (artifacts.length === 0) return [];
 
-    const ids = artifacts.map((a) => a.id);
-    const latest = await this.versions()
-      .find(
-        { artifact: { $in: ids } },
-        { projection: { _id: 0, artifact: 1, ordinal: 1, state: 1, digest: 1 } },
-      )
-      .sort({ ordinal: -1 })
-      .toArray();
-    const latestByArtifact = new Map<string, (typeof latest)[number]>();
-    for (const version of latest) {
-      if (!latestByArtifact.has(version.artifact)) latestByArtifact.set(version.artifact, version);
-    }
+    // The artifact names its latest ordinal, so the latest versions are one batched read by key.
+    const latest = await this.handle.versions.getMany(
+      artifacts.map((a) => ({ artifact: a.id, ordinal: a.latest_ordinal })),
+    );
+    const latestByArtifact = new Map(latest.map((v) => [v.artifact, v]));
 
-    const openDrafts = await this.drafts()
-      .find({ artifact: { $in: ids } }, { projection: { _id: 0, id: 1, artifact: 1 } })
-      .toArray();
-    const draftByArtifact = new Map(openDrafts.map((d) => [d.artifact!, d.id]));
+    const openDrafts = await this.handle.drafts.openOn(artifacts.map((a) => a.id));
+    const draftByArtifact = new Map(openDrafts.map((d) => [d.artifact, d.id]));
 
     return artifacts.map((artifact) => {
       const version = latestByArtifact.get(artifact.id);
@@ -622,20 +572,46 @@ export class ArtifactService {
   }
 
   /**
-   * Search facets and bodies, within this workspace only.
+   * Search titles and bodies, within this workspace only (ADR-0021 §5).
    *
-   * The index lives in the workspace's own database, so the boundary holds by construction rather
-   * than by a filter someone might forget.
+   * A filtered read over the workspace's versions: every term must appear in the title or the
+   * body, case-insensitively, and a hit in the title outweighs one in the body. Bounded by the
+   * workspace by construction — the read is the workspace's own partition — rather than by a
+   * filter someone might forget. Adequate for the MVP; a search service is a later decision.
    */
-  async search(query: string, limit = 25): Promise<Array<Version & { score: number }>> {
-    return this.versions()
-      .aggregate<Version & { score: number }>([
-        { $match: { $text: { $search: query } } },
-        { $addFields: { score: { $meta: 'textScore' } } },
-        { $sort: { score: -1 } },
-        { $limit: limit },
-        { $project: { _id: 0, 'body.content': 0 } },
-      ])
-      .toArray();
+  async search(
+    query: string,
+    limit = 25,
+  ): Promise<Array<ReturnType<typeof withoutBody<Version>> & { score: number; excerpt: string }>> {
+    const terms = query
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length > 0);
+    if (terms.length === 0) return [];
+    const hits: Array<ReturnType<typeof withoutBody<Version>> & { score: number; excerpt: string }> = [];
+    for (const version of await this.handle.versions.all()) {
+      const title = version.title.toLowerCase();
+      const body = version.body.content.toLowerCase();
+      let score = 0;
+      for (const term of terms) {
+        const inTitle = title.includes(term);
+        const inBody = body.includes(term);
+        if (!inTitle && !inBody) {
+          score = 0;
+          break;
+        }
+        score += (inTitle ? 10 : 0) + (inBody ? 1 : 0);
+      }
+      if (score > 0) hits.push({ ...withoutBody(version), score, excerpt: excerpt(version.body) });
+    }
+    return hits
+      .sort((a, b) => b.score - a.score || b.proposed_at.localeCompare(a.proposed_at))
+      .slice(0, limit);
   }
+}
+
+/** A draft's expiry, to the second: the table's TTL keeps seconds, and a round trip must be lossless. */
+function expiryFrom(duration: string): string {
+  const at = Date.now() + parseDuration(duration);
+  return new Date(Math.floor(at / 1000) * 1000).toISOString();
 }

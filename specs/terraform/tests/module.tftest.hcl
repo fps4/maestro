@@ -1,11 +1,19 @@
 # Module tests with a mocked provider: no account, no credentials. What they check is the shape the
-# design promises — the store versioned and never Object-Locked, the API behind the Web Adapter with
-# RECORD_SINK=off, the relay carrying the spine's names under the spine's policy, on its schedule —
-# not whether AWS accepts it. That is proven by the first real tenant (maestro ADR-0017).
+# design promises — the table keyed and indexed as api/src/db/table.ts declares it, on demand, with
+# PITR and TTL; the store versioned and never Object-Locked; the API behind the Web Adapter with
+# RECORD_SINK=off; both functions granted the table and no credential; the relay carrying the
+# spine's names under the spine's policy, on its schedule — not whether AWS accepts it. That is
+# proven by the first real tenant (maestro ADR-0017).
 
 # Terraform >= 1.11 (override_during). ARNs are mocked without an account: the public-repository
 # guards forbid one, and the policies only need the shape.
 mock_provider "aws" {
+  mock_resource "aws_dynamodb_table" {
+    override_during = plan
+    defaults = {
+      arn = "arn:aws:dynamodb:eu-west-1::table/aannemer-x-specs"
+    }
+  }
   mock_resource "aws_s3_bucket" {
     override_during = plan
     defaults = {
@@ -66,7 +74,7 @@ variables {
     RECORD_SINK   = "s3" # a tenant's mistake; the module owns this one
   }
   secrets = {
-    MONGO_URI = "arn:aws:secretsmanager:eu-west-1::secret:aannemer-x/specs/mongo-uri"
+    EVALUATOR_TOKEN = "arn:aws:secretsmanager:eu-west-1::secret:aannemer-x/specs/evaluator-token"
   }
   archive = {
     relay_environment = {
@@ -80,6 +88,32 @@ variables {
 
 run "defaults" {
   command = plan
+
+  # the table: what api/src/db/table.ts declares, and what the service checks at boot
+  assert {
+    condition     = aws_dynamodb_table.records.name == "maestro-specs" && aws_dynamodb_table.records.hash_key == "pk" && aws_dynamodb_table.records.range_key == "sk"
+    error_message = "one table, named after the module, keyed pk/sk"
+  }
+  assert {
+    condition     = aws_dynamodb_table.records.billing_mode == "PAY_PER_REQUEST"
+    error_message = "on demand: an idle tenant pays for bytes only"
+  }
+  assert {
+    condition     = aws_dynamodb_table.records.point_in_time_recovery[0].enabled && aws_dynamodb_table.records.server_side_encryption[0].enabled
+    error_message = "point-in-time recovery and encryption at rest are on"
+  }
+  assert {
+    condition     = aws_dynamodb_table.records.ttl[0].attribute_name == "expires_at" && aws_dynamodb_table.records.ttl[0].enabled
+    error_message = "expiry is the table's TTL on expires_at"
+  }
+  assert {
+    condition     = toset([for i in aws_dynamodb_table.records.global_secondary_index : i.name]) == toset(["gsi1", "gsi2", "pending"])
+    error_message = "the two general indexes and the sparse pending index, as table.ts names them"
+  }
+  assert {
+    condition     = alltrue([for i in aws_dynamodb_table.records.global_secondary_index : i.hash_key == "${i.name == "pending" ? "pending_" : i.name}${i.name == "pending" ? "pk" : "pk"}" && i.range_key == "${i.name == "pending" ? "pending_" : i.name}sk" && i.projection_type == "ALL"])
+    error_message = "each index is keyed <name>pk/<name>sk (pending_pk/pending_sk) and projects the whole item"
+  }
 
   # the store
   assert {
@@ -133,8 +167,16 @@ run "defaults" {
     error_message = "the tenant's environment reaches the API; a deployment is production unless it says otherwise"
   }
   assert {
-    condition     = aws_lambda_function.api.environment[0].variables["MONGO_URI"] == "mocked-secret-value"
+    condition     = aws_lambda_function.api.environment[0].variables["EVALUATOR_TOKEN"] == "mocked-secret-value"
     error_message = "each secret is read and set as the variable it is named for"
+  }
+  assert {
+    condition     = aws_lambda_function.api.environment[0].variables["TABLE_NAME"] == "maestro-specs" && !contains(keys(aws_lambda_function.api.environment[0].variables), "DYNAMODB_ENDPOINT")
+    error_message = "the API reads the module's table by name, at the SDK's endpoint for the region"
+  }
+  assert {
+    condition     = length([for k in keys(aws_lambda_function.api.environment[0].variables) : k if startswith(k, "MONGO")]) == 0
+    error_message = "no database credential exists (maestro ADR-0018)"
   }
   assert {
     condition     = aws_lambda_function.api.timeout == 29
@@ -142,7 +184,11 @@ run "defaults" {
   }
   assert {
     condition     = !strcontains(aws_iam_role_policy.api.policy, "\"Resource\":\"*\"") && !strcontains(aws_iam_role_policy.api.policy, "sns:") && !strcontains(aws_iam_role_policy.api.policy, "aannemer-x-maestro-archive")
-    error_message = "the API's role reaches its log and its bucket, nothing else — the archive is the relay's"
+    error_message = "the API's role reaches its log, its table and its bucket, nothing else — the archive is the relay's"
+  }
+  assert {
+    condition     = strcontains(aws_iam_role_policy.api.policy, "dynamodb:TransactWriteItems") && strcontains(aws_iam_role_policy.api.policy, "dynamodb:ConditionCheckItem") && strcontains(aws_iam_role_policy.api.policy, "table/aannemer-x-specs/index/*") && !strcontains(aws_iam_role_policy.api.policy, "dynamodb:Scan") && !strcontains(aws_iam_role_policy.api.policy, "dynamodb:DeleteTable")
+    error_message = "the API is granted the item operations on the table and its indexes — never a scan, never the table itself"
   }
 
   # the gateway
@@ -177,8 +223,12 @@ run "defaults" {
     error_message = "the relay carries the spine's three names as the spine's module output them"
   }
   assert {
-    condition     = aws_lambda_function.relay.environment[0].variables["MONGO_URI"] == "mocked-secret-value" && aws_lambda_function.relay.environment[0].variables["AUTH_MODE"] == "jwks"
-    error_message = "the relay reads the same database and configuration as the API"
+    condition     = aws_lambda_function.relay.environment[0].variables["TABLE_NAME"] == "maestro-specs" && aws_lambda_function.relay.environment[0].variables["EVALUATOR_TOKEN"] == "mocked-secret-value" && aws_lambda_function.relay.environment[0].variables["AUTH_MODE"] == "jwks"
+    error_message = "the relay reads the same table and configuration as the API"
+  }
+  assert {
+    condition     = strcontains(aws_iam_role_policy.relay_logs.policy, "dynamodb:Query") && strcontains(aws_iam_role_policy.relay_logs.policy, "dynamodb:UpdateItem") && !strcontains(aws_iam_role_policy.relay_logs.policy, "dynamodb:Scan")
+    error_message = "the relay is granted the table: it reads pending and acks"
   }
   assert {
     condition     = aws_iam_role_policy.relay_archive.policy == var.archive.relay_policy_json
@@ -186,7 +236,7 @@ run "defaults" {
   }
   assert {
     condition     = !strcontains(aws_iam_role_policy.relay_logs.policy, "s3:")
-    error_message = "the relay's own policy is its log; the archive comes from the spine's policy"
+    error_message = "the relay's own policy is its log and its table; the archive comes from the spine's policy"
   }
   assert {
     condition     = aws_lambda_function.relay.reserved_concurrent_executions == 1
@@ -215,11 +265,13 @@ run "tenant_overrides" {
 
   variables {
     name                = "aannemer-x-specs"
+    table_name          = "aannemer-x-maestro-specs-records"
     relay_schedule      = "rate(5 minutes)"
     api_timeout_seconds = 15
     environment = {
-      NODE_ENV  = "development"
-      AUTH_MODE = "dev"
+      NODE_ENV   = "development"
+      AUTH_MODE  = "dev"
+      TABLE_NAME = "somebody-elses-table" # a tenant's mistake; the module owns this one
     }
     secrets = {}
   }
@@ -227,6 +279,10 @@ run "tenant_overrides" {
   assert {
     condition     = aws_lambda_function.api.function_name == "aannemer-x-specs-api" && aws_lambda_function.relay.function_name == "aannemer-x-specs-relay"
     error_message = "the name prefixes every function"
+  }
+  assert {
+    condition     = aws_dynamodb_table.records.name == "aannemer-x-maestro-specs-records" && aws_lambda_function.api.environment[0].variables["TABLE_NAME"] == "aannemer-x-maestro-specs-records" && aws_lambda_function.relay.environment[0].variables["TABLE_NAME"] == "aannemer-x-maestro-specs-records"
+    error_message = "the tenant may name the table; both functions read the one the module made, whatever the tenant's environment says"
   }
   assert {
     condition     = aws_scheduler_schedule.relay.schedule_expression == "rate(5 minutes)"
@@ -241,7 +297,7 @@ run "tenant_overrides" {
     error_message = "NODE_ENV is a default the tenant may override; the module's own variables are not"
   }
   assert {
-    condition     = !contains(keys(aws_lambda_function.api.environment[0].variables), "MONGO_URI")
+    condition     = !contains(keys(aws_lambda_function.api.environment[0].variables), "EVALUATOR_TOKEN")
     error_message = "no secrets, no secret variables"
   }
 }

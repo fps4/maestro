@@ -11,34 +11,27 @@
  * rather than aspirational.
  */
 
-import { PRINCIPALS } from '../db/collections.js';
 import type { Store } from '../db/client.js';
+import type { PrincipalRecord } from '../db/control.js';
 import { mintPrincipalId } from '../domain/ids.js';
 import type { Principal, PrincipalKind } from '../domain/types.js';
 
-export interface PrincipalRecord extends Principal {
-  issuer?: string;
-  subject?: string;
-  /** The human answerable for an agent's work. Never the agent, and never a credential. */
-  operated_by?: string;
-  created_at: string;
-  last_seen_at?: string;
-}
+export type { PrincipalRecord } from '../db/control.js';
 
 export class PrincipalDirectory {
   private readonly cache = new Map<string, PrincipalRecord>();
 
   constructor(private readonly store: Store) {}
 
-  private collection() {
-    return this.store.control().collection<PrincipalRecord>(PRINCIPALS);
+  private get principals() {
+    return this.store.control.principals;
   }
 
   /**
    * Resolve a token's issuer and subject to a local principal, minting one on first sight.
    *
-   * First sight is the only moment the issuer's subject is stored, and it is stored here — in the
-   * control database, on the mapping row — never on a record.
+   * First sight is the only moment the issuer's subject is stored, and it is stored here — among
+   * the control items, on the mapping item — never on a record.
    */
   async resolve(input: {
     issuer: string;
@@ -48,22 +41,8 @@ export class PrincipalDirectory {
     operated_by?: string;
   }): Promise<PrincipalRecord> {
     const now = new Date().toISOString();
-    const existing = await this.collection().findOne({ issuer: input.issuer, subject: input.subject });
-    if (existing) {
-      // A display name changes; a principal id does not. Keeping the name current is what makes a
-      // five-year-old decision readable without a lookup table nobody kept.
-      if (existing.display_name !== input.display_name) {
-        await this.collection().updateOne(
-          { id: existing.id },
-          { $set: { display_name: input.display_name, last_seen_at: now } },
-        );
-        existing.display_name = input.display_name;
-      } else {
-        await this.collection().updateOne({ id: existing.id }, { $set: { last_seen_at: now } });
-      }
-      this.cache.set(existing.id, existing);
-      return existing;
-    }
+    const existing = await this.principals.bySubject(input.issuer, input.subject);
+    if (existing) return this.seen(existing, input.display_name, now);
 
     const record: PrincipalRecord = {
       id: mintPrincipalId(input.kind),
@@ -75,15 +54,36 @@ export class PrincipalDirectory {
       created_at: now,
       last_seen_at: now,
     };
-    await this.collection().insertOne(record);
+    const { inserted } = await this.principals.insert(record);
+    if (!inserted) {
+      // Two first sights at once: the other one minted, and it is the one to keep.
+      const minted = await this.principals.bySubject(input.issuer, input.subject);
+      if (!minted) throw new Error(`Principal for ${input.issuer}/${input.subject} vanished after a race.`);
+      return this.seen(minted, input.display_name, now);
+    }
     this.cache.set(record.id, record);
     return record;
+  }
+
+  /**
+   * A display name changes; a principal id does not. Keeping the name current is what makes a
+   * five-year-old decision readable without a lookup table nobody kept.
+   */
+  private async seen(existing: PrincipalRecord, displayName: string, now: string): Promise<PrincipalRecord> {
+    const renamed = existing.display_name !== displayName;
+    await this.principals.touch(existing.id, {
+      ...(renamed ? { display_name: displayName } : {}),
+      last_seen_at: now,
+    });
+    const current = { ...existing, display_name: displayName, last_seen_at: now };
+    this.cache.set(current.id, current);
+    return current;
   }
 
   async get(id: string): Promise<PrincipalRecord | null> {
     const cached = this.cache.get(id);
     if (cached) return cached;
-    const found = await this.collection().findOne({ id }, { projection: { _id: 0 } });
+    const found = await this.principals.get(id);
     if (found) this.cache.set(id, found);
     return found;
   }
@@ -92,10 +92,7 @@ export class PrincipalDirectory {
     const unique = [...new Set(ids)].filter(Boolean);
     const missing = unique.filter((id) => !this.cache.has(id));
     if (missing.length > 0) {
-      const found = await this.collection()
-        .find({ id: { $in: missing } }, { projection: { _id: 0 } })
-        .toArray();
-      for (const record of found) this.cache.set(record.id, record);
+      for (const record of await this.principals.getMany(missing)) this.cache.set(record.id, record);
     }
     const found = new Map<string, PrincipalRecord>();
     for (const id of unique) {

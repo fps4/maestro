@@ -1,12 +1,13 @@
 /**
  * Integration harness.
  *
- * These tests drive the real service against a real MongoDB replica set, because the meaningful
- * behaviour of this system is integration-shaped: a transaction that half-applies, a pin that
- * resolves against stored state, an index that stops a query crossing a boundary. None of that is
- * observable from a unit test.
+ * These tests drive the real service against DynamoDB Local, because the meaningful behaviour of
+ * this system is integration-shaped: a transaction that half-applies, a pin that resolves against
+ * stored state, a key prefix that stops a query crossing a boundary. None of that is observable
+ * from a unit test.
  */
 
+import { randomBytes } from 'node:crypto';
 import { mkdtempSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -16,9 +17,10 @@ import { parse } from 'yaml';
 import type { FastifyInstance } from 'fastify';
 import { buildApp, type App } from '../../src/app.js';
 import { loadConfig, type Config } from '../../src/config.js';
+import { dynamoClientFor } from '../../src/db/client.js';
+import { createTable, deleteTable } from '../../src/db/table.js';
 import { parseWorkspaceDefinition } from '../../src/domain/workspace-definition.js';
 import { WorkspaceRegistry } from '../../src/services/workspaces.js';
-import { MEMBERSHIPS } from '../../src/db/collections.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 /** The shipped definitions — the catalogue is applied from here. */
@@ -30,26 +32,20 @@ export const CONFIG_DIR = resolve(here, '../../../config/workspaces');
  */
 export const FIXTURE_DIR = resolve(here, '../fixtures');
 
-export const MONGO_URI = process.env.MONGO_URI ?? 'mongodb://127.0.0.1:27019/?directConnection=true';
+/** DynamoDB Local: `make dynamodb`, or the sibling container the DoD gate starts. */
+export const DYNAMODB_ENDPOINT = process.env.DYNAMODB_ENDPOINT ?? 'http://127.0.0.1:8000';
 
 /**
- * A distinct control database per test file, so files cannot see each other's workspaces.
- *
- * Mongo credentials are read from the environment rather than hard-coded, because CI runs against
- * an authenticated instance and a developer usually does not. Omitting them here would mean the
- * suite passes locally and fails in CI with "requires authentication" — a difference between the
- * two environments that has nothing to do with the code under test.
+ * A distinct table per test file — and per run, so a rerun after a crash starts from nothing —
+ * so files cannot see each other's workspaces. Created from `db/table.ts`, the one schema.
  */
 export function testConfig(suffix: string): Config {
   return loadConfig({
     SPECS_ENV: 'ci',
     NODE_ENV: 'test',
-    MONGO_URI,
-    ...(process.env.MONGO_USER ? { MONGO_USER: process.env.MONGO_USER } : {}),
-    ...(process.env.MONGO_PASSWORD ? { MONGO_PASSWORD: process.env.MONGO_PASSWORD } : {}),
-    ...(process.env.MONGO_AUTH_SOURCE ? { MONGO_AUTH_SOURCE: process.env.MONGO_AUTH_SOURCE } : {}),
-    MONGO_CONTROL_DB: `test_control_${suffix}`,
-    MONGO_DB_PREFIX: `test_${suffix}`,
+    TABLE_NAME: `specs-test-${suffix}-${randomBytes(4).toString('hex')}`,
+    DYNAMODB_ENDPOINT,
+    AWS_REGION: 'local',
     AUTH_MODE: 'dev',
     CATALOGUE_WORKSPACE: `cat-${suffix}`,
     RECORD_SINK: 'local',
@@ -73,11 +69,49 @@ export interface Harness {
   stop(): Promise<void>;
 }
 
+/**
+ * The table this file runs against. DynamoDB Local may still be starting when the suite does, so
+ * a refused connection is retried for a while before it is a failure with a sentence.
+ */
+export async function createTestTable(config: Config): Promise<void> {
+  const client = dynamoClientFor(config);
+  const deadline = Date.now() + 30_000;
+  try {
+    for (;;) {
+      try {
+        await createTable(client, config.TABLE_NAME);
+        return;
+      } catch (error) {
+        const code = (error as { code?: string; name?: string }).code ?? (error as Error).name;
+        if (code !== 'ECONNREFUSED' || Date.now() > deadline) {
+          throw new Error(
+            `DynamoDB Local is not reachable at ${DYNAMODB_ENDPOINT} (${(error as Error).message}). ` +
+              'Start it with `make dynamodb`, or point DYNAMODB_ENDPOINT at one.',
+          );
+        }
+        await new Promise((r) => setTimeout(r, 1_000));
+      }
+    }
+  } finally {
+    client.destroy();
+  }
+}
+
+export async function dropTestTable(config: Config): Promise<void> {
+  const client = dynamoClientFor(config);
+  try {
+    await deleteTable(client, config.TABLE_NAME);
+  } finally {
+    client.destroy();
+  }
+}
+
 export async function startHarness(suffix: string): Promise<Harness> {
   const config = testConfig(suffix);
   const tenant = `ten-${suffix}`;
   const catalogue = `cat-${suffix}`;
 
+  await createTestTable(config);
   const app = await buildApp(config);
   const registry = new WorkspaceRegistry(app.store);
 
@@ -91,16 +125,9 @@ export async function startHarness(suffix: string): Promise<Harness> {
     tenant,
     catalogue,
     async stop() {
-      // Drop what this file created, so a rerun starts from nothing rather than from whatever the
-      // last failing run left behind.
-      for (const name of [
-        config.MONGO_CONTROL_DB,
-        `${config.MONGO_DB_PREFIX}_${tenant}`,
-        `${config.MONGO_DB_PREFIX}_${catalogue}`,
-      ]) {
-        await app.store.client.db(name).dropDatabase();
-      }
+      // Drop the table this file created; a rerun makes its own.
       await app.stop();
+      await dropTestTable(config);
     },
   };
 }
@@ -147,13 +174,11 @@ export async function grantMembership(
   });
 
   const handle = await harness.app.store.handle(workspace);
-  await handle
-    .collection<{ principal: string; roles: string[]; accountable?: string }>(MEMBERSHIPS)
-    .updateOne(
-      { principal: principal.id },
-      { $set: { roles, ...(accountable ? { accountable } : {}) } },
-      { upsert: true },
-    );
+  await handle.memberships.put({
+    principal: principal.id,
+    roles,
+    ...(accountable ? { accountable } : {}),
+  });
   return principal.id;
 }
 

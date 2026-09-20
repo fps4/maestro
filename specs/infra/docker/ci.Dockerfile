@@ -1,5 +1,5 @@
 # The CI image: both packages' dependencies plus the repository, so the DoD gate can run lint,
-# typecheck and the full suite against a sibling MongoDB replica set.
+# typecheck and the full suite against a sibling DynamoDB Local.
 #
 # The repository is baked in rather than bind-mounted. The ds1 runner is itself containerized and
 # talks to the host Docker socket, so host paths do not translate across it — the build context is

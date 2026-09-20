@@ -12,7 +12,6 @@
  * exactly the corruption the sink exists to make detectable.
  */
 
-import type { ClientSession, Db } from 'mongodb';
 import {
   AppendRefused,
   assertEvent,
@@ -25,16 +24,10 @@ import {
 import { spineWorkspaceId, versionRef } from '../domain/ids.js';
 import type { PrincipalKind } from '../domain/types.js';
 import { consequenceClassFor, type Seat, type WorkspaceDefinition } from '../domain/workspace-definition.js';
-import { OUTBOX } from './collections.js';
+import type { Transaction, WorkspaceHandle } from './handle.js';
 import { RECORD_TYPES } from './record-types.js';
 
-/** One outbox row: the envelope plus the relay's bookkeeping. `workspace` is this service's id. */
-export interface OutboxRow extends SpineEvent {
-  workspace: string;
-  delivered: boolean;
-  delivered_at?: string;
-  attempts: number;
-}
+export type { OutboxRow } from './handle.js';
 
 /**
  * Who is acting, and what this workspace has granted them. For an agent, `accountable` is the
@@ -78,7 +71,7 @@ export class ActRefused extends Error {
 }
 
 export interface RecorderDeps {
-  db: Db;
+  handle: WorkspaceHandle;
   workspace: string;
   definition: WorkspaceDefinition;
   actor: Actor;
@@ -143,23 +136,25 @@ export function firstSeat<S extends Seat>(actor: Actor, seats: readonly S[]): S 
 }
 
 export interface Recorder {
-  /** Append inside the caller's transaction. Returns what was written, in order. */
-  emit(session: ClientSession, acts: Act[], causation?: string | null): Promise<SpineEvent[]>;
+  /** Stage on the caller's transaction. Returns what will be written, in order, once it commits. */
+  emit(tx: Transaction, acts: Act[], causation?: string | null): Promise<SpineEvent[]>;
 }
 
 /**
  * A recorder bound to one request: one workspace, one actor, one correlation id.
  *
- * `seq` is allocated from the workspace's counter in the same transaction, so ordering is a
- * property of the stream rather than of when a relay happened to read it; `subject_seq` likewise,
- * per subject. Events of one call chain by `causation_id` to the first of them.
+ * `seq` is allocated from the workspace's counter in the same transaction — read here, moved on
+ * the condition that it has not moved (ADR-0021 §2) — so ordering is a property of the stream
+ * rather than of when a relay happened to read it; `subject_seq` likewise, per subject. A counter
+ * that moved cancels the transaction and the handle re-runs the caller. Events of one call chain
+ * by `causation_id` to the first of them.
  */
 export function createRecorder(deps: RecorderDeps): Recorder {
   const now = deps.now ?? (() => new Date().toISOString());
   const types = deps.types ?? RECORD_TYPES;
 
   return {
-    async emit(session, acts, causation = null) {
+    async emit(tx, acts, causation = null) {
       if (acts.length === 0) return [];
 
       const attributed = acts.map((act) => ({
@@ -175,24 +170,26 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         return p ? { kind: toSpineKind(p.kind) } : undefined;
       };
 
-      const counters = deps.db.collection<{ _id: string; value: number }>('counters');
-      const counter = await counters.findOneAndUpdate(
-        { _id: 'outbox' },
-        { $inc: { value: acts.length } },
-        { session, upsert: true, returnDocument: 'after' },
-      );
-      const end = counter?.value ?? acts.length;
-      const start = end - acts.length;
+      const { counters, outbox } = deps.handle;
+      const start = await counters.get('outbox');
+      counters.bump('outbox', start, acts.length, tx);
+
+      // One counter item per subject, moved once by however many acts name it: a transaction
+      // touches an item once.
+      const subjects = new Map<string, { start: number; used: number }>();
+      for (const { act } of attributed) {
+        const subjectId = versionRef(act.subject.artifact, act.subject.ordinal);
+        if (!subjects.has(subjectId)) {
+          subjects.set(subjectId, { start: await counters.get(`subject#${subjectId}`), used: 0 });
+        }
+      }
 
       const events: SpineEvent[] = [];
       for (let i = 0; i < attributed.length; i += 1) {
         const { act, attribution } = attributed[i]!;
         const subjectId = versionRef(act.subject.artifact, act.subject.ordinal);
-        const subject = await counters.findOneAndUpdate(
-          { _id: `subject:${subjectId}` },
-          { $inc: { value: 1 } },
-          { session, upsert: true, returnDocument: 'after' },
-        );
+        const subject = subjects.get(subjectId)!;
+        subject.used += 1;
         const recordedAt = now();
         const candidate = {
           event_id: uuidv7(),
@@ -200,7 +197,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
           seq: start + i + 1,
           subject_type: 'version',
           subject_id: subjectId,
-          subject_seq: subject?.value ?? 1,
+          subject_seq: subject.start + subject.used,
           type: act.type,
           type_version: 1,
           occurred_at: act.occurred_at ?? recordedAt,
@@ -216,10 +213,12 @@ export function createRecorder(deps: RecorderDeps): Recorder {
         events.push(assertEvent(candidate, resolve, types));
       }
 
-      await deps.db.collection<OutboxRow>(OUTBOX).insertMany(
-        events.map((event) => ({ ...event, workspace: deps.workspace, delivered: false, attempts: 0 })),
-        { session },
-      );
+      for (const [subjectId, { start: from, used }] of subjects) {
+        counters.bump(`subject#${subjectId}`, from, used, tx);
+      }
+      for (const event of events) {
+        outbox.insert({ ...event, workspace: deps.workspace, delivered: false, attempts: 0 }, tx);
+      }
       return events;
     },
   };

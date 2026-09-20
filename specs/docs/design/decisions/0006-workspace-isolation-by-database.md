@@ -2,12 +2,19 @@
 title: "0006: Workspace is the isolation boundary, enforced by database-per-workspace bound once per request"
 summary: "One boundary concept — the workspace — which maestro maps to a tenant and maestro v1 to its organisation. Every access binds a workspace-scoped handle resolving to that workspace's own MongoDB database; no query names a workspace and none filters by one. The property that matters is that the mistake fails closed."
 status: proposed
-last_updated: 2026-08-04
+last_updated: 2026-09-20
 date: 2026-08-04
+amended_by:
+  - ./0021-the-store-is-dynamodb.md
 related:
   - ./0007-mongodb-with-inline-bodies.md
   - ../architecture.md
 ---
+
+> **Amended by [ADR-0021](0021-the-store-is-dynamodb.md) (2026-09-20).** The boundary and the
+> handle stand; the mechanism under them is a key prefix in one DynamoDB table rather than a
+> database per workspace, and the handle refuses a key outside its prefix. Read "database" below
+> as "prefix"; the argument is unchanged.
 
 ## Context
 

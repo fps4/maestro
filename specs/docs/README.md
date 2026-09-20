@@ -28,8 +28,8 @@ Two planes: a **Docs** plane you read, and a **Delivery** plane you track.
 | [0003](design/decisions/0003-immutable-versions-mutable-drafts.md) | Drafts are mutable, versions are immutable; proposing snapshots one into the other |
 | [0004](design/decisions/0004-facets-are-evaluated-bodies-are-read.md) | Facets are evaluated; bodies are authored, rendered and diffed but never evaluated |
 | [0005](design/decisions/0005-agents-may-author-never-decide.md) | Agents author and propose; only a named human decides; no decision surface on MCP |
-| [0006](design/decisions/0006-workspace-isolation-by-database.md) | Workspace isolation is database-per-workspace, bound once per request |
-| [0007](design/decisions/0007-mongodb-with-inline-bodies.md) | MongoDB, with bodies inline and blobs in object storage |
+| [0006](design/decisions/0006-workspace-isolation-by-database.md) | Workspace isolation is one prefix per workspace, bound once per request — amended by 0021 (was database-per-workspace) |
+| [0007](design/decisions/0007-mongodb-with-inline-bodies.md) | MongoDB, with bodies inline and blobs in object storage — **superseded** by 0021 |
 | [0008](design/decisions/0008-the-catalogue-is-a-workspace.md) | The catalogue is a workspace, reached through a read-only handle |
 | [0009](design/decisions/0009-external-and-platform-standards-are-distinct-types.md) | External and platform standards are distinct types, not one type with a flag |
 | [0010](design/decisions/0010-effective-dating-and-acceptance-lapse.md) | Versions may be effective-dated, and a *material* change lapses an acceptance |
@@ -42,11 +42,13 @@ Two planes: a **Docs** plane you read, and a **Delivery** plane you track.
 | [0017](design/decisions/0017-one-document.md) | One document is the artifact; the facets are a projection of it, derived at save; typed blocks are declared, not coded |
 | [0018](design/decisions/0018-openspec-interoperate-not-adopt.md) | specs-service stays the record; OpenSpec is interoperated with (a block shape, one notation), not adopted — **accepted** |
 | [0019](design/decisions/0019-the-outbox-holds-spine-envelopes.md) | The outbox holds maestro's spine envelope, built and validated in the transaction; an agent acts under a seat occupancy that names the answerable human; free text leaves the body; principal ids carry the kind — **accepted** |
+| [0020](design/decisions/0020-the-payload-store-and-the-rebuild.md) | What the record cannot say goes to the payload store; a workspace is rebuilt from the archive and the payloads alone — **accepted** |
+| [0021](design/decisions/0021-the-store-is-dynamodb.md) | The store is DynamoDB (maestro ADR-0018): one table, a prefix per workspace, every query a key or an index, the outbox one transaction — **accepted** |
 
 0001–0017 are `status: proposed`: the builds exist, but nothing has run against real content yet,
-so they remain a design under review rather than a record of commitments made. 0018 and 0019 are
-`accepted` — taken explicitly by the architect, and constraining work rather than describing a
-design.
+so they remain a design under review rather than a record of commitments made (0007 is
+superseded). 0018–0021 are `accepted` — taken explicitly by the architect, and constraining work
+rather than describing a design.
 
 ## Conventions
 

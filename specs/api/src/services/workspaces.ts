@@ -13,18 +13,9 @@
 
 import { FacetValidator } from '../domain/facets.js';
 import { parseWorkspaceDefinition, type WorkspaceDefinition } from '../domain/workspace-definition.js';
-import { DEFINITIONS, WORKSPACES } from '../db/collections.js';
 import type { Store, WorkspaceRecord } from '../db/client.js';
 
-export interface StoredDefinition {
-  workspace: string;
-  definition_version: number;
-  definition: unknown;
-  /** Resolved at apply time, so the running service never reads a schema file. */
-  facet_schemas: Record<string, object>;
-  applied_at: string;
-  applied_by: string;
-}
+export type { StoredDefinition } from '../db/control.js';
 
 export interface LoadedWorkspace {
   record: WorkspaceRecord;
@@ -50,10 +41,7 @@ export class WorkspaceRegistry {
     const record = await this.store.workspaceRecord(workspace);
     if (!record) throw new Error(`No workspace \`${workspace}\` is registered in this deployment.`);
 
-    const stored = await this.store
-      .control()
-      .collection<StoredDefinition>(DEFINITIONS)
-      .findOne({ workspace, definition_version: record.definition_version });
+    const stored = await this.store.control.definitions.get(workspace, record.definition_version);
     if (!stored) {
       throw new Error(
         `Workspace \`${workspace}\` names definition version ${record.definition_version}, which is not stored. ` +
@@ -79,12 +67,7 @@ export class WorkspaceRegistry {
   }
 
   async list(): Promise<WorkspaceRecord[]> {
-    return this.store
-      .control()
-      .collection<WorkspaceRecord>(WORKSPACES)
-      .find({}, { projection: { _id: 0 } })
-      .sort({ id: 1 })
-      .toArray();
+    return this.store.control.workspaces.list();
   }
 
   /**
@@ -101,7 +84,7 @@ export class WorkspaceRegistry {
     title?: string;
   }): Promise<{ workspace: string; definition_version: number; created: boolean }> {
     const { definition } = input;
-    const control = this.store.control();
+    const control = this.store.control;
     const existing = await this.store.workspaceRecord(definition.workspace);
 
     if (existing && existing.kind !== definition.kind) {
@@ -119,9 +102,7 @@ export class WorkspaceRegistry {
 
     // Every type a stored version could name must still exist, or those versions become unreadable.
     if (existing) {
-      const previous = await control
-        .collection<StoredDefinition>(DEFINITIONS)
-        .findOne({ workspace: definition.workspace, definition_version: existing.definition_version });
+      const previous = await control.definitions.get(definition.workspace, existing.definition_version);
       if (previous) {
         const before = parseWorkspaceDefinition(previous.definition);
         const removed = before.types.filter((t) => !definition.types.some((n) => n.id === t.id));
@@ -136,7 +117,7 @@ export class WorkspaceRegistry {
     }
 
     const now = new Date().toISOString();
-    await control.collection<StoredDefinition>(DEFINITIONS).insertOne({
+    await control.definitions.insert({
       workspace: definition.workspace,
       definition_version: definition.definition_version,
       definition,
@@ -145,17 +126,14 @@ export class WorkspaceRegistry {
       applied_by: input.applied_by,
     });
 
-    await control.collection<WorkspaceRecord>(WORKSPACES).updateOne(
-      { id: definition.workspace },
+    await control.workspaces.upsert(
       {
-        $set: {
-          kind: definition.kind,
-          definition_version: definition.definition_version,
-          ...(input.title || definition.title ? { title: input.title ?? definition.title! } : {}),
-        },
-        $setOnInsert: { id: definition.workspace, created_at: now },
+        id: definition.workspace,
+        kind: definition.kind,
+        definition_version: definition.definition_version,
+        ...(input.title || definition.title ? { title: input.title ?? definition.title! } : {}),
       },
-      { upsert: true },
+      now,
     );
 
     this.invalidate(definition.workspace);

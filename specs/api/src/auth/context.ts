@@ -7,7 +7,6 @@
  */
 
 import { uuidv7 } from '@fps4/maestro-spine';
-import { MEMBERSHIPS } from '../db/collections.js';
 import type { Store } from '../db/client.js';
 import type { CatalogueHandle, WorkspaceHandle } from '../db/handle.js';
 import { createRecorder, type Actor, type Recorder } from '../db/outbox.js';
@@ -23,17 +22,7 @@ export class Forbidden extends Error {
   }
 }
 
-export interface Membership {
-  principal: string;
-  roles: string[];
-  /** Gates this principal is explicitly assigned to, for `resolver: assignment`. */
-  gates?: string[];
-  /**
-   * For an agent: the human answerable for what it does here (ADR-0019 §2). Granted with the
-   * membership, like the roles; an agent without one holds roles it cannot act in.
-   */
-  accountable?: string;
-}
+export type { Membership } from '../db/handle.js';
 
 export interface RequestContext {
   principal: PrincipalRecord;
@@ -87,9 +76,7 @@ export async function buildContext(
   }
 
   const handle = await deps.store.handle(workspaceId);
-  const membership = await handle
-    .collection<Membership>(MEMBERSHIPS)
-    .findOne({ principal: principal.id }, { projection: { _id: 0 } });
+  const membership = await handle.memberships.get(principal.id);
 
   if (!membership && token.workspaces.length === 0) {
     throw new Forbidden(
@@ -108,7 +95,7 @@ export async function buildContext(
   };
   const correlation_id = uuidv7();
   const recorder = createRecorder({
-    db: handle.db,
+    handle,
     workspace: workspaceId,
     definition: workspace.definition,
     actor,

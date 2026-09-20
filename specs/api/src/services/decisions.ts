@@ -10,9 +10,8 @@
  * can audit, and "the system stopped me" needs to be a fact rather than a memory.
  */
 
-import { ARTIFACTS, DECISIONS, DRAFTS, EVALUATIONS, VERSIONS } from '../db/collections.js';
 import type { Act, Recorder } from '../db/outbox.js';
-import type { WorkspaceHandle } from '../db/handle.js';
+import { Conflict, type WorkspaceHandle } from '../db/handle.js';
 import { assertAttribution, checkAttribution } from '../domain/attribution.js';
 import { gateIsOpen, gateRequirements, mayDecide } from '../domain/gates.js';
 import { mintDecisionId, mintDraftId } from '../domain/ids.js';
@@ -21,15 +20,7 @@ import { phaseAfterGate } from '../domain/lifecycle.js';
 import { nextState } from '../domain/versioning.js';
 import { acceptingOutcome, gateIn, profileIn, typeIn } from '../domain/workspace-definition.js';
 import { versionPayloadKey, writePayload, type PayloadStore } from '../record/payload-store.js';
-import type {
-  Artifact,
-  Attribution,
-  Decision,
-  Draft,
-  EvaluationResult,
-  Materiality,
-  Version,
-} from '../domain/types.js';
+import type { Attribution, Decision, Draft, EvaluationResult, Materiality } from '../domain/types.js';
 import { NotFound, Refused, type Actor } from './artifacts.js';
 import { GateViewService, type DecisionContext, type GateView } from './gate-view.js';
 import { pinnedLinkInput } from './pinned-link.js';
@@ -82,25 +73,17 @@ export class DecisionService {
   }
 
   private async load(artifact: string, ordinal: number) {
-    const version = await this.handle
-      .collection<Version>(VERSIONS)
-      .findOne({ artifact, ordinal }, { projection: { _id: 0 } });
+    const version = await this.handle.versions.get(artifact, ordinal);
     if (!version) throw new NotFound(`Version \`${artifact}@${ordinal}\``);
-    const record = await this.handle.collection<Artifact>(ARTIFACTS).findOne({ id: artifact });
+    const record = await this.handle.artifacts.get(artifact);
     if (!record) throw new NotFound(`Artifact \`${artifact}\``);
-    const evaluations = await this.handle
-      .collection<EvaluationResult>(EVALUATIONS)
-      .find({ artifact, ordinal }, { projection: { _id: 0 } })
-      .toArray();
+    const evaluations = await this.handle.evaluations.ofVersion(artifact, ordinal);
     return { version, artifact: record, evaluations };
   }
 
   /** Who created the lineage, for `exclude_creator`. The first version's proposer. */
   private async creatorOf(artifact: string): Promise<string> {
-    const first = await this.handle
-      .collection<Version>(VERSIONS)
-      .findOne({ artifact }, { sort: { ordinal: 1 }, projection: { proposed_by: 1 } });
-    return first?.proposed_by ?? '';
+    return (await this.handle.versions.creator(artifact)) ?? '';
   }
 
   /** Everything the console needs to render the decision screen. Read-only; lives in `gate-view.ts`. */
@@ -118,7 +101,9 @@ export class DecisionService {
    *
    * Everything below happens in one transaction with the outbox emission: the version's state, the
    * previous accepted version's supersession, the pin freezing, the phase transition, the reopened
-   * draft, and the events describing all of it.
+   * draft, and the events describing all of it. Each write is conditioned on what was read — the
+   * version still proposed, the superseded one still accepted, each pin target's accepted ordinal
+   * unmoved — so a decision taken on a moved record is refused rather than half-applied.
    */
   async decide(input: DecideInput, actor: Actor, context: DecisionContext): Promise<Decision> {
     const gate = this.gateOrThrow(input.gate);
@@ -134,7 +119,7 @@ export class DecisionService {
       );
     }
 
-    const { version, artifact, evaluations } = await this.load(input.artifact, input.ordinal);
+    const { version, evaluations } = await this.load(input.artifact, input.ordinal);
     const type = typeIn(this.workspace.definition, version.type)!;
     const profile = profileIn(this.workspace.definition, gate.attribution_profile)!;
 
@@ -202,183 +187,184 @@ export class DecisionService {
       payload,
     );
 
-    return this.handle.transaction(async (session) => {
-      const versions = this.handle.collection<Version>(VERSIONS);
-      const state = nextState(version.state, {
-        kind: 'gate_decision',
-        outcome: accepted ? 'accept' : reopens ? 'reopen' : 'reject',
-        gate: gate.id,
-      });
+    return this.handle
+      .transaction(async (tx) => {
+        // Re-read on every attempt: a retry after a moved counter must see the record as it is.
+        const { version: current, artifact } = await this.load(input.artifact, input.ordinal);
+        const state = nextState(current.state, {
+          kind: 'gate_decision',
+          outcome: accepted ? 'accept' : reopens ? 'reopen' : 'reject',
+          gate: gate.id,
+        });
 
-      let links = version.links;
-      if (accepted) {
-        // Resolve every pin target's accepted ordinal *inside* the transaction, so the pin freezes
-        // to what was accepted at this instant rather than to what was accepted when the screen
-        // was rendered.
-        const targets = version.links.map((l) => l.target);
-        const rows = await versions
-          .find(
-            { artifact: { $in: targets }, state: 'accepted' },
-            { session, projection: { artifact: 1, ordinal: 1 } },
-          )
-          .toArray();
-        const acceptedByArtifact = new Map(rows.map((r) => [r.artifact, r.ordinal]));
-        links = freezePins(version.links, type, (a) => acceptedByArtifact.get(a));
-      }
+        let links = current.links;
+        if (accepted) {
+          // Resolve every pin target's accepted ordinal now, and condition the transaction on each
+          // staying where it was read, so the pin freezes to what was accepted at this instant
+          // rather than to what was accepted when the screen was rendered.
+          const targets = [...new Set(current.links.map((l) => l.target))];
+          const acceptedByArtifact = await this.handle.artifacts.acceptedOrdinals(targets);
+          for (const target of targets) {
+            if (target === input.artifact) continue;
+            this.handle.artifacts.checkAccepted(tx, target, acceptedByArtifact.get(target));
+          }
+          links = freezePins(current.links, type, (a) => acceptedByArtifact.get(a));
+        }
 
-      await versions.updateOne(
-        { artifact: input.artifact, ordinal: input.ordinal },
-        {
-          $set: {
+        await this.handle.versions.update(
+          input.artifact,
+          input.ordinal,
+          {
             state,
             links,
             decided_at: now,
             ...(input.materiality ? { materiality: input.materiality } : {}),
           },
-        },
-        { session },
-      );
-
-      let superseded: number | undefined;
-      if (accepted && artifact.accepted_ordinal && artifact.accepted_ordinal !== input.ordinal) {
-        const previous = await versions.findOne(
-          { artifact: input.artifact, ordinal: artifact.accepted_ordinal },
-          { session },
+          tx,
+          { expectState: current.state },
         );
-        if (previous && previous.state === 'accepted') {
-          await versions.updateOne(
-            { artifact: input.artifact, ordinal: artifact.accepted_ordinal },
-            { $set: { state: nextState('accepted', { kind: 'supersede', by_ordinal: input.ordinal }) } },
-            { session },
-          );
-          superseded = artifact.accepted_ordinal;
-        }
-      }
 
-      const phase = phaseAfterGate(this.workspace.definition, artifact.phase, gate.id, input.outcome);
-      await this.handle.collection<Artifact>(ARTIFACTS).updateOne(
-        { id: input.artifact },
-        {
-          $set: {
+        let superseded: number | undefined;
+        if (accepted && artifact.accepted_ordinal && artifact.accepted_ordinal !== input.ordinal) {
+          const previous = await this.handle.versions.get(input.artifact, artifact.accepted_ordinal);
+          if (previous && previous.state === 'accepted') {
+            await this.handle.versions.update(
+              input.artifact,
+              artifact.accepted_ordinal,
+              { state: nextState('accepted', { kind: 'supersede', by_ordinal: input.ordinal }) },
+              tx,
+              { expectState: 'accepted' },
+            );
+            superseded = artifact.accepted_ordinal;
+          }
+        }
+
+        const phase = phaseAfterGate(this.workspace.definition, artifact.phase, gate.id, input.outcome);
+        await this.handle.artifacts.update(
+          input.artifact,
+          {
             ...(phase ? { phase } : {}),
             ...(accepted ? { accepted_ordinal: input.ordinal } : {}),
             updated_at: now,
           },
-        },
-        { session },
-      );
+          tx,
+        );
 
-      const decision: Decision = {
-        id: decisionId,
-        workspace: this.handle.workspace,
-        gate: gate.id,
-        artifact: input.artifact,
-        ordinal: input.ordinal,
-        subject_digest: version.digest,
-        outcome: input.outcome,
-        ...(input.reasoning ? { reasoning: input.reasoning } : {}),
-        attribution: input.attribution,
-        evaluations,
-        decided_by: actor.principal,
-        decided_at: now,
-      };
-      await this.handle.collection<Decision>(DECISIONS).insertOne(decision, { session });
-
-      // A request_changes outcome opens a new draft based on the refused version, carrying the
-      // reviewer's reasoning. The refused version stays in the record — the loop is visible, not
-      // erased.
-      let reopenedDraft: string | undefined;
-      if (reopens) {
-        reopenedDraft = mintDraftId();
-        const draft: Draft = {
-          id: reopenedDraft,
+        const decision: Decision = {
+          id: decisionId,
           workspace: this.handle.workspace,
+          gate: gate.id,
           artifact: input.artifact,
-          type: version.type,
-          title: version.title,
-          revision: 1,
-          facets: version.facets,
-          provenance: version.provenance,
-          body: version.body,
-          attachments: version.attachments,
-          links: version.links,
-          ...(version.catalogue_refs ? { catalogue_refs: version.catalogue_refs } : {}),
-          ...(version.classification ? { classification: version.classification } : {}),
-          ...(version.effective ? { effective: version.effective } : {}),
-          contributors: version.contributors,
-          based_on: version.ordinal,
-          reopened_from_decision: decision.id,
-          created_at: now,
-          updated_at: now,
+          ordinal: input.ordinal,
+          subject_digest: version.digest,
+          outcome: input.outcome,
+          ...(input.reasoning ? { reasoning: input.reasoning } : {}),
+          attribution: input.attribution,
+          evaluations,
+          decided_by: actor.principal,
+          decided_at: now,
         };
-        await this.handle.collection<Draft>(DRAFTS).insertOne(draft, { session });
-      }
+        await this.handle.decisions.insert(decision, tx);
 
-      // The decision's own attribution is the profile's — accountable, acting and whatever else it
-      // required — and it must agree with the seat: a decider is a human in `decider`.
-      const declared = {
-        accountable: input.attribution.accountable,
-        acting: input.attribution.acting,
-        oversight_level: input.attribution.oversight_level,
-      };
-      const consequences: Act[] = [
-        ...(superseded !== undefined
-          ? [
-              {
-                type: 'VersionSuperseded',
-                subject: { artifact: input.artifact, ordinal: superseded },
-                artifact_type: version.type,
-                seat: 'decider' as const,
-                body: { by_ordinal: input.ordinal },
-                occurred_at: now,
-                attribution: declared,
-              },
-            ]
-          : []),
-        ...(accepted && links.some((l) => l.pinned_to != null)
-          ? [
-              {
-                type: 'LinkPinned',
-                subject: { artifact: input.artifact, ordinal: input.ordinal },
-                artifact_type: version.type,
-                seat: 'decider' as const,
-                body: {
-                  links: links
-                    .filter((l) => l.pinned_to != null)
-                    .map((l) => ({ type: l.type, target: l.target, pinned_to: l.pinned_to })),
+        // A request_changes outcome opens a new draft based on the refused version, carrying the
+        // reviewer's reasoning. The refused version stays in the record — the loop is visible, not
+        // erased.
+        let reopenedDraft: string | undefined;
+        if (reopens) {
+          reopenedDraft = mintDraftId();
+          const draft: Draft = {
+            id: reopenedDraft,
+            workspace: this.handle.workspace,
+            artifact: input.artifact,
+            type: version.type,
+            title: version.title,
+            revision: 1,
+            facets: version.facets,
+            provenance: version.provenance,
+            body: version.body,
+            attachments: version.attachments,
+            links: version.links,
+            ...(version.catalogue_refs ? { catalogue_refs: version.catalogue_refs } : {}),
+            ...(version.classification ? { classification: version.classification } : {}),
+            ...(version.effective ? { effective: version.effective } : {}),
+            contributors: version.contributors,
+            based_on: version.ordinal,
+            reopened_from_decision: decision.id,
+            created_at: now,
+            updated_at: now,
+          };
+          await this.handle.drafts.insert(draft, tx);
+        }
+
+        // The decision's own attribution is the profile's — accountable, acting and whatever else it
+        // required — and it must agree with the seat: a decider is a human in `decider`.
+        const declared = {
+          accountable: input.attribution.accountable,
+          acting: input.attribution.acting,
+          oversight_level: input.attribution.oversight_level,
+        };
+        const consequences: Act[] = [
+          ...(superseded !== undefined
+            ? [
+                {
+                  type: 'VersionSuperseded',
+                  subject: { artifact: input.artifact, ordinal: superseded },
+                  artifact_type: version.type,
+                  seat: 'decider' as const,
+                  body: { by_ordinal: input.ordinal },
+                  occurred_at: now,
+                  attribution: declared,
                 },
-                occurred_at: now,
-                attribution: declared,
-              },
-            ]
-          : []),
-      ];
-      await this.record().emit(session, [
-        {
-          type: 'DecisionRecorded',
-          subject: { artifact: input.artifact, ordinal: input.ordinal },
-          artifact_type: version.type,
-          seat: 'decider',
-          body: {
-            decision: decision.id,
-            gate: gate.id,
-            outcome: input.outcome,
-            state,
-            subject_digest: version.digest,
-            attribution: input.attribution,
-            ...(input.materiality ? { materiality: input.materiality } : {}),
-            ...(phase ? { phase } : {}),
-            ...(reopenedDraft ? { reopened_draft: reopenedDraft } : {}),
+              ]
+            : []),
+          ...(accepted && links.some((l) => l.pinned_to != null)
+            ? [
+                {
+                  type: 'LinkPinned',
+                  subject: { artifact: input.artifact, ordinal: input.ordinal },
+                  artifact_type: version.type,
+                  seat: 'decider' as const,
+                  body: {
+                    links: links
+                      .filter((l) => l.pinned_to != null)
+                      .map((l) => ({ type: l.type, target: l.target, pinned_to: l.pinned_to })),
+                  },
+                  occurred_at: now,
+                  attribution: declared,
+                },
+              ]
+            : []),
+        ];
+        await this.record().emit(tx, [
+          {
+            type: 'DecisionRecorded',
+            subject: { artifact: input.artifact, ordinal: input.ordinal },
+            artifact_type: version.type,
+            seat: 'decider',
+            body: {
+              decision: decision.id,
+              gate: gate.id,
+              outcome: input.outcome,
+              state,
+              subject_digest: version.digest,
+              attribution: input.attribution,
+              ...(input.materiality ? { materiality: input.materiality } : {}),
+              ...(phase ? { phase } : {}),
+              ...(reopenedDraft ? { reopened_draft: reopenedDraft } : {}),
+            },
+            occurred_at: now,
+            payload: payloadRef,
+            attribution: declared,
           },
-          occurred_at: now,
-          payload: payloadRef,
-          attribution: declared,
-        },
-        ...consequences,
-      ]);
+          ...consequences,
+        ]);
 
-      return decision;
-    });
+        return decision;
+      })
+      .catch((error) => {
+        if (error instanceof Conflict) throw new Refused(error.message);
+        throw error;
+      });
   }
 
   /**
@@ -400,8 +386,8 @@ export class DecisionService {
     // refusal. The attempt is logged by the caller's refusal and stays off the record — there is
     // no answerable human to write it under, which is the point (ADR-0019 §2).
     if (actor.kind !== 'human') return;
-    await this.handle.transaction(async (session) => {
-      await this.record().emit(session, [
+    await this.handle.transaction(async (tx) => {
+      await this.record().emit(tx, [
         {
           type: 'DecisionRefused',
           subject: { artifact: input.artifact, ordinal: input.ordinal },
@@ -415,10 +401,6 @@ export class DecisionService {
   }
 
   async listDecisions(artifact: string): Promise<Decision[]> {
-    return this.handle
-      .collection<Decision>(DECISIONS)
-      .find({ artifact }, { projection: { _id: 0 } })
-      .sort({ decided_at: -1 })
-      .toArray();
+    return this.handle.decisions.ofArtifact(artifact);
   }
 }

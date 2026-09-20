@@ -15,9 +15,8 @@
  * workspace's own retention, and the spine learns that a question was asked, answered and closed.
  */
 
-import { QUESTIONS, VERSIONS } from '../db/collections.js';
 import { firstSeat, type Recorder } from '../db/outbox.js';
-import type { WorkspaceHandle } from '../db/handle.js';
+import { Conflict, type WorkspaceHandle } from '../db/handle.js';
 import { digestOf } from '../domain/digest.js';
 import { mintQuestionId } from '../domain/ids.js';
 import type { Answer, Question, Version } from '../domain/types.js';
@@ -56,34 +55,30 @@ export class QuestionService {
     return firstSeat(actor, ['reviewer', 'author', 'workspace_admin', 'auditor'] as const);
   }
 
-  private questions() {
-    return this.handle.collection<Question>(QUESTIONS);
-  }
-
-  private async versionOrThrow(artifact: string, ordinal: number): Promise<Version> {
-    const version = await this.handle
-      .collection<Version>(VERSIONS)
-      .findOne({ artifact, ordinal }, { projection: { _id: 0, body: 0 } });
+  private async versionOrThrow(artifact: string, ordinal: number): Promise<Pick<Version, 'type'>> {
+    const version = await this.handle.versions.get(artifact, ordinal);
     if (!version) throw new NotFound(`Version \`${artifact}@${ordinal}\``);
     return version;
   }
 
   async list(artifact: string, ordinal: number): Promise<Question[]> {
-    return this.questions()
-      .find({ artifact, ordinal }, { projection: { _id: 0 } })
-      .sort({ asked_at: 1 })
-      .toArray();
+    return this.handle.questions.ofVersion(artifact, ordinal);
   }
 
   /** Open questions on a version — the number a gate may block on. */
   async openCount(artifact: string, ordinal: number): Promise<number> {
-    return this.questions().countDocuments({ artifact, ordinal, resolved_at: { $exists: false } });
+    return this.handle.questions.openCount(artifact, ordinal);
   }
 
   async get(id: string): Promise<Question> {
-    const question = await this.questions().findOne({ id }, { projection: { _id: 0 } });
+    const question = await this.handle.questions.get(id);
     if (!question) throw new NotFound(`Question \`${id}\``);
     return question;
+  }
+
+  private refuseConflict(error: unknown): never {
+    if (error instanceof Conflict) throw new Refused(error.message);
+    throw error;
   }
 
   async ask(artifact: string, ordinal: number, text: string, actor: Actor): Promise<Question> {
@@ -105,20 +100,22 @@ export class QuestionService {
     };
     const payload = await this.payload({ artifact, ordinal }, `question/${question.id}.json`, trimmed);
 
-    await this.handle.transaction(async (session) => {
-      await this.questions().insertOne(question, { session });
-      await this.record().emit(session, [
-        {
-          type: 'QuestionRaised',
-          subject: { artifact, ordinal },
-          artifact_type: version.type,
-          seat: this.seatOf(actor),
-          body: { question: question.id, text_digest: digestOf(trimmed), asked_kind: actor.kind },
-          occurred_at: now,
-          payload,
-        },
-      ]);
-    });
+    await this.handle
+      .transaction(async (tx) => {
+        await this.handle.questions.insert(question, tx);
+        await this.record().emit(tx, [
+          {
+            type: 'QuestionRaised',
+            subject: { artifact, ordinal },
+            artifact_type: version.type,
+            seat: this.seatOf(actor),
+            body: { question: question.id, text_digest: digestOf(trimmed), asked_kind: actor.kind },
+            occurred_at: now,
+            payload,
+          },
+        ]);
+      })
+      .catch((error) => this.refuseConflict(error));
     return question;
   }
 
@@ -146,26 +143,23 @@ export class QuestionService {
     };
     const payload = await this.payload(question, `answer/${answer.id}.json`, trimmed);
 
-    return this.handle.transaction(async (session) => {
-      const updated = await this.questions().findOneAndUpdate(
-        { id, resolved_at: { $exists: false } },
-        { $push: { answers: answer } },
-        { session, returnDocument: 'after', projection: { _id: 0 } },
-      );
-      if (!updated) throw new Refused('This question was closed while you were answering.');
-      await this.record().emit(session, [
-        {
-          type: 'QuestionAnswered',
-          subject: { artifact: question.artifact, ordinal: question.ordinal },
-          artifact_type: version.type,
-          seat: this.seatOf(actor),
-          body: { question: id, answer: answer.id, text_digest: digestOf(trimmed), kind: actor.kind },
-          occurred_at: now,
-          payload,
-        },
-      ]);
-      return updated;
-    });
+    return this.handle
+      .transaction(async (tx) => {
+        await this.handle.questions.answer(id, answer, question.answers.length, tx);
+        await this.record().emit(tx, [
+          {
+            type: 'QuestionAnswered',
+            subject: { artifact: question.artifact, ordinal: question.ordinal },
+            artifact_type: version.type,
+            seat: this.seatOf(actor),
+            body: { question: id, answer: answer.id, text_digest: digestOf(trimmed), kind: actor.kind },
+            occurred_at: now,
+            payload,
+          },
+        ]);
+        return { ...question, answers: [...question.answers, answer] };
+      })
+      .catch((error) => this.refuseConflict(error));
   }
 
   /** Close a question. A human's act, always — the same line as confirming an extraction. */
@@ -180,24 +174,25 @@ export class QuestionService {
     const version = await this.versionOrThrow(question.artifact, question.ordinal);
 
     const now = new Date().toISOString();
-    return this.handle.transaction(async (session) => {
-      const updated = await this.questions().findOneAndUpdate(
-        { id, resolved_at: { $exists: false } },
-        { $set: { resolved_at: now, resolved_by: actor.principal } },
-        { session, returnDocument: 'after', projection: { _id: 0 } },
-      );
-      if (!updated) return question;
-      await this.record().emit(session, [
-        {
-          type: 'QuestionResolved',
-          subject: { artifact: question.artifact, ordinal: question.ordinal },
-          artifact_type: version.type,
-          seat: this.seatOf(actor),
-          body: { question: id, answers: question.answers.length },
-          occurred_at: now,
-        },
-      ]);
-      return updated;
-    });
+    return this.handle
+      .transaction(async (tx) => {
+        await this.handle.questions.resolve(id, now, actor.principal, tx);
+        await this.record().emit(tx, [
+          {
+            type: 'QuestionResolved',
+            subject: { artifact: question.artifact, ordinal: question.ordinal },
+            artifact_type: version.type,
+            seat: this.seatOf(actor),
+            body: { question: id, answers: question.answers.length },
+            occurred_at: now,
+          },
+        ]);
+        return { ...question, resolved_at: now, resolved_by: actor.principal };
+      })
+      .catch(async (error) => {
+        // Closed by someone else in the meantime: closed is what was asked for.
+        if (error instanceof Conflict) return this.get(id);
+        throw error;
+      });
   }
 }

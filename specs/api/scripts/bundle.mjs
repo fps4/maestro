@@ -19,19 +19,9 @@ const FUNCTIONS = {
 };
 const EPOCH = new Date('2020-01-01T00:00:00Z');
 
-// The MongoDB driver's optional peers: native or cloud-specific modules it `require`s only when
-// asked for (Kerberos, compression, field-level encryption, IAM auth). None is installed and none
-// is needed; esbuild must leave the `require` in place rather than fail to resolve it.
-const EXTERNAL = [
-  'kerberos',
-  '@mongodb-js/zstd',
-  'snappy',
-  'mongodb-client-encryption',
-  'gcp-metadata',
-  'aws4',
-  'socks',
-  '@aws-sdk/credential-providers',
-];
+// Optional peers a dependency `require`s only when asked for and that are neither installed nor
+// needed; esbuild must leave the `require` in place rather than fail to resolve it.
+const EXTERNAL = ['@aws-sdk/credential-providers'];
 
 for (const [name, { entry, extra }] of Object.entries(FUNCTIONS)) {
   const dir = resolve('bundle', name);

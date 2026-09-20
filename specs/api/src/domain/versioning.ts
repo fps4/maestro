@@ -40,7 +40,7 @@ const TERMINAL: ReadonlySet<VersionState> = new Set(['superseded', 'rejected', '
 /**
  * The state machine, stated once.
  *
- * MongoDB has no check constraints (§8.4), so a legal transition is enforced in one code path
+ * The store has no check constraints (§8.4), so a legal transition is enforced in one code path
  * rather than by the database. This is that path — every state change in the service goes through
  * it, and the compensating control is the record sink, which makes a divergence detectable.
  */

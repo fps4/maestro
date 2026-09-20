@@ -55,7 +55,7 @@ export function freezePins(
 /**
  * Refuse any change to a frozen pin.
  *
- * MongoDB has no foreign keys and no check constraints (§8.4), so this is enforced in application
+ * The store has no foreign keys and no check constraints (§8.4), so this is enforced in application
  * code — in one place, called before every write that could touch links.
  */
 export function assertPinsUnchanged(before: Link[], after: Link[]): void {

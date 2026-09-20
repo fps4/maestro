@@ -6,15 +6,17 @@
  * readable from another and therefore the one place the boundary could be crossed on purpose.
  *
  * The point is the *failure mode*. A forgotten filter returns another tenant's rows; a forgotten
- * handle has no database to query. These tests exist to keep it that way as the code changes.
+ * handle has no prefix to query, and a key outside the handle's prefix is refused before a request
+ * is made. These tests exist to keep it that way as the code changes.
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { IsolationViolation } from '../../src/db/handle.js';
+import { Items } from '../../src/db/items.js';
+import { workspaceKeys } from '../../src/db/keys.js';
 import { WorkspaceRegistry } from '../../src/services/workspaces.js';
-import { VERSIONS } from '../../src/db/collections.js';
 import {
   applyDefinition,
   call,
@@ -25,7 +27,6 @@ import {
   token,
   type Harness,
 } from './helpers.js';
-import type { Version } from '../../src/domain/types.js';
 
 let harness: Harness;
 let other: string;
@@ -44,7 +45,7 @@ beforeAll(async () => {
 
   // Put something in the other tenant worth stealing.
   const handle = await harness.app.store.handle(other);
-  await handle.collection<Version>(VERSIONS).insertOne({
+  await handle.versions.insert({
     workspace: other,
     artifact: 'art-secret',
     type: 'business_case',
@@ -65,24 +66,49 @@ beforeAll(async () => {
 }, 60_000);
 
 afterAll(async () => {
-  if (harness) {
-    await harness.app.store.client.db(`${harness.config.MONGO_DB_PREFIX}_${other}`).dropDatabase();
-    await harness.stop();
-  }
+  await harness?.stop();
 });
 
-describe('database per workspace', () => {
-  it('gives two workspaces two databases, so a query cannot reach across', async () => {
-    const a = await harness.app.store.handle(harness.tenant);
-    const b = await harness.app.store.handle(other);
-    expect(a.db.databaseName).not.toBe(b.db.databaseName);
+describe('key prefix per workspace', () => {
+  it('gives two workspaces two prefixes, so a key cannot reach across', async () => {
+    const a = workspaceKeys(harness.tenant);
+    const b = workspaceKeys(other);
+    expect(a.prefix).not.toBe(b.prefix);
+    expect(a.version('art-secret', 1).pk.startsWith(b.prefix)).toBe(false);
   });
 
-  it('finds nothing when tenant A’s handle looks for tenant B’s document by id', async () => {
+  it('finds nothing when tenant A’s handle looks for tenant B’s version by id', async () => {
     // The adversarial read: the attacker knows the exact id and asks for it directly.
     const a = await harness.app.store.handle(harness.tenant);
-    const stolen = await a.collection<Version>(VERSIONS).findOne({ artifact: 'art-secret' });
+    const stolen = await a.versions.get('art-secret', 1);
     expect(stolen).toBeNull();
+    expect(await a.versions.inStates(['accepted'])).toEqual([]);
+  });
+
+  it('refuses a key outside the handle’s prefix before any request is made', async () => {
+    // The item access under every handle is bound to one prefix. Hand it tenant B's key — the
+    // exact key, as an attacker with the layout would build it — and it throws rather than reads.
+    const items = new Items(
+      harness.app.store.doc,
+      harness.app.store.table,
+      workspaceKeys(harness.tenant).prefix,
+    );
+    const stolen = workspaceKeys(other).version('art-secret', 1);
+    await expect(items.get(stolen)).rejects.toThrow(IsolationViolation);
+    await expect(items.query(stolen.pk)).rejects.toThrow(IsolationViolation);
+    await expect(items.put({ ...stolen, kind: 'version' })).rejects.toThrow(IsolationViolation);
+    await expect(items.delete(stolen)).rejects.toThrow(IsolationViolation);
+    expect(() => items.transaction().put({ ...stolen, kind: 'version' })).toThrow(IsolationViolation);
+    // An index key is a key too: an item cannot be filed under another workspace's index partition.
+    await expect(
+      items.put({
+        ...workspaceKeys(harness.tenant).version('art-x', 1),
+        gsi1pk: `ws#${other}#version`,
+        gsi1sk: 'x',
+      }),
+    ).rejects.toThrow(IsolationViolation);
+    // And the control prefix is not a workspace's.
+    await expect(items.get({ pk: 'ctl#workspaces', sk: other })).rejects.toThrow(IsolationViolation);
   });
 
   it('refuses a request for a workspace the caller is not a member of', async () => {
@@ -117,13 +143,15 @@ describe('the catalogue handle', () => {
     const catalogue = await harness.app.store.catalogue(harness.catalogue);
     expect(catalogue.kind).toBe('catalogue');
 
-    const collection = catalogue.collection(VERSIONS) as Record<string, unknown>;
+    const versions = catalogue.versions as unknown as Record<string, unknown>;
     // Reads are present; writes are absent from the type. Asserting on the value too, because a
     // type-only guarantee disappears the moment someone casts.
-    expect(typeof collection.find).toBe('function');
-    for (const write of ['insertOne', 'updateOne', 'deleteOne', 'replaceOne', 'bulkWrite']) {
-      expect(collection[write]).toBeUndefined();
+    expect(typeof versions.get).toBe('function');
+    expect(typeof versions.inStates).toBe('function');
+    for (const write of ['insert', 'update', 'delete', 'put']) {
+      expect(versions[write]).toBeUndefined();
     }
+    expect((catalogue as unknown as Record<string, unknown>).transaction).toBeUndefined();
   });
 
   it('reads the catalogue from inside a tenant session, which is the one crossing that is allowed', async () => {
@@ -139,7 +167,7 @@ describe('the catalogue handle', () => {
 });
 
 describe('search', () => {
-  it('cannot return another workspace’s content, because the index is not in this database', async () => {
+  it('cannot return another workspace’s content, because the read is this workspace’s partition', async () => {
     const results = await call<{ results: Array<{ title: string }> }>(
       harness,
       'GET',
@@ -154,10 +182,11 @@ describe('search', () => {
 describe('the code itself', () => {
   it('has no repository that takes a raw client or a workspace id', async () => {
     // ADR-0006 is a compile-time guarantee only while every store access goes through a handle. A
-    // lint rule enforces this in `services/`, `http/` and `mcp/`; this asserts the rule is still
-    // configured, so deleting it is a failing test rather than a silent loss.
+    // lint rule enforces this in `services/`, `http/`, `mcp/` and `auth/`; this asserts the rule
+    // is still configured, so deleting it is a failing test rather than a silent loss.
     const config = await readFile(resolve(CONFIG_DIR, '../../api/eslint.config.js'), 'utf8');
-    expect(config).toMatch(/importNames: \['MongoClient', 'Db'\]/);
+    expect(config).toMatch(/name: '@aws-sdk\/client-dynamodb'/);
+    expect(config).toMatch(/name: '@aws-sdk\/lib-dynamodb'/);
     expect(config).toMatch(/src\/services\/\*\*\/\*\.ts/);
   });
 

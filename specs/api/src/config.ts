@@ -8,6 +8,9 @@
 
 import { z } from 'zod';
 
+/** What a body may be at most: DynamoDB's item limit, less what the rest of a version needs. */
+export const BODY_CEILING_MAX = 300_000;
+
 const booleanish = z
   .string()
   .transform((v) => ['1', 'true', 'yes', 'on'].includes(v.toLowerCase()))
@@ -20,14 +23,14 @@ const schema = z.object({
   HOST: z.string().default('0.0.0.0'),
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
 
-  // The URI deliberately carries no credentials; the driver receives them separately, so a password
-  // containing `@` or `#` cannot corrupt the connection string.
-  MONGO_URI: z.string().default('mongodb://127.0.0.1:27019'),
-  MONGO_USER: z.string().optional(),
-  MONGO_PASSWORD: z.string().optional(),
-  MONGO_AUTH_SOURCE: z.string().default('admin'),
-  MONGO_CONTROL_DB: z.string().default('specs_control'),
-  MONGO_DB_PREFIX: z.string().default('ws'),
+  /**
+   * The record store: one DynamoDB table (ADR-0021; maestro ADR-0018). No credential — on AWS the
+   * function's role is the grant, and the SDK reads the runtime's own. `DYNAMODB_ENDPOINT` names
+   * DynamoDB Local on a laptop; unset, the SDK's endpoint for `AWS_REGION` applies.
+   */
+  TABLE_NAME: z.string().min(1, 'TABLE_NAME names the DynamoDB table this service reads and writes'),
+  DYNAMODB_ENDPOINT: z.string().optional(),
+  AWS_REGION: z.string().default('us-east-1'),
 
   AUTH_MODE: z.enum(['dev', 'jwks']).default('dev'),
   AUTH_JWKS_URL: z.string().optional(),
@@ -78,8 +81,12 @@ const schema = z.object({
   /** The one workspace whose artifacts every tenant may read, and none may write (ADR-0008). */
   CATALOGUE_WORKSPACE: z.string().default('catalogue'),
 
-  /** Well under MongoDB's 16MB document limit, leaving room for facets and metadata (§8.2). */
-  BODY_CEILING_BYTES: z.coerce.number().int().positive().default(1_048_576),
+  /**
+   * A version is one item, and an item is at most 400 KB (§8.2). The body's ceiling leaves room
+   * for the facets, the provenance, the links and the keys beside it; a specification is tens of
+   * kilobytes. The payload store holds the same version without a ceiling.
+   */
+  BODY_CEILING_BYTES: z.coerce.number().int().positive().max(BODY_CEILING_MAX).default(262_144),
 
   CORS_ORIGINS: z.string().default(''),
 });

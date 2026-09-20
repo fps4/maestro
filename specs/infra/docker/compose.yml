@@ -1,5 +1,5 @@
-# The mstr-specs stack — the local development loop and CI. It is not a deployment target: the
-# service deploys to AWS from a CDK stack (see ../maestro/docs/decisions/0002).
+# The mstr-specs stack — the local development loop. It is not a deployment target: the service
+# deploys to AWS from the Terraform module in terraform/ (maestro ADR-0002, ADR-0016).
 #
 #   local:  make up
 #
@@ -8,90 +8,54 @@
 name: mstr-specs
 
 services:
-  # A SINGLE-NODE REPLICA SET, not a standalone mongod.
-  #
-  # The transactional outbox needs multi-document transactions and those need a replica set, so a
-  # standalone deployment is not a supported configuration — including in development. It would
-  # answer every ordinary read and write happily and then refuse the one thing the outbox exists to
-  # do, which is the worst possible moment to find out. The api asserts this at boot.
-  mongo:
-    image: mongo:7
+  # DynamoDB Local, in place of the table the Terraform module makes on AWS (maestro ADR-0018;
+  # ADR-0021 here). `-sharedDb` so every client sees one database whatever region or key it
+  # names; a data directory on a volume so `make down` keeps what was written. The api asserts
+  # the table's shape at boot, and `dynamodb-init` makes it from the same schema the module
+  # declares (api/src/db/table.ts).
+  dynamodb:
+    image: amazon/dynamodb-local:latest
     restart: unless-stopped
-    # A keyfile is not optional here. MongoDB refuses to start with authorisation enabled *and*
-    # replication enabled unless internal authentication is configured — even for one member. It is
-    # generated on first boot into its own volume rather than committed, because a keyfile in a
-    # repository is a credential in a repository.
-    entrypoint: ["/bin/bash", "-c"]
-    command:
-      - |
-        set -e
-        if [ ! -s /etc/mongo-key/keyfile ]; then
-          openssl rand -base64 756 > /etc/mongo-key/keyfile
-        fi
-        chmod 400 /etc/mongo-key/keyfile
-        chown mongodb:mongodb /etc/mongo-key/keyfile
-        exec docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all --keyFile /etc/mongo-key/keyfile
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/home/dynamodblocal/data"]
+    user: root
     networks:
       default:
         # A UNIQUE hostname, deliberately not the service name. When the api also joins another
         # stack's network (identity-service's, for a local SSO loop) a container there may be
-        # aliased `mongo` too — and Docker's DNS answers across every attached network, so plain
-        # `mongo` can resolve to *their* database. That presents as "Authentication failed" and
-        # looks like a wrong password rather than a wrong server.
+        # aliased `dynamodb` too — and Docker's DNS answers across every attached network, so plain
+        # `dynamodb` can resolve to *their* store.
         aliases:
-          - mstr-specs-mongo
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-specs}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-specs}
+          - mstr-specs-dynamodb
     ports:
-      # Loopback-bound, and 27019 rather than the default so it collides with neither a developer's
-      # own MongoDB nor skills-coach's 27018.
-      - "${MONGO_BIND:-127.0.0.1}:${MONGO_PORT:-27019}:27017"
+      # Loopback-bound, and 8030 rather than the default so it collides with neither a developer's
+      # own DynamoDB Local nor identity-service's on 8000.
+      - "${DYNAMODB_BIND:-127.0.0.1}:${DYNAMODB_PORT:-8030}:8000"
     volumes:
-      - specs-mongodata:/data/db
-      - specs-mongokey:/etc/mongo-key
+      - specs-dynamodata:/home/dynamodblocal/data
     healthcheck:
-      # `hello().setName` rather than `ping`: a standalone answers ping, and the difference between
-      # "running" and "running as a replica set" is the whole point of this service's shape.
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.hello().setName === 'rs0' || quit(1)"]
+      # Any HTTP answer will do: the endpoint returns 400 to a bare GET once it is up.
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8000/ || exit 1"]
       interval: 5s
       timeout: 5s
       retries: 30
-      start_period: 10s
+      start_period: 5s
 
-  # One-shot. Initiates the replica set on an empty volume and exits; on an initiated one it is a
-  # no-op, so it is safe on every deploy rather than only the first.
-  mongo-init:
-    image: mongo:7
+  # One-shot. Creates the table on an empty store and exits; on an existing one it is a no-op,
+  # so it is safe on every start rather than only the first.
+  dynamodb-init:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    image: mstr-specs-api:${IMAGE_TAG:-dev}
     restart: "no"
     depends_on:
-      mongo:
-        condition: service_started
+      dynamodb:
+        condition: service_healthy
     environment:
-      MONGO_USER: ${MONGO_USER:-specs}
-      MONGO_PASSWORD: ${MONGO_PASSWORD:-specs}
-    entrypoint:
-      - bash
-      - -c
-      - |
-        set -e
-        for i in $$(seq 1 60); do
-          if mongosh --host mstr-specs-mongo --quiet -u "$$MONGO_USER" -p "$$MONGO_PASSWORD" \
-               --authenticationDatabase admin --eval 'db.adminCommand({ping:1}).ok' >/dev/null 2>&1; then
-            break
-          fi
-          sleep 2
-        done
-        mongosh --host mstr-specs-mongo --quiet -u "$$MONGO_USER" -p "$$MONGO_PASSWORD" \
-          --authenticationDatabase admin --eval '
-            try {
-              rs.status();
-              print("replica set already initiated");
-            } catch (e) {
-              rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "mstr-specs-mongo:27017" }] });
-              print("replica set initiated");
-            }
-          '
+      TABLE_NAME: ${TABLE_NAME:-specs}
+      DYNAMODB_ENDPOINT: http://mstr-specs-dynamodb:8000
+      AWS_REGION: ${AWS_REGION:-local}
+    command: ["node", "dist/cli/create-table.js"]
 
   minio:
     image: minio/minio:latest
@@ -113,7 +77,7 @@ services:
       start_period: 10s
 
   # One-shot bucket creation. Attachments are content-addressed under a prefix per workspace, so
-  # object storage mirrors the database isolation rather than being the one place a workspace
+  # object storage mirrors the table's isolation rather than being the one place a workspace
   # boundary is a naming convention.
   minio-init:
     image: minio/mc:latest
@@ -141,21 +105,18 @@ services:
     container_name: mstr-specs-api
     restart: unless-stopped
     depends_on:
-      mongo:
+      dynamodb:
         condition: service_healthy
-      mongo-init:
+      dynamodb-init:
         condition: service_completed_successfully
     environment:
       SPECS_ENV: ${SPECS_ENV:-local}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      # The URI carries no credentials; the driver receives them separately, so nothing needs
-      # percent-encoding and a password containing @ or # cannot corrupt the connection string.
-      MONGO_URI: ${MONGO_URI:-mongodb://mstr-specs-mongo:27017/?replicaSet=rs0}
-      MONGO_USER: ${MONGO_USER:-specs}
-      MONGO_PASSWORD: ${MONGO_PASSWORD:-specs}
-      MONGO_AUTH_SOURCE: ${MONGO_AUTH_SOURCE:-admin}
-      MONGO_CONTROL_DB: ${MONGO_CONTROL_DB:-specs_control}
-      MONGO_DB_PREFIX: ${MONGO_DB_PREFIX:-ws}
+      # No database credential: DynamoDB Local accepts any key pair, and on AWS the function's
+      # role is the grant.
+      TABLE_NAME: ${TABLE_NAME:-specs}
+      DYNAMODB_ENDPOINT: http://mstr-specs-dynamodb:8000
+      AWS_REGION: ${AWS_REGION:-local}
       # `dev` injects a stub principal so the stack runs with no identity provider. The api refuses
       # this combination when SPECS_ENV/NODE_ENV say production (src/config.ts).
       AUTH_MODE: ${AUTH_MODE:-dev}
@@ -213,6 +174,5 @@ services:
       start_period: 25s
 
 volumes:
-  specs-mongodata:
-  specs-mongokey:
+  specs-dynamodata:
   specs-miniodata:

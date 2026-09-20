@@ -1,14 +1,23 @@
 ---
 title: "0007: MongoDB, with bodies stored inline and blobs in object storage"
 summary: "MongoDB is the primary store, matching the estate. A version's body is embedded in its document up to 1 MB so reading, rendering, diffing and searching are one round trip; attachments are content-addressed in object storage. Two costs are accepted explicitly: no database-enforced referential or state constraints, and no engine-level row isolation."
-status: proposed
-last_updated: 2026-08-04
+status: superseded
+last_updated: 2026-09-20
 date: 2026-08-04
+superseded_by:
+  - ./0021-the-store-is-dynamodb.md
 related:
   - ./0003-immutable-versions-mutable-drafts.md
   - ./0006-workspace-isolation-by-database.md
   - ../architecture.md
 ---
+
+> **Superseded by [ADR-0021](0021-the-store-is-dynamodb.md) (2026-09-20), under maestro's
+> [ADR-0018](https://github.com/fps4/maestro/blob/main/docs/decisions/0018-dynamodb-is-the-mvp-database.md).**
+> The store is DynamoDB. Bodies stay inline in the version — now an item, with a 256 KiB ceiling —
+> and attachments stay content-addressed in object storage; the two accepted costs below still
+> hold, and the compensating control is still the record sink. Kept as the record of why MongoDB
+> was chosen and what it was expected to cost.
 
 ## Context
 

@@ -1,11 +1,11 @@
 /**
  * `npm run workspace:rebuild -- --workspace <id> [--force]`
  *
- * Rebuild a workspace's database from the archive and the payloads alone (ADR-0020 §4). An
- * operator's act against the database, so it lives beside `workspace:apply` rather than in the
+ * Rebuild a workspace's items from the archive and the payloads alone (ADR-0020 §4). An
+ * operator's act against the table, so it lives beside `workspace:apply` rather than in the
  * `specs` CLI, which speaks HTTP as a member of a workspace. It reads the same configuration as
  * the running service — `RECORD_SINK`, `RECORD_ARCHIVE_DIR` or `ARCHIVE_BUCKET`, `PAYLOAD_STORE`,
- * `RECORD_PAYLOAD_DIR` or `PAYLOAD_BUCKET`, `MONGO_*` — so it reads exactly where the service
+ * `RECORD_PAYLOAD_DIR` or `PAYLOAD_BUCKET`, `TABLE_NAME` — so it reads exactly where the service
  * wrote. Run it with the service stopped for this workspace: a write during the replay would race
  * the projection.
  *

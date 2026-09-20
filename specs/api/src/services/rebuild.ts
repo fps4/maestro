@@ -1,16 +1,16 @@
 /**
- * The rebuilder (ADR-0020 §4): a workspace's database, from the archive and the payloads alone.
+ * The rebuilder (ADR-0020 §4): a workspace's items, from the archive and the payloads alone.
  *
- * This is what makes "the archive is the record and this database a projection" (architecture
- * §5) a fact rather than a sentence — maestro's M1 gate. Verify first: an archive the spine's
- * verifier does not pass is not rebuilt from. Then replay every event in `seq` order into an empty
- * database, fetching each payload by reference and checking it against the digest the event
- * carries before anything is read from it. What comes out reads identically to what was dropped.
+ * This is what makes "the archive is the record and this table a projection" (architecture §5)
+ * a fact rather than a sentence — maestro's M1 gate. Verify first: an archive the spine's verifier
+ * does not pass is not rebuilt from. Then replay every event in `seq` order into an empty prefix,
+ * fetching each payload by reference and checking it against the digest the event carries before
+ * anything is read from it. What comes out reads identically to what was dropped.
  *
  * Not rebuilt, and why (ADR-0020 §5): memberships are grants, re-applied from the tenant's
  * configuration; drafts are not record, except the one a `request_changes` reopened, recreated as
  * it was at reopen; acceptances are derived, and `refresh` runs after replay; attachment blobs
- * were never in the database.
+ * were never in the table.
  */
 
 import {
@@ -20,30 +20,12 @@ import {
   type ArchiveStore,
   type SpineEvent,
 } from '@fps4/maestro-spine';
-import {
-  ARTIFACTS,
-  COUNTERS,
-  DECISIONS,
-  DEFINITIONS,
-  DRAFTS,
-  EVALUATIONS,
-  META,
-  OUTBOX,
-  PROJECTION_VERSION,
-  QUESTIONS,
-  RECORD_COLLECTIONS,
-  VERSIONS,
-  ensureWorkspaceIndexes,
-  type ProjectionMeta,
-} from '../db/collections.js';
 import type { Store } from '../db/client.js';
-import type { WorkspaceHandle } from '../db/handle.js';
-import type { OutboxRow } from '../db/outbox.js';
+import { PROJECTION_VERSION, type OutboxRow, type WorkspaceHandle } from '../db/handle.js';
 import { parseVersionRef, spineWorkspaceId } from '../domain/ids.js';
 import { phaseAfterPropose } from '../domain/lifecycle.js';
 import type {
   Answer,
-  Artifact,
   Decision,
   Draft,
   EvaluationResult,
@@ -63,7 +45,6 @@ import { AcceptanceService, CatalogueReader } from './catalogue.js';
 import type { DecisionPayload } from './decisions.js';
 import type { EvaluationPayload } from './evaluate.js';
 import type { TextPayload } from './questions.js';
-import type { StoredDefinition } from './workspaces.js';
 
 export class RebuildRefused extends Error {
   constructor(message: string) {
@@ -112,19 +93,16 @@ export class RebuildService {
       );
     }
 
-    // 2. Empty target. The control database — definitions, principals — is not touched.
+    // 2. Empty target. The control items — definitions, principals — are not touched.
     if (input.force) await this.store.dropWorkspace(input.workspace);
-    const handle = await this.store.handle(input.workspace);
-    const populated: string[] = [];
-    for (const name of RECORD_COLLECTIONS) {
-      if ((await handle.collection(name).countDocuments({}, { limit: 1 })) > 0) populated.push(name);
-    }
+    const populated = await this.store.populatedRecordKinds(input.workspace);
     if (populated.length > 0) {
       throw new RebuildRefused(
-        `Workspace \`${input.workspace}\` is not empty (${populated.join(', ')} hold documents). ` +
+        `Workspace \`${input.workspace}\` is not empty (it holds ${populated.join(', ')} items). ` +
           'Pass --force to drop it and rebuild from the archive.',
       );
     }
+    const handle = await this.store.handle(input.workspace);
 
     // 3. Replay, in seq order, every day the archive holds.
     const projector = new Projector(this.store, handle, input.workspace, input.payloads);
@@ -150,32 +128,22 @@ export class RebuildService {
           delivered_at: deliveredAt,
           attempts: 1,
         });
-        if (rows.length >= OUTBOX_BATCH) {
-          await handle.collection<OutboxRow>(OUTBOX).insertMany(rows.splice(0));
-        }
+        if (rows.length >= OUTBOX_BATCH) await handle.outbox.insertMany(rows.splice(0));
         last = event.seq;
         expected += 1;
       }
     }
-    if (rows.length > 0) await handle.collection<OutboxRow>(OUTBOX).insertMany(rows);
+    if (rows.length > 0) await handle.outbox.insertMany(rows);
 
     // The counters the emitting transaction would have left: the workspace's seq, each subject's.
-    const counters = handle.collection<{ _id: string; value: number }>(COUNTERS);
     if (last > 0) {
-      await counters.insertMany([
-        { _id: 'outbox', value: last },
-        ...[...subjects].map(([subject, seq]) => ({ _id: `subject:${subject}`, value: seq })),
+      await handle.counters.putMany([
+        { name: 'outbox', value: last },
+        ...[...subjects].map(([subject, seq]) => ({ name: `subject#${subject}`, value: seq })),
       ]);
     }
 
-    await ensureWorkspaceIndexes(handle.db);
-    await handle
-      .collection<ProjectionMeta>(META)
-      .updateOne(
-        { _id: 'projection' },
-        { $set: { projection_version: PROJECTION_VERSION } },
-        { upsert: true },
-      );
+    await handle.meta.put({ projection_version: PROJECTION_VERSION });
 
     // 4. What is derived: acceptances are recomputed against the catalogue.
     const acceptances = await new AcceptanceService(
@@ -188,9 +156,9 @@ export class RebuildService {
 }
 
 /**
- * The projection: one event at a time, in order, into the collections the services write. Each
- * branch mirrors the transaction that emitted the event; a divergence between the two is the
- * defect the rebuild test exists to catch.
+ * The projection: one event at a time, in order, into the items the services write. Each branch
+ * mirrors the transaction that emitted the event; a divergence between the two is the defect the
+ * rebuild test exists to catch.
  */
 class Projector {
   readonly counts = {
@@ -233,14 +201,11 @@ class Projector {
     }
   }
 
-  /** The definition the event was written under, from the control database. */
+  /** The definition the event was written under, from the control items. */
   private async definition(event: SpineEvent, version: number): Promise<WorkspaceDefinition> {
     const cached = this.definitions.get(version);
     if (cached) return cached;
-    const stored = await this.store
-      .control()
-      .collection<StoredDefinition>(DEFINITIONS)
-      .findOne({ workspace: this.workspace, definition_version: version });
+    const stored = await this.store.control.definitions.get(this.workspace, version);
     if (!stored) this.refuse(event, `definition version ${version} is not stored for this workspace`);
     const definition = parseWorkspaceDefinition(stored.definition);
     this.definitions.set(version, definition);
@@ -249,9 +214,7 @@ class Projector {
 
   private async version(event: SpineEvent): Promise<Version> {
     const subject = this.subject(event);
-    const version = await this.handle
-      .collection<Version>(VERSIONS)
-      .findOne({ artifact: subject.artifact, ordinal: subject.ordinal }, { projection: { _id: 0 } });
+    const version = await this.handle.versions.get(subject.artifact, subject.ordinal);
     if (!version) this.refuse(event, 'its version was never proposed on this record');
     return version;
   }
@@ -300,25 +263,19 @@ class Projector {
     const definition = await this.definition(event, body.definition_version);
 
     const version: Version = { workspace: this.workspace, ...payload, state: 'proposed' };
-    await this.handle.collection<Version>(VERSIONS).insertOne(version);
+    await this.handle.versions.insert(version);
     this.counts.versions += 1;
 
-    const artifacts = this.handle.collection<Artifact>(ARTIFACTS);
-    const artifact = await artifacts.findOne({ id: subject.artifact });
+    const artifact = await this.handle.artifacts.get(subject.artifact);
     if (artifact) {
-      await artifacts.updateOne(
-        { id: subject.artifact },
-        {
-          $set: {
-            latest_ordinal: subject.ordinal,
-            phase: phaseAfterPropose(definition, artifact.phase) ?? artifact.phase,
-            title: version.title,
-            updated_at: event.occurred_at,
-          },
-        },
-      );
+      await this.handle.artifacts.update(subject.artifact, {
+        latest_ordinal: subject.ordinal,
+        phase: phaseAfterPropose(definition, artifact.phase) ?? artifact.phase,
+        title: version.title,
+        updated_at: event.occurred_at,
+      });
     } else {
-      await artifacts.insertOne({
+      await this.handle.artifacts.insert({
         id: subject.artifact,
         workspace: this.workspace,
         type: version.type,
@@ -362,29 +319,19 @@ class Projector {
       decided_by: event.acting,
       decided_at: event.occurred_at,
     };
-    await this.handle.collection<Decision>(DECISIONS).insertOne(decision);
+    await this.handle.decisions.insert(decision);
     this.counts.decisions += 1;
 
-    await this.handle.collection<Version>(VERSIONS).updateOne(
-      { artifact: subject.artifact, ordinal: subject.ordinal },
-      {
-        $set: {
-          state: body.state,
-          decided_at: event.occurred_at,
-          ...(body.materiality ? { materiality: body.materiality } : {}),
-        },
-      },
-    );
-    await this.handle.collection<Artifact>(ARTIFACTS).updateOne(
-      { id: subject.artifact },
-      {
-        $set: {
-          ...(body.phase ? { phase: body.phase } : {}),
-          ...(body.state === 'accepted' ? { accepted_ordinal: subject.ordinal } : {}),
-          updated_at: event.occurred_at,
-        },
-      },
-    );
+    await this.handle.versions.update(subject.artifact, subject.ordinal, {
+      state: body.state,
+      decided_at: event.occurred_at,
+      ...(body.materiality ? { materiality: body.materiality } : {}),
+    });
+    await this.handle.artifacts.update(subject.artifact, {
+      ...(body.phase ? { phase: body.phase } : {}),
+      ...(body.state === 'accepted' ? { accepted_ordinal: subject.ordinal } : {}),
+      updated_at: event.occurred_at,
+    });
 
     // A reopened draft, as it was at reopen (ADR-0020 §5): the refused version, editable again.
     if (body.reopened_draft) {
@@ -409,17 +356,19 @@ class Projector {
         created_at: event.occurred_at,
         updated_at: event.occurred_at,
       };
-      await this.handle.collection<Draft>(DRAFTS).insertOne(draft);
+      await this.handle.drafts.insert(draft);
       this.counts.drafts_reopened += 1;
     }
   }
 
-  private async versionState(event: SpineEvent, state: VersionState, more: Partial<Version>): Promise<void> {
+  private async versionState(
+    event: SpineEvent,
+    state: VersionState,
+    more: Partial<Pick<Version, 'decided_at'>>,
+  ): Promise<void> {
     const subject = this.subject(event);
-    const result = await this.handle
-      .collection<Version>(VERSIONS)
-      .updateOne({ artifact: subject.artifact, ordinal: subject.ordinal }, { $set: { state, ...more } });
-    if (result.matchedCount === 0) this.refuse(event, 'its version was never proposed on this record');
+    const updated = await this.handle.versions.update(subject.artifact, subject.ordinal, { state, ...more });
+    if (!updated) this.refuse(event, 'its version was never proposed on this record');
   }
 
   private async linkPinned(event: SpineEvent): Promise<void> {
@@ -430,9 +379,7 @@ class Projector {
       const pin = body.links.find((p) => p.type === link.type && p.target === link.target);
       return pin && link.pinned_to == null ? { ...link, pinned_to: pin.pinned_to } : link;
     });
-    await this.handle
-      .collection<Version>(VERSIONS)
-      .updateOne({ artifact: subject.artifact, ordinal: subject.ordinal }, { $set: { links } });
+    await this.handle.versions.update(subject.artifact, subject.ordinal, { links });
   }
 
   private async evaluationRecorded(event: SpineEvent): Promise<void> {
@@ -453,15 +400,7 @@ class Projector {
       subject_digest: body.subject_digest,
       recorded_at: event.occurred_at,
     };
-    await this.handle
-      .collection<EvaluationResult>(EVALUATIONS)
-      .replaceOne(
-        { artifact: subject.artifact, ordinal: subject.ordinal, evaluator: body.evaluator },
-        record,
-        {
-          upsert: true,
-        },
-      );
+    await this.handle.evaluations.put(record);
     this.counts.evaluations += 1;
   }
 
@@ -481,7 +420,7 @@ class Projector {
       asked_at: event.occurred_at,
       answers: [],
     };
-    await this.handle.collection<Question>(QUESTIONS).insertOne(question);
+    await this.handle.questions.insert(question);
     this.counts.questions += 1;
   }
 
@@ -495,22 +434,15 @@ class Projector {
       kind: body.kind,
       at: event.occurred_at,
     };
-    const result = await this.handle
-      .collection<Question>(QUESTIONS)
-      .updateOne({ id: body.question }, { $push: { answers: answer } });
-    if (result.matchedCount === 0)
-      this.refuse(event, `question \`${body.question}\` was never raised on this record`);
+    const question = await this.handle.questions.get(body.question);
+    if (!question) this.refuse(event, `question \`${body.question}\` was never raised on this record`);
+    await this.handle.questions.answer(body.question, answer, question.answers.length);
   }
 
   private async questionResolved(event: SpineEvent): Promise<void> {
     const body = event.body as { question: string };
-    const result = await this.handle
-      .collection<Question>(QUESTIONS)
-      .updateOne(
-        { id: body.question },
-        { $set: { resolved_at: event.occurred_at, resolved_by: event.acting } },
-      );
-    if (result.matchedCount === 0)
-      this.refuse(event, `question \`${body.question}\` was never raised on this record`);
+    const question = await this.handle.questions.get(body.question);
+    if (!question) this.refuse(event, `question \`${body.question}\` was never raised on this record`);
+    await this.handle.questions.resolve(body.question, event.occurred_at, event.acting);
   }
 }

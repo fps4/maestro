@@ -21,7 +21,6 @@
  * the payload.
  */
 
-import { EVALUATIONS, VERSIONS } from '../db/collections.js';
 import { firstSeat, type Actor, type Recorder } from '../db/outbox.js';
 import type { WorkspaceHandle } from '../db/handle.js';
 import { facetSchemaEvaluation } from '../domain/builtin-evaluators.js';
@@ -82,9 +81,7 @@ export class EvaluationService {
    * bytes, and one with different findings never overwrites what an earlier event names.
    */
   async record(input: Omit<EvaluationResult, 'recorded_at'>, actor: Actor): Promise<EvaluationResult> {
-    const version = await this.handle
-      .collection<Version>(VERSIONS)
-      .findOne({ artifact: input.artifact, ordinal: input.ordinal }, { projection: { type: 1, digest: 1 } });
+    const version = await this.handle.versions.get(input.artifact, input.ordinal);
     if (!version) throw new NotFound(`Version \`${input.artifact}@${input.ordinal}\``);
     // A verdict against bytes we do not hold is not a verdict about anything here.
     if (version.digest !== input.subject_digest) {
@@ -110,18 +107,9 @@ export class EvaluationService {
 
     const now = new Date().toISOString();
     const record: EvaluationResult = { ...input, recorded_at: now };
-    return this.handle.transaction(async (session) => {
-      await this.handle
-        .collection<EvaluationResult>(EVALUATIONS)
-        .replaceOne(
-          { artifact: input.artifact, ordinal: input.ordinal, evaluator: input.evaluator },
-          record,
-          {
-            upsert: true,
-            session,
-          },
-        );
-      await recorder.emit(session, [
+    return this.handle.transaction(async (tx) => {
+      await this.handle.evaluations.put(record, tx);
+      await recorder.emit(tx, [
         {
           type: 'EvaluationRecorded',
           subject: { artifact: input.artifact, ordinal: input.ordinal },

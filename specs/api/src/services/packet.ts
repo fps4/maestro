@@ -10,7 +10,6 @@
  * It contains no way to decide. It is what you read *before* deciding.
  */
 
-import { DECISIONS, EVALUATIONS, VERSIONS } from '../db/collections.js';
 import type { WorkspaceHandle } from '../db/handle.js';
 import { consequencesOf, type OutcomeConsequence } from '../domain/consequences.js';
 import { facetDiff, linkDiff, bodyDiff, type FacetChange, type LinkDiff } from '../domain/diff.js';
@@ -128,18 +127,11 @@ export class PacketService {
     ]);
     const type = typeIn(def, version.type)!;
 
-    const evaluations = await this.handle
-      .collection<EvaluationResult>(EVALUATIONS)
-      .find({ artifact: artifactId, ordinal }, { projection: { _id: 0 } })
-      .toArray();
+    const evaluations = await this.handle.evaluations.ofVersion(artifactId, ordinal);
 
     const questions = await new QuestionService(this.handle).list(artifactId, ordinal);
 
-    const history = await this.handle
-      .collection<Decision>(DECISIONS)
-      .find({ artifact: artifactId }, { projection: { _id: 0 } })
-      .sort({ decided_at: -1 })
-      .toArray();
+    const history = await this.handle.decisions.ofArtifact(artifactId);
 
     // Link targets: what a pin would freeze to, and what to call each target.
     const targets = version.links.map((l) => l.target);
@@ -256,9 +248,7 @@ export class PacketService {
       .sort((a, b) => b.ordinal - a.ordinal || b.decided_at.localeCompare(a.decided_at))[0];
     if (!last) return null;
 
-    const previous = await this.handle
-      .collection<Version>(VERSIONS)
-      .findOne({ artifact: version.artifact, ordinal: last.ordinal }, { projection: { _id: 0 } });
+    const previous = await this.handle.versions.get(version.artifact, last.ordinal);
     if (!previous) return null;
 
     const facets = facetDiff(previous.facets, version.facets, previous.provenance, version.provenance);

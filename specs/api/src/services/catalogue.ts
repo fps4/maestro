@@ -16,8 +16,6 @@
  *   a settable flag would not tell them reliably.
  */
 
-import type { Filter } from 'mongodb';
-import { ACCEPTANCES, VERSIONS, WITHOUT_BODY } from '../db/collections.js';
 import type { CatalogueHandle, WorkspaceHandle } from '../db/handle.js';
 import { acceptanceStatus, forceStatusAt, type AcceptanceRecord } from '../domain/effective.js';
 import type { AcceptanceState } from '../domain/gates.js';
@@ -55,7 +53,12 @@ interface StandardFacets {
   [key: string]: unknown;
 }
 
-function summarise(version: Version, at: Date): StandardSummary {
+type Listed = Pick<
+  Version,
+  'artifact' | 'ordinal' | 'type' | 'title' | 'facets' | 'effective' | 'materiality' | 'digest' | 'state'
+>;
+
+function summarise(version: Listed, at: Date): StandardSummary {
   const facets = version.facets as StandardFacets;
   return {
     artifact: version.artifact,
@@ -81,46 +84,31 @@ function summarise(version: Version, at: Date): StandardSummary {
 export class CatalogueReader {
   constructor(private readonly catalogue: CatalogueHandle) {}
 
-  /** Every accepted standard, newest first. Bodies excluded — this is a list query. */
+  /** Every accepted standard, by its stable id. Bodies excluded — this is a list query. */
   async list(options: { pack?: string; type?: string; at?: Date } = {}): Promise<StandardSummary[]> {
     const at = options.at ?? new Date();
-    const filter: Record<string, unknown> = {
-      state: 'accepted',
-      type: options.type ?? { $in: [PLATFORM_STANDARD, EXTERNAL_STANDARD] },
-    };
-    if (options.pack) filter['facets.pack'] = options.pack;
-
-    const versions = await this.catalogue
-      .collection<Version>(VERSIONS)
-      .find(filter, { projection: { _id: 0, ...WITHOUT_BODY } })
-      .sort({ 'facets.standard_id': 1 })
-      .toArray();
-    return versions.map((v) => summarise(v, at));
+    const types = options.type ? [options.type] : [PLATFORM_STANDARD, EXTERNAL_STANDARD];
+    const versions = (await this.catalogue.versions.inStates(['accepted'])).filter((v) => {
+      if (!types.includes(v.type)) return false;
+      return !options.pack || (v.facets as StandardFacets).pack === options.pack;
+    });
+    return versions
+      .sort((a, b) => standardIdOf(a).localeCompare(standardIdOf(b)) || a.ordinal - b.ordinal)
+      .map((v) => summarise(v, at));
   }
 
   /** One standard, with its body — which is the full text for ours and a summary for an external one. */
   async read(artifact: string, ordinal?: number): Promise<Version | null> {
-    const filter: Filter<Version> =
-      ordinal === undefined ? { artifact, state: 'accepted' } : { artifact, ordinal };
-    return this.catalogue.collection<Version>(VERSIONS).findOne(filter, { projection: { _id: 0 } });
+    return ordinal === undefined
+      ? this.catalogue.versions.accepted(artifact)
+      : this.catalogue.versions.get(artifact, ordinal);
   }
 
-  /** Resolve stable standard ids to the versions a tenant artifact references. */
-  async resolveRefs(refs: CatalogueRef[]): Promise<Map<string, Version>> {
-    if (refs.length === 0) return new Map();
-    const versions = await this.catalogue
-      .collection<Version>(VERSIONS)
-      .find(
-        { 'facets.standard_id': { $in: refs.map((r) => r.standard) } },
-        { projection: { _id: 0, ...WITHOUT_BODY } },
-      )
-      .toArray();
-
-    const byId = new Map<string, Version>();
+  /** Resolve stable standard ids to the versions a tenant artifact references (gsi2, one read each). */
+  async resolveRefs(refs: CatalogueRef[]): Promise<Map<string, Listed>> {
+    const byId = new Map<string, Listed>();
     for (const ref of refs) {
-      const match = versions.find(
-        (v) => (v.facets as StandardFacets).standard_id === ref.standard && v.ordinal === ref.ordinal,
-      );
+      const match = await this.catalogue.versions.byStandardRef(ref.standard, ref.ordinal);
       if (match) byId.set(ref.standard, match);
     }
     return byId;
@@ -130,19 +118,17 @@ export class CatalogueReader {
   async publishedVersions(
     standardId: string,
   ): Promise<Array<{ ordinal: number; materiality?: Materiality }>> {
-    const versions = await this.catalogue
-      .collection<Version>(VERSIONS)
-      .find(
-        { 'facets.standard_id': standardId, state: { $in: ['accepted', 'superseded'] } },
-        { projection: { _id: 0, ordinal: 1, materiality: 1 } },
-      )
-      .toArray();
-    return versions.map((v) => ({
-      ordinal: v.ordinal,
-      ...(v.materiality ? { materiality: v.materiality } : {}),
-    }));
+    const versions = await this.catalogue.versions.byStandard(standardId);
+    return versions
+      .filter((v) => v.state === 'accepted' || v.state === 'superseded')
+      .map((v) => ({
+        ordinal: v.ordinal,
+        ...(v.materiality ? { materiality: v.materiality } : {}),
+      }));
   }
 }
+
+const standardIdOf = (v: Listed): string => (v.facets as StandardFacets).standard_id ?? '';
 
 export interface StoredAcceptance extends AcceptanceRecord {
   status: 'active' | 'lapsed' | 'overridden';
@@ -165,11 +151,7 @@ export class AcceptanceService {
   ) {}
 
   async list(): Promise<StoredAcceptance[]> {
-    return this.handle
-      .collection<StoredAcceptance>(ACCEPTANCES)
-      .find({}, { projection: { _id: 0 } })
-      .sort({ standard: 1 })
-      .toArray();
+    return this.handle.acceptances.list<StoredAcceptance>();
   }
 
   /**
@@ -187,21 +169,17 @@ export class AcceptanceService {
       const published = await this.reader.publishedVersions(acceptance.standard);
       const status = acceptanceStatus(acceptance, published);
       if (status.status !== acceptance.status) {
-        await this.handle.collection<StoredAcceptance>(ACCEPTANCES).updateOne(
+        // An acceptance is keyed by (standard, scope, project) — Wkb acceptance is per project
+        // (§3.6), so the tenant-scoped and project-scoped rows for one standard are different
+        // acceptances by different parties and must not overwrite each other.
+        await this.handle.acceptances.setStatus(
           {
             standard: acceptance.standard,
             scope: acceptance.scope,
-            // An acceptance is keyed by (standard, scope, project) — Wkb acceptance is per project
-            // (§3.6), so the tenant-scoped and project-scoped rows for one standard are different
-            // acceptances by different parties and must not overwrite each other.
-            ...(acceptance.project ? { project: acceptance.project } : { project: { $exists: false } }),
+            ...(acceptance.project ? { project: acceptance.project } : {}),
           },
-          {
-            $set: {
-              status: status.status,
-              ...(status.lapsed_at_ordinal ? { lapsed_at_ordinal: status.lapsed_at_ordinal } : {}),
-            },
-          },
+          status.status,
+          status.lapsed_at_ordinal,
         );
       }
       if (status.status === 'lapsed') lapsed.push(acceptance.standard);

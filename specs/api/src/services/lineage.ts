@@ -6,7 +6,6 @@
  * answer, rather than three clients each walking links slightly differently.
  */
 
-import { ARTIFACTS, DECISIONS, VERSIONS, WITHOUT_BODY } from '../db/collections.js';
 import type { WorkspaceHandle } from '../db/handle.js';
 import {
   bodyDiff,
@@ -18,7 +17,7 @@ import {
 } from '../domain/diff.js';
 import { resolveLinks, type ResolvedLink } from '../domain/links.js';
 import { typeIn } from '../domain/workspace-definition.js';
-import type { Artifact, Decision, Version } from '../domain/types.js';
+import type { Decision } from '../domain/types.js';
 import { NotFound } from './artifacts.js';
 import type { LoadedWorkspace } from './workspaces.js';
 
@@ -63,10 +62,9 @@ export class LineageService {
   ) {}
 
   async diff(artifact: string, from: number, to: number): Promise<VersionDiff> {
-    const versions = this.handle.collection<Version>(VERSIONS);
     const [a, b] = await Promise.all([
-      versions.findOne({ artifact, ordinal: from }, { projection: { _id: 0 } }),
-      versions.findOne({ artifact, ordinal: to }, { projection: { _id: 0 } }),
+      this.handle.versions.get(artifact, from),
+      this.handle.versions.get(artifact, to),
     ]);
     if (!a) throw new NotFound(`Version \`${artifact}@${from}\``);
     if (!b) throw new NotFound(`Version \`${artifact}@${to}\``);
@@ -89,11 +87,13 @@ export class LineageService {
    * lineage query nobody runs twice.
    */
   async lineage(root: string, depth = 4): Promise<Lineage> {
-    const artifacts = this.handle.collection<Artifact>(ARTIFACTS);
-    const versions = this.handle.collection<Version>(VERSIONS);
-
-    const start = await artifacts.findOne({ id: root }, { projection: { _id: 0 } });
+    const start = await this.handle.artifacts.get(root);
     if (!start) throw new NotFound(`Artifact \`${root}\``);
+
+    // Every accepted or proposed version of the workspace, once: the outgoing edges of each level
+    // and the incoming ones — which a client cannot compute without reading every artifact — both
+    // come from this one bounded read.
+    const live = await this.handle.versions.inStates(['accepted', 'proposed']);
 
     const nodes = new Map<string, LineageNode>();
     const edges: LineageEdge[] = [];
@@ -105,7 +105,7 @@ export class LineageService {
       unseen.forEach((id) => seen.add(id));
       if (unseen.length === 0) break;
 
-      const records = await artifacts.find({ id: { $in: unseen } }, { projection: { _id: 0 } }).toArray();
+      const records = await this.handle.artifacts.getMany(unseen);
       for (const record of records) {
         nodes.set(record.id, {
           artifact: record.id,
@@ -119,15 +119,9 @@ export class LineageService {
 
       // Outgoing: the links this artifact's most authoritative version declares. An accepted
       // version is what the trail is made of; a proposal is shown only when nothing is accepted.
-      const outgoing = await versions
-        .find(
-          { artifact: { $in: unseen }, state: { $in: ['accepted', 'proposed'] } },
-          { projection: { _id: 0, ...WITHOUT_BODY } },
-        )
-        .sort({ ordinal: -1 })
-        .toArray();
+      const outgoing = live.filter((v) => unseen.includes(v.artifact)).sort((a, b) => b.ordinal - a.ordinal);
 
-      const authoritative = new Map<string, Version>();
+      const authoritative = new Map<string, (typeof live)[number]>();
       for (const version of outgoing) {
         const held = authoritative.get(version.artifact);
         if (!held || (held.state !== 'accepted' && version.state === 'accepted')) {
@@ -140,13 +134,7 @@ export class LineageService {
         const type = typeIn(this.workspace.definition, version.type);
         if (!type) continue;
         const targets = version.links.map((l) => l.target);
-        const acceptedRows = await versions
-          .find(
-            { artifact: { $in: targets }, state: 'accepted' },
-            { projection: { artifact: 1, ordinal: 1 } },
-          )
-          .toArray();
-        const acceptedByArtifact = new Map(acceptedRows.map((r) => [r.artifact, r.ordinal]));
+        const acceptedByArtifact = await this.handle.artifacts.acceptedOrdinals(targets);
 
         for (const link of resolveLinks(version.links, type, (a) => acceptedByArtifact.get(a))) {
           edges.push({
@@ -162,13 +150,8 @@ export class LineageService {
       }
 
       // Incoming: who points *at* these. This is the direction that answers "what happened to my
-      // idea", and it is the one a client cannot compute without scanning every artifact.
-      const incoming = await versions
-        .find(
-          { 'links.target': { $in: unseen }, state: { $in: ['accepted', 'proposed'] } },
-          { projection: { _id: 0, ...WITHOUT_BODY } },
-        )
-        .toArray();
+      // idea".
+      const incoming = live.filter((v) => v.links.some((l) => unseen.includes(l.target)));
       for (const version of incoming) {
         for (const link of version.links) {
           if (!unseen.includes(link.target)) continue;
@@ -197,10 +180,6 @@ export class LineageService {
 
   /** The decisions taken on an artifact, newest first — the "who accepted it" half of the question. */
   async decisions(artifact: string): Promise<Decision[]> {
-    return this.handle
-      .collection<Decision>(DECISIONS)
-      .find({ artifact }, { projection: { _id: 0 } })
-      .sort({ decided_at: -1 })
-      .toArray();
+    return this.handle.decisions.ofArtifact(artifact);
   }
 }

@@ -22,7 +22,6 @@ import { EvaluationService } from '../services/evaluate.js';
 import { LineageService } from '../services/lineage.js';
 import { PacketService } from '../services/packet.js';
 import { QuestionService } from '../services/questions.js';
-import { excerpt } from '../services/render.js';
 import type { RequestContext } from '../auth/context.js';
 import type { ProvenanceMap } from '../domain/types.js';
 
@@ -129,7 +128,7 @@ export const TOOLS: McpTool[] = [
           type: r.type,
           title: r.title,
           state: r.state,
-          excerpt: excerpt(r.body ?? { format: 'text/v1', content: '' }),
+          excerpt: r.excerpt,
         })),
       };
     },

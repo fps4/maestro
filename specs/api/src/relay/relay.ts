@@ -21,7 +21,7 @@ import { RECORD_TYPES } from '../db/record-types.js';
 import { FsPayloadStore, S3PayloadStore, type PayloadStore } from '../record/payload-store.js';
 import { s3ClientFor } from '../services/attachments.js';
 import type { PrincipalDirectory } from '../services/principals.js';
-import { MongoOutboxSource } from './source.js';
+import { DynamoOutboxSource } from './source.js';
 
 export interface Relay {
   once(): Promise<RelayReport>;
@@ -80,7 +80,7 @@ export function createRelay(
   directory: PrincipalDirectory,
   sink: { archive: ArchiveStore; delivery: Delivery },
 ): Relay {
-  const source = new MongoOutboxSource(store, directory);
+  const source = new DynamoOutboxSource(store, directory);
   const deps = {
     source,
     archive: sink.archive,

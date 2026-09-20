@@ -1,30 +1,28 @@
 /**
- * The Mongo client, the control database, and handle acquisition.
+ * The DynamoDB client, the control items, and handle acquisition (ADR-0021; maestro ADR-0018).
  *
- * A **replica set is required**, including in development. The outbox is transactional and
- * multi-document transactions need one, so a standalone `mongod` is not a supported configuration —
- * running against one would appear to work until the first partial write, which is the worst
- * possible moment to discover it.
+ * No database credential exists: on AWS the function's role is the grant, and `DYNAMODB_ENDPOINT`
+ * names DynamoDB Local on a laptop. The table is described at boot, so a table the module did not
+ * make — or made differently from `table.ts` — is a sentence at start-up rather than a query that
+ * fails later.
  */
 
-import { MongoClient, type Db } from 'mongodb';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb';
 import type { Config } from '../config.js';
-import { databaseNameFor } from '../domain/ids.js';
-import { catalogueHandle, workspaceHandle, type CatalogueHandle, type WorkspaceHandle } from './handle.js';
+import { controlStore, type ControlStore, type WorkspaceRecord } from './control.js';
 import {
-  ensureControlIndexes,
-  ensureProjectionVersion,
-  ensureWorkspaceIndexes,
-  WORKSPACES,
-} from './collections.js';
+  catalogueHandle,
+  PROJECTION_VERSION,
+  workspaceHandle,
+  type CatalogueHandle,
+  type WorkspaceHandle,
+} from './handle.js';
+import { Items, type Item, type Key } from './items.js';
+import { RECORD_KINDS, workspacePrefix, type Kind } from './keys.js';
+import { describeTable, KIND, PK, schemaDiscrepancies, SK } from './table.js';
 
-export interface WorkspaceRecord {
-  id: string;
-  kind: 'tenant' | 'catalogue';
-  title?: string;
-  definition_version: number;
-  created_at: string;
-}
+export type { WorkspaceRecord } from './control.js';
 
 export class UnknownWorkspace extends Error {
   constructor(workspace: string) {
@@ -33,99 +31,118 @@ export class UnknownWorkspace extends Error {
   }
 }
 
+export class ProjectionBehind extends Error {
+  constructor(
+    readonly workspace: string,
+    readonly found: number,
+  ) {
+    super(
+      `Workspace \`${workspace}\` was projected at version ${found}; this service projects at ${PROJECTION_VERSION}. ` +
+        'Rebuild it from the archive (`npm run workspace:rebuild -- --workspace <id> --force`); nothing migrates in place.',
+    );
+    this.name = 'ProjectionBehind';
+  }
+}
+
+export type StoreConfig = Pick<Config, 'TABLE_NAME' | 'DYNAMODB_ENDPOINT' | 'AWS_REGION'>;
+
+/** The client the configuration describes: the runtime's own credentials, or Local's stand-ins. */
+export function dynamoClientFor(config: StoreConfig): DynamoDBClient {
+  return new DynamoDBClient({
+    region: config.AWS_REGION,
+    ...(config.DYNAMODB_ENDPOINT
+      ? {
+          endpoint: config.DYNAMODB_ENDPOINT,
+          // DynamoDB Local accepts any key pair; the SDK still insists on one.
+          credentials: { accessKeyId: 'local', secretAccessKey: 'local' },
+        }
+      : {}),
+  });
+}
+
 export class Store {
-  private readonly indexed = new Set<string>();
+  private readonly checked = new Set<string>();
+  readonly control: ControlStore;
 
   private constructor(
-    readonly client: MongoClient,
-    private readonly config: Config,
-  ) {}
+    readonly client: DynamoDBClient,
+    readonly doc: DynamoDBDocumentClient,
+    readonly table: string,
+    private readonly config: Pick<Config, 'CATALOGUE_WORKSPACE'>,
+  ) {
+    this.control = controlStore(doc, table);
+  }
 
-  static async connect(config: Config): Promise<Store> {
-    const client = new MongoClient(config.MONGO_URI, {
-      ...(config.MONGO_USER && config.MONGO_PASSWORD
-        ? {
-            auth: { username: config.MONGO_USER, password: config.MONGO_PASSWORD },
-            authSource: config.MONGO_AUTH_SOURCE,
-          }
-        : {}),
-      // A write that is not acknowledged by a majority can be rolled back by an election, and a
-      // record that can be rolled back is not a record.
-      writeConcern: { w: 'majority' },
-      retryWrites: true,
+  static async connect(config: StoreConfig & Pick<Config, 'CATALOGUE_WORKSPACE'>): Promise<Store> {
+    const client = dynamoClientFor(config);
+    const doc = DynamoDBDocumentClient.from(client, {
+      marshallOptions: { removeUndefinedValues: true },
     });
-    await client.connect();
-
-    const store = new Store(client, config);
-    await ensureControlIndexes(store.control());
-    await store.assertReplicaSet();
+    const store = new Store(client, doc, config.TABLE_NAME, config);
+    await store.assertTable();
     return store;
   }
 
   /**
-   * Fail at boot rather than at the first transaction.
+   * Fail at boot rather than at the first query.
    *
-   * A standalone deployment answers every ordinary read and write happily and then refuses to start
-   * a session transaction — so without this check the service looks healthy right up until the
-   * outbox tries to do its one job.
+   * The module declares the table and the code declares its shape (`table.ts`); the two must
+   * match, and this is where a mismatch is found — at start-up, in a sentence naming the index.
    */
-  private async assertReplicaSet(): Promise<void> {
-    const info = (await this.client.db('admin').command({ hello: 1 })) as { setName?: string; msg?: string };
-    if (!info.setName && info.msg !== 'isdbgrid') {
+  private async assertTable(): Promise<void> {
+    const description = await describeTable(this.client, this.table);
+    const problems = schemaDiscrepancies(description);
+    if (problems.length > 0) {
       throw new Error(
-        'MongoDB is running standalone. The transactional outbox needs multi-document transactions, ' +
-          'so a replica set is required — start mongod with --replSet and run rs.initiate().',
+        `Table \`${this.table}\` does not match api/src/db/table.ts: ${problems.join('; ')}. ` +
+          'The Terraform module and table.ts declare the same table; one of them moved.',
       );
     }
   }
 
-  control(): Db {
-    return this.client.db(this.config.MONGO_CONTROL_DB);
-  }
-
   async close(): Promise<void> {
-    await this.client.close();
+    this.client.destroy();
   }
 
   async workspaceRecord(workspace: string): Promise<WorkspaceRecord | null> {
-    return this.control().collection<WorkspaceRecord>(WORKSPACES).findOne({ id: workspace });
+    return this.control.workspaces.get(workspace);
   }
 
-  private async database(workspace: string): Promise<{ db: Db; record: WorkspaceRecord }> {
-    const record = await this.workspaceRecord(workspace);
+  private async registered(workspace: string): Promise<WorkspaceRecord> {
+    const record = await this.control.workspaces.get(workspace);
     if (!record) throw new UnknownWorkspace(workspace);
-    const db = this.client.db(databaseNameFor(workspace, this.config.MONGO_DB_PREFIX));
-    if (!this.indexed.has(workspace)) {
-      // A database an older projection wrote is refused here, before a handle exists (ADR-0020 §4).
-      await ensureProjectionVersion(db, workspace);
-      await ensureWorkspaceIndexes(db);
-      this.indexed.add(workspace);
+    if (!this.checked.has(workspace)) {
+      // A workspace an older projection wrote is refused here, before a handle exists (ADR-0020 §4).
+      await this.ensureProjectionVersion(workspace);
+      this.checked.add(workspace);
     }
-    return { db, record };
+    return record;
   }
 
   /**
-   * Drop a workspace's database — the rebuilder's `--force`, and nothing else's (ADR-0020 §4).
-   *
-   * On the Store rather than reached through a handle, because a handle is what a request holds and
-   * a request must never be able to do this. The control database is untouched: definitions and
-   * principals are not the workspace's.
+   * Stamp a workspace the running service first serves with the current projection version, and
+   * refuse one written by an older projection. Once per workspace per process.
    */
-  async dropWorkspace(workspace: string): Promise<void> {
-    if (!(await this.workspaceRecord(workspace))) throw new UnknownWorkspace(workspace);
-    await this.client.db(databaseNameFor(workspace, this.config.MONGO_DB_PREFIX)).dropDatabase();
-    this.indexed.delete(workspace);
+  private async ensureProjectionVersion(workspace: string): Promise<void> {
+    const meta = workspaceHandle(this.doc, this.table, workspace).meta;
+    const found = await meta.get();
+    if (!found) {
+      await meta.putIfAbsent({ projection_version: PROJECTION_VERSION });
+      return;
+    }
+    if (found.projection_version < PROJECTION_VERSION)
+      throw new ProjectionBehind(workspace, found.projection_version);
   }
 
   /**
-   * The only way to reach a tenant workspace's store.
+   * The only way to reach a tenant workspace's items.
    *
    * No repository accepts a raw client or a workspace id, so every access passes through here and
    * a code search for a query naming a workspace finds nothing.
    */
   async handle(workspace: string): Promise<WorkspaceHandle> {
-    const { db } = await this.database(workspace);
-    return workspaceHandle(db, workspace, () => this.client.startSession());
+    await this.registered(workspace);
+    return workspaceHandle(this.doc, this.table, workspace);
   }
 
   /**
@@ -135,7 +152,60 @@ export class Store {
    * confidentiality boundary wearing the one type allowed to cross it (ADR-0008).
    */
   async catalogue(workspace = this.config.CATALOGUE_WORKSPACE): Promise<CatalogueHandle> {
-    const { db, record } = await this.database(workspace);
-    return catalogueHandle(db, workspace, record.kind);
+    const record = await this.registered(workspace);
+    return catalogueHandle(this.doc, this.table, workspace, record.kind);
+  }
+
+  /**
+   * Every item under a workspace's prefix, paged — the rebuilder's drop and its emptiness check,
+   * and the tests' snapshot. A scan filtered on the prefix: a tenant's table holds that tenant
+   * (maestro ADR-0007), so the scan reads what it is about to return.
+   */
+  async *dump(workspace: string): AsyncGenerator<Item> {
+    const prefix = workspacePrefix(workspace);
+    let start: Record<string, unknown> | undefined;
+    do {
+      const { Items: page, LastEvaluatedKey } = await this.doc.send(
+        new ScanCommand({
+          TableName: this.table,
+          FilterExpression: 'begins_with(#pk, :prefix)',
+          ExpressionAttributeNames: { '#pk': PK },
+          ExpressionAttributeValues: { ':prefix': prefix },
+          ConsistentRead: true,
+          ...(start ? { ExclusiveStartKey: start } : {}),
+        }),
+      );
+      for (const item of page ?? []) yield item as Item;
+      start = LastEvaluatedKey;
+    } while (start);
+  }
+
+  /** The kinds of record item a workspace holds — empty means the rebuilder may write it. */
+  async populatedRecordKinds(workspace: string): Promise<Kind[]> {
+    const found = new Set<Kind>();
+    for await (const item of this.dump(workspace)) {
+      const kind = item[KIND] as Kind;
+      if (RECORD_KINDS.includes(kind)) found.add(kind);
+    }
+    return RECORD_KINDS.filter((k) => found.has(k));
+  }
+
+  /**
+   * Delete a workspace's prefix — the rebuilder's `--force`, and nothing else's (ADR-0020 §4).
+   *
+   * On the Store rather than reached through a handle, because a handle is what a request holds and
+   * a request must never be able to do this. Control items are untouched: definitions and
+   * principals are not the workspace's.
+   */
+  async dropWorkspace(workspace: string): Promise<void> {
+    if (!(await this.control.workspaces.get(workspace))) throw new UnknownWorkspace(workspace);
+    const items = new Items(this.doc, this.table, workspacePrefix(workspace));
+    const keys: Key[] = [];
+    for await (const item of this.dump(workspace)) {
+      keys.push({ pk: item[PK] as string, sk: item[SK] as string });
+      if (keys.length >= 100) await items.batchWrite([], keys.splice(0));
+    }
+    if (keys.length > 0) await items.batchWrite([], keys);
+    this.checked.delete(workspace);
   }
 }

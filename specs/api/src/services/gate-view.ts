@@ -6,7 +6,6 @@
  * imported nothing that can decide (ADR-0005).
  */
 
-import { ARTIFACTS, EVALUATIONS, VERSIONS } from '../db/collections.js';
 import type { WorkspaceHandle } from '../db/handle.js';
 import {
   gateIsOpen,
@@ -16,7 +15,7 @@ import {
   type Requirement,
 } from '../domain/gates.js';
 import { labelsFor } from '../domain/labels.js';
-import type { Artifact, EvaluationResult, Principal, Version } from '../domain/types.js';
+import type { Principal } from '../domain/types.js';
 import { gateIn, profileIn } from '../domain/workspace-definition.js';
 import { NotFound, Refused } from './artifacts.js';
 import { pinnedLinkInput } from './pinned-link.js';
@@ -65,10 +64,7 @@ export class GateViewService {
 
   /** Who created the lineage, for `exclude_creator`. The first version's proposer. */
   async creatorOf(artifact: string): Promise<string> {
-    const first = await this.handle
-      .collection<Version>(VERSIONS)
-      .findOne({ artifact }, { sort: { ordinal: 1 }, projection: { proposed_by: 1 } });
-    return first?.proposed_by ?? '';
+    return (await this.handle.versions.creator(artifact)) ?? '';
   }
 
   /** Everything the console needs to render the decision screen, before anything is decided. */
@@ -80,16 +76,11 @@ export class GateViewService {
   ): Promise<GateView> {
     const gate = gateIn(this.workspace.definition, gateId);
     if (!gate) throw new NotFound(`Gate \`${gateId}\``);
-    const version = await this.handle
-      .collection<Version>(VERSIONS)
-      .findOne({ artifact: artifactId, ordinal }, { projection: { _id: 0 } });
+    const version = await this.handle.versions.get(artifactId, ordinal);
     if (!version) throw new NotFound(`Version \`${artifactId}@${ordinal}\``);
-    const record = await this.handle.collection<Artifact>(ARTIFACTS).findOne({ id: artifactId });
+    const record = await this.handle.artifacts.get(artifactId);
     if (!record) throw new NotFound(`Artifact \`${artifactId}\``);
-    const evaluations = await this.handle
-      .collection<EvaluationResult>(EVALUATIONS)
-      .find({ artifact: artifactId, ordinal }, { projection: { _id: 0 } })
-      .toArray();
+    const evaluations = await this.handle.evaluations.ofVersion(artifactId, ordinal);
 
     if (version.type !== gate.decides_on) {
       throw new Refused(

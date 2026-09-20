@@ -13,11 +13,12 @@ related:
   - ./decisions/0007-mongodb-with-inline-bodies.md
   - ./decisions/0019-the-outbox-holds-spine-envelopes.md
   - ./decisions/0020-the-payload-store-and-the-rebuild.md
+  - ./decisions/0021-the-store-is-dynamodb.md
 ---
 
 # specs-service — architecture
 
-**Status:** Draft v1.3
+**Status:** Draft v1.4
 **Scope:** The whole product. Model, authoring, rendering, configuration, ports, isolation,
 interfaces, storage, build order.
 **Shape:** A full end-to-end service with its own domain, its own console, and SSO through
@@ -90,7 +91,7 @@ an unusable editor and a worthless record. Keeping them apart gives both.
 The isolation boundary (ADR-0006). maestro maps a tenant onto it; maestro v1 maps its organisation.
 Nothing crosses a workspace — not a link, not a lineage, not a query.
 
-**A workspace is logical, never physical.** Which database or deployment it lives in is a choice
+**A workspace is logical, never physical.** Which table or deployment it lives in is a choice
 (§6), and the workspace id never encodes it. If it did, moving a workspace would change every export
 and every pinned reference.
 
@@ -330,8 +331,10 @@ shown and never block.
 
 ### 3.5 Search
 
-Bodies and facets are indexed per workspace. MongoDB text indexes cover v1; the index lives in the
-workspace's own database, so search cannot cross the boundary by construction (§6).
+Search is a filtered read of the workspace's versions — title and body, case-insensitively, a title
+hit outweighing a body hit — bounded by the workspace's own partition, so search cannot cross the
+boundary by construction (§6; ADR-0021 §5). Adequate for the MVP; a search service is a later
+decision, taken when a workspace outgrows it.
 
 ---
 
@@ -375,7 +378,7 @@ port with a working local default.
 
 | Port | Local default | Production adapter | Consumer |
 |---|---|---|---|
-| **Record sink** | Outbox collection holding the spine's envelope, relayed to a filesystem archive; payloads — a version's text, a reasoning, a question, findings — in a directory beside it, named on the event by locator and digest | maestro's spine: a scheduled relay drains the outbox to an S3 archive; SNS/SQS deliver to consumers; payloads in this service's own bucket, erasable; the rebuilder replays the verified archive and its payloads into an empty workspace database | maestro — the archive becomes the record and this database a projection (ADR-0019, ADR-0020); the rebuild is the M1 gate |
+| **Record sink** | Outbox items holding the spine's envelope, relayed to a filesystem archive; payloads — a version's text, a reasoning, a question, findings — in a directory beside it, named on the event by locator and digest | maestro's spine: a scheduled relay drains the outbox to an S3 archive; SNS/SQS deliver to consumers; payloads in this service's own bucket, erasable; the rebuilder replays the verified archive and its payloads into an empty workspace prefix | maestro — the archive becomes the record and this table a projection (ADR-0019, ADR-0020); the rebuild is the M1 gate |
 | **Evaluator** | `builtin: facet_schema` — the type's own schema, one finding per required facet (ADR-0015) | HTTP callout, `${VAR}` resolved from the environment; result recorded on the version | maestro: the builtin floor in the MVP; a standards engine only in its regulated branch. maestro v1: spec-lint, EARS check |
 | **Notifier** | Log line | HTTP webhook (Slack); SES | Gate awaiting a decision; changes requested |
 | **Object storage** | MinIO | S3 | Attachments, and body overflow |
@@ -383,8 +386,8 @@ port with a working local default.
 
 **The record sink is the seam between product and platform component.** Every state change — draft
 proposed, decision recorded, link pinned, body redacted — is emitted as an attributed event,
-transactionally with the change via an outbox. Run with the default and this database is the record.
-Point it at a durable spine and **the spine becomes authoritative and this database becomes a
+transactionally with the change via an outbox. Run with the default and this table is the record.
+Point it at a durable spine and **the spine becomes authoritative and this table becomes a
 projection.** One configuration value. In maestro that spine is an S3 archive fed by a relay from
 this outbox (`../maestro/docs/components/spine.md`); nothing in this service names it, which is
 what keeps the default and the spine the same code path.
@@ -393,34 +396,34 @@ what keeps the default and the spine the same code path.
 
 ## 6. Isolation
 
-**Database per workspace** (ADR-0006). The rule, stated once:
+**One key prefix per workspace** (ADR-0006, amended by ADR-0021). The rule, stated once:
 
 > A workspace-scoped handle is acquired once per request, and no query names a workspace.
 
 ```ts
-// The only way to reach a store. No repository accepts a raw client or a workspace id.
-type WorkspaceHandle = { readonly db: Db; readonly workspace: WorkspaceId };
+// The only way to reach a store. No repository accepts a raw client or a workspace id; every key
+// the handle's repositories build begins with `ws#<workspace>#`, and any other is refused.
+type WorkspaceHandle = { readonly workspace: WorkspaceId; readonly versions: VersionRepository; … };
 ```
 
 **This fails closed, and that is the argument.** A forgotten `WHERE tenant_id` returns every tenant's
-rows. A forgotten handle has no database to query — it does not compile, and at worst it errors. The
-failure mode of the mistake is what matters, not the elegance of the mechanism.
+rows. A forgotten handle has no prefix to query — it does not compile, and at worst it errors — and a
+key built for another workspace is an `IsolationViolation` before a request is made. The failure
+mode of the mistake is what matters, not the elegance of the mechanism.
 
-Three deployment levels, and the code cannot tell them apart:
+Two deployment levels, and the code cannot tell them apart:
 
 | Level | Mechanism | Isolation |
 |---|---|---|
-| **Shared** | One MongoClient, database per workspace | Structural — resolved once, never filtered |
-| **Dedicated database** | Per-workspace client and per-workspace Mongo user | Structural **and** authenticated |
-| **Dedicated deployment** | One workspace configured | Physical |
+| **Shared** | One table, a key prefix per workspace | Structural — resolved once, never filtered |
+| **Dedicated deployment** | One tenant, one table, one workspace (or several of the tenant's own) | Physical |
 
-Object storage mirrors it: prefix per workspace, and a prefix-scoped credential at the dedicated
-levels.
+Object storage mirrors it: prefix per workspace.
 
-**maestro's default is the third row.** A tenant is one deployment of maestro (its ADR-0007): one
-stack, one identity realm, one archive prefix — so a tenant's specs-service holds one workspace, or
-several for a tenant with several estates, and never another tenant's. The shared level stays
-available, unchanged in code, for a consumer that wants it.
+**maestro's default is the second row.** A tenant is one deployment of maestro (its ADR-0007): one
+stack, one identity realm, one archive prefix, one table — so a tenant's specs-service holds one
+workspace, or several for a tenant with several estates, and never another tenant's. The shared
+level stays available, unchanged in code, for a consumer that wants it.
 
 **An adversarial isolation test is a build gate** — acquire workspace A's handle, attempt B's data,
 assert failure. It belongs in the tier that proves the service works at all.
@@ -474,40 +477,44 @@ sink points at its spine. The service does not learn it has been absorbed.
 
 ## 8. Storage
 
-**MongoDB, with bodies inline and blobs in object storage** (ADR-0007).
+**One DynamoDB table, with bodies inline and blobs in object storage** (ADR-0021, superseding
+ADR-0007; maestro ADR-0018).
 
-### 8.1 Collections
+### 8.1 Items
 
-Per-workspace database:
+Every item carries `kind`. A workspace's items share the prefix `ws#<workspace>#`
+(`api/src/db/keys.ts` is the layout; ADR-0021 §1 the table of keys):
 
-| Collection | Holds |
+| Kind | Holds |
 |---|---|
-| `artifacts` | Lineage metadata, current accepted ordinal |
-| `drafts` | Mutable working copies |
-| `versions` | Envelope, facets, **body inline**, attachment refs, links |
-| `decisions` | Immutable gate decisions |
-| `evaluations` | Verdicts recorded against versions |
-| `memberships` | Who may author, who may decide |
-| `questions` | Questions on a version, with their answers and who closed them (ADR-0014) |
-| `acceptances` | This tenant's acceptances of catalogue standards, with their status (ADR-0010) |
-| `outbox` | The record sink: spine envelopes with the relay's bookkeeping (ADR-0019) |
-| `counters` | The workspace's `seq` and each subject's `subject_seq`, allocated in the emitting transaction |
-| `meta` | One document: the `projection_version` this database was written by; behind the code's, it refuses to serve until rebuilt (ADR-0020) |
+| `artifact` | Lineage metadata, current accepted ordinal |
+| `draft` | Mutable working copies; `expires_at` is the table's TTL |
+| `version` | Envelope, facets, **body inline**, attachment refs, links; on `gsi1` by state, on `gsi2` by `standard_id` |
+| `decision` | Immutable gate decisions |
+| `evaluation` | Verdicts recorded against versions |
+| `membership` | Who may author, who may decide |
+| `question` | Questions on a version, with their answers and who closed them (ADR-0014); on `gsi1` by version |
+| `acceptance` | This tenant's acceptances of catalogue standards, with their status (ADR-0010) |
+| `outbox` | The record sink: spine envelopes with the relay's bookkeeping (ADR-0019); on the sparse `pending` index while undelivered |
+| `counter` | The workspace's `seq` and each subject's `subject_seq`, moved in the emitting transaction on the condition that they had not |
+| `meta` | One item: the `projection_version` this workspace was written by; behind the code's, it refuses to serve until rebuilt (ADR-0020) |
 
-Control database: `workspaces`, `workspace_definitions`, `principals`.
+Control items, under `ctl#`: `workspace`, `workspace_definition`, `principal`, and the `unique`
+item that maps a principal's `(issuer, subject)`.
 
 ### 8.2 Bodies inline, blobs outside
 
-**The body lives in the version document.** A specification is tens of kilobytes; fetching a version
-is one round trip, and rendering, diffing and searching need no second store.
+**The body lives in the version item.** A specification is tens of kilobytes; fetching a version is
+one round trip, and rendering, diffing and searching need no second store.
 
-- **Ceiling: 1 MB inline.** Well under MongoDB's 16 MB document limit, leaving room for facets and
-  metadata. Beyond it the body overflows to object storage behind the same accessor — a reader cannot
-  tell, and the ceiling is enforced at propose rather than discovered.
+- **Ceiling: 256 KiB inline** (`BODY_CEILING_BYTES`), capped at 300 000: an item is at most 400 KB,
+  and the facets, provenance, links and keys sit beside the body. Enforced at propose rather than
+  discovered. The payload store holds the same version without a ceiling (ADR-0020).
 - **Attachments are always external**, content-addressed and deduplicated (§2.5).
-- **Projections are mandatory on list queries.** Registers, search results and lineage must exclude
-  the body. Inline bodies make the wrong query expensive, and this is the one operational discipline
-  the choice demands.
+- **Lists travel without the body.** Registers, search results, lineage and the catalogue's shelf
+  return versions without their text. DynamoDB bills the item read, not what travels, so the
+  ceiling is what bounds the cost of a list; this is the one operational discipline the choice
+  demands.
 
 ### 8.3 Redaction — the single permitted mutation
 
@@ -521,28 +528,31 @@ The digest no longer matches the stored body afterwards, **and that is the point
 detectable, and the redaction event explains it. A mismatch with no event is corruption; a mismatch
 with one is a lawful erasure. Silent deletion would be indistinguishable from tampering.
 
-### 8.4 What MongoDB does not give us
+### 8.4 What the store does not give us
 
 Recorded rather than glossed. There are no foreign keys, so a pinned link pointing at a real version
 is enforced in application code. There are no check constraints, so a legal state transition is
-enforced in one code path rather than by the database. Both are accepted costs (ADR-0007), and the
-compensating control is the record sink: an illegal transition is detectable after the fact because
-every transition is emitted, and a divergence between the emitted stream and stored state is a
-alertable condition.
+enforced in one code path rather than by the store. Both are accepted costs (ADR-0007, carried by
+ADR-0021), and the compensating control is the record sink: an illegal transition is detectable
+after the fact because every transition is emitted, and a divergence between the emitted stream and
+stored state is an alertable condition.
 
-Multi-document transactions require a **replica set** — the outbox is unsound without them, so a
-standalone `mongod` is not a supported configuration, including in development.
+What the store *does* give: a condition on every write. The transaction that records an act
+carries the condition that makes each read still true — the version still proposed, the counter
+where it was — so a record that moved is refused rather than half-applied (ADR-0021 §2). Reads of
+an index are eventually consistent, by milliseconds; where that shows is written down (ADR-0021 §4).
 
 ---
 
 ## 9. Stack
 
 TypeScript on Node 22 LTS, matching `identity-service`. Fastify with zod validation at the route
-boundary. MongoDB driver directly, no ODM — the document shapes are ours and per-workspace databases
-are resolved at runtime. **Ajv with draft 2020-12** for facet schemas. Next.js console, token-driven
-Tailwind. Vitest, with the integration tests driving a real single-node replica set, since the
-meaningful behaviour here is integration-shaped: a transaction that half-applies, a pin that resolves
-against stored state, an index that stops a query crossing a boundary.
+boundary. The AWS SDK's DynamoDB document client directly, behind typed repositories — one method
+per access pattern, every key built from the workspace's layout (`api/src/db/`). **Ajv with draft
+2020-12** for facet schemas. Next.js console, token-driven Tailwind. Vitest, with the integration
+tests driving DynamoDB Local, since the meaningful behaviour here is integration-shaped: a
+transaction that half-applies, a pin that resolves against stored state, a prefix that stops a
+query crossing a boundary.
 
 **The repository layout is `api/` and `web/`**, each with its own `package.json`, lockfile and
 Dockerfile, plus `infra/docker/`, `config/` and `docs/`. There is deliberately no npm workspace: each
@@ -554,12 +564,12 @@ framework that owns them owns the thing being sold.
 
 **Deployment is serverless AWS**, as maestro's ADR-0002 rules for every component: the api as a
 Lambda behind an HTTP API Gateway through the Lambda Web Adapter, code unchanged; the console
-through OpenNext to Lambda and CloudFront; MongoDB Atlas Flex, still one database per workspace;
-S3 for attachments and body overflow; the record-sink relay as a scheduled Lambda; the whole as a
-CDK stack that a tenant's private configuration repository (`fps4/maestro-config-<tenant>`) deploys
-at a tag, with this repository's own pipeline deploying the demo tenant only. `docker compose` is
-the development loop and CI, not a deployment target; the self-hosted deployment this repository
-used to carry is gone. The CDK stack is M1 of maestro's roadmap.
+through OpenNext to Lambda and CloudFront; one DynamoDB table, the module's, a prefix per workspace
+(maestro ADR-0018); S3 for attachments and payloads; the record-sink relay as a scheduled Lambda;
+the whole as the Terraform module in `terraform/` (maestro ADR-0016) that a tenant's private
+configuration repository (`fps4/maestro-config-<tenant>`) composes with the spine's and applies
+at a tag (maestro ADR-0017). `docker compose` is the development loop, not a deployment target;
+the self-hosted deployment this repository used to carry is gone.
 
 ---
 
@@ -595,8 +605,8 @@ version is admitted on that test. Comments on drafts, page trees and freeform sp
 | D3 | Drafts are mutable, versions are immutable; propose snapshots one into the other | [ADR-0003](decisions/0003-immutable-versions-mutable-drafts.md) |
 | D4 | Facets are evaluated; bodies are authored, rendered and diffed but never evaluated | [ADR-0004](decisions/0004-facets-are-evaluated-bodies-are-read.md) |
 | D5 | Agents author and propose; only a named human decides; no decision surface on MCP | [ADR-0005](decisions/0005-agents-may-author-never-decide.md) |
-| D6 | Workspace isolation is database-per-workspace, bound once per request | [ADR-0006](decisions/0006-workspace-isolation-by-database.md) |
-| D7 | MongoDB with bodies inline; attachments content-addressed in object storage | [ADR-0007](decisions/0007-mongodb-with-inline-bodies.md) |
+| D6 | Workspace isolation is one key prefix per workspace, bound once per request | [ADR-0006](decisions/0006-workspace-isolation-by-database.md), amended by [ADR-0021](decisions/0021-the-store-is-dynamodb.md) |
+| D7 | Bodies inline; attachments content-addressed in object storage | [ADR-0007](decisions/0007-mongodb-with-inline-bodies.md), superseded by [ADR-0021](decisions/0021-the-store-is-dynamodb.md) |
 | D8 | Principal ids are local; an issuer's `sub` is never stored on a record | §7.2 |
 | D9 | At most one link per type is pinned, resolved to a version at acceptance and frozen | §2.6 |
 | D10 | Redaction is the single permitted mutation, recorded, and detectable by digest mismatch | §8.3 |
@@ -612,6 +622,7 @@ version is admitted on that test. Comments on drafts, page trees and freeform sp
 | D20 | specs-service stays the record for every maestro repository; OpenSpec is interoperated with — its requirement/scenario layout as a block shape, EARS statements with GIVEN/WHEN/THEN scenarios — and not adopted as a system | [ADR-0018](decisions/0018-openspec-interoperate-not-adopt.md) — *accepted* |
 | D21 | The outbox holds the spine's envelope, built and validated in the transaction; an agent acts under a seat occupancy naming the answerable human; free text leaves the body; principal ids carry the kind | [ADR-0019](decisions/0019-the-outbox-holds-spine-envelopes.md) — *accepted* |
 | D22 | What the record cannot say goes to an erasable payload store, named on the event by locator and digest; evaluations are events; a workspace is rebuilt from a verified archive and its payloads alone, and a stale projection refuses to serve; memberships are grants, drafts are not record | [ADR-0020](decisions/0020-the-payload-store-and-the-rebuild.md) — *accepted* |
+| D23 | The store is one DynamoDB table (maestro ADR-0018): a prefix per workspace under the same handle, every query a key or an index, the outbox one transaction conditioned on the workspace's counter, the relay on a sparse index, search a filtered read, expiry the table's TTL, the rebuild a deleted prefix; no database credential | [ADR-0021](decisions/0021-the-store-is-dynamodb.md) — *accepted* |
 
 ---
 
@@ -621,7 +632,7 @@ version is admitted on that test. Comments on drafts, page trees and freeform sp
 |---|---|---|
 | 1 | Workspace definitions, type registry, facet schema validation | An invalid facet set is refused with the failing schema path named; the definition version is stamped on every version written under it |
 | 2 | Principal registry over `identity-service`, console SSO | A user signed in for another Application reaches the console without a login form; an agent principal is distinguishable from the human accountable for its work and from its credential |
-| 3 | Workspace handle and database-per-workspace | Every access binds a handle; a code search finds no query naming a workspace; the adversarial cross-workspace read fails |
+| 3 | Workspace handle and a key prefix per workspace | Every access binds a handle; a code search finds no query naming a workspace; the adversarial cross-workspace read fails, and a key outside the handle's prefix is refused |
 | 4 | Drafts, save, optimistic concurrency, contributors | Two concurrent saves — one human, one agent — resolve without silent loss, and both appear as contributors |
 | 5 | Propose, immutable versions, supersede | No API path mutates a version; a stale-revision propose is refused |
 | 6 | Rendering, attachments, diff | A body renders sanitised, an attachment resolves to a signed URL, and a reviewer reads a diff without knowing the format |
@@ -647,8 +658,9 @@ Steps 1–7 are the product. Everything after makes it complete.
 - **E.** Whether `expired` needs a scheduler in-service or is driven by a consumer.
 - **F.** Whether comments belong on drafts. Reviewers want them, and they are the first step onto the
   wiki path — the safe version is comments on a *decision*, which the record already carries.
-- **G.** Full-text search beyond MongoDB text indexes. Atlas Search or an external index both cross
-  the workspace boundary awkwardly.
+- **G.** Full-text search beyond a filtered read of the workspace's versions. An external index
+  crosses the workspace boundary awkwardly; the trigger is a workspace whose search outgrows the
+  read (ADR-0021 §5).
 
 ---
 
@@ -656,6 +668,7 @@ Steps 1–7 are the product. Everything after makes it complete.
 
 | Version | Date | Change |
 |---|---|---|
+| 1.4 | 2026-09-20 | **The store is DynamoDB** (D23, ADR-0021; maestro ADR-0018). One table per component, the Terraform module's, reached by a role and never by a credential. A workspace's items share the prefix `ws#<workspace>#` and the handle refuses any other key; the handle's repositories are one method per access pattern, and every former index maps to a key, a partition, `gsi1`, `gsi2`, the sparse `pending` index or the TTL (ADR-0021 §4). The outbox is one `TransactWriteItems` conditioned on the workspace's counter; search is a filtered read of the workspace's versions; the body ceiling is 256 KiB; the rebuild deletes a prefix. Tests, the compose loop and CI run on DynamoDB Local. §3.5, §5, §6, §8, §9, §12 and §13.G amended |
 | 1.3 | 2026-09-20 | **The payload store and the rebuild** (D22, ADR-0020; D21 recorded for ADR-0019). Every free-text write — a version, a decision's reasoning and its evaluations snapshot, a question, an answer, a withdrawal's reason, an evaluator's findings — is a payload in an erasable store (`PAYLOAD_STORE`: a directory or this service's bucket), written before the transaction and named on the event by `payload_ref` and `payload_digest`. `EvaluationRecorded` joins the record: a gate's openness is a function of it. A version is stored in canonical key order, the form the record carries. `RebuildService` and `workspace:rebuild` replay a verified archive and its payloads into an empty workspace database; `meta.projection_version` refuses a stale projection. `tests/integration/rebuild.test.ts` is the M1 gate. §5 and §8.1 amended |
 | 1.2 | 2026-09-18 | **Aligned with the maestro MVP.** maestro was re-scoped on 2026-09-18 from a governed application platform to an ops engine, its design corpus retired (tag `corpus-2026-09` on `fps4/maestro`) and rewritten; this service is one of its components. §1.1's maestro column now reads in the MVP's words; §5 names the spine the record sink drains to (an S3 archive via a relay, SNS/SQS delivery) and drops Kafka as the example; §6 records that tenant = deployment is maestro's default; §9 gains the deployment shape (Lambda + API Gateway, OpenNext, Atlas Flex, S3, CDK). The shipped demo workspace is `config/workspaces/aannemer-x.yaml` v2 — cause analysis, intake assessment, specification, change record — and the earlier chain lives on as the integration fixture; the console shows the catalogue only for a workspace that declares `catalogue_refs`. The self-hosted deployment configuration and workflow are removed. No model, port or decision changed |
 | 1.1 | 2026-09-15 | **OpenSpec: interoperate, do not adopt** (D20, ADR-0018 — the first *accepted* decision). Its requirement/scenario layout becomes the second `body_blocks` shape; requirement statements stay EARS with GIVEN/WHEN/THEN scenarios; no `openspec/` directory in a maestro repository. The change workflow is recorded as owed by work-service and skills, not by a spec convention |

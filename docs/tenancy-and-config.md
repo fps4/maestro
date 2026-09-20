@@ -26,7 +26,7 @@ Same layout in every tenant repository:
 README.md                 who, contacts, which components at which tag; who holds the state mirror's key
 .github/workflows/deploy.yml   a dozen lines calling fps4/maestro's reusable workflow: runner, target, tags
 deploy/aws/               the root module for the tenant's account; backend.hcl names the state bucket,
-                          terraform.tfvars carries account, region, domain, database endpoint name, contacts
+                          terraform.tfvars carries account, region, domain, contacts
 deploy/local/             the same modules against LocalStack; local state, disposable
 workspaces/*.yaml         workspace definitions in the tenant's vocabulary (types, gates, labels)
 policy.yaml               severity × tier → clocks; agent ceilings; chase ladders; the SEV↔P mapping
@@ -108,13 +108,12 @@ tenant          = "aannemer-x"
 region          = "eu-west-1"
 account_id      = "<account-id>"
 domain          = "maestro.aannemer-x.example"
-atlas_endpoint  = "aannemer-x-flex.<cluster-id>.mongodb.net"
 digest_contacts = ["ops@aannemer-x.example", "audit@aannemer-x.example"]
 ```
 
 `deploy/local/main.tf` is the same composition with the provider pointed at LocalStack, `local_stand_in = true` and no backend — a tested copy is [`.github/self-test/deploy/local/main.tf`](../.github/self-test/deploy/local/main.tf), which this repository's CI applies through the reusable workflow on every pull request. What the stand-in cannot represent is named in the [spine README](../spine/README.md#localstack).
 
-**Atlas Flex.** The cluster is created out of band, in the tenant's Atlas project ([ADR-0016](decisions/0016-terraform-is-the-infrastructure-language.md): joining it to the root module is a later change). Its endpoint name goes in `terraform.tfvars`; the connection string, which carries a credential, lives in Secrets Manager in the tenant's account under a name listed in `secrets.md` — the components read it by name at start, and no repository ever holds it.
+**The database.** Each component's DynamoDB table is its module's ([ADR-0018](decisions/0018-dynamodb-is-the-mvp-database.md)): created in the apply, granted to the functions that read it, nothing made out of band and no connection credential anywhere. `secrets.md` names the secrets that remain — identity-service's signing and admin secrets.
 
 ## Guards in the public repositories
 

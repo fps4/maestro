@@ -150,7 +150,7 @@ MCP implements the tracker contract — publish / fetch / claim / resolve / fron
 
 | Port | Local default | AWS |
 |---|---|---|
-| record sink | outbox in MongoDB | relay → spine |
+| record sink | outbox in DynamoDB | relay → spine |
 | notifier | log line | SES; Slack webhook |
 | signals intake | HTTP | SQS from SNS / EventBridge / GitHub |
 | authority resolver | policy in the definition | + runtime-service for the instance's level and tier |

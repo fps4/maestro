@@ -42,3 +42,16 @@ jobs:
       tenant: aannemer-x
       components: '{"maestro":"${{ github.sha }}"}'
       root: .github/self-test/deploy
+
+  self-test-labels:
+    # The same call with the runner as an array of labels, the form a tenant's own runners take.
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/tenant-deploy.yml
+    with:
+      runner: '["ubuntu-latest"]'
+      target: local
+      tenant: aannemer-x
+      components: '{"maestro":"${{ github.sha }}"}'
+      root: .github/self-test/deploy

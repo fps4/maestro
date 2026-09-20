@@ -1,10 +1,10 @@
 name: spine
 on:
   pull_request:
-    paths: ['spine/**', '.github/workflows/spine.yml']
+    paths: ['spine/**', 'scripts/deploy.sh', '.github/workflows/spine.yml']
   push:
     branches: [main]
-    paths: ['spine/**', '.github/workflows/spine.yml']
+    paths: ['spine/**', 'scripts/deploy.sh', '.github/workflows/spine.yml']
 defaults:
   run:
     working-directory: spine
@@ -54,3 +54,48 @@ jobs:
       - name: Example root validates
         working-directory: spine/terraform/examples/demo
         run: terraform init -backend=false -input=false && terraform validate
+      - name: Stand-in root validates
+        working-directory: spine/terraform/examples/local
+        run: terraform init -backend=false -input=false && terraform validate
+  localstack:
+    # ADR-0017 §3: a public repository applies its modules to a LocalStack stand-in on every pull
+    # request. 4.4.0 is the last Community image that starts without an auth token; the Docker
+    # socket is mounted because LocalStack creates a Lambda function by preparing a container for
+    # it. What the edition cannot represent is skipped under `local_stand_in` and named in the
+    # module README under "LocalStack".
+    runs-on: ubuntu-latest
+    services:
+      localstack:
+        image: localstack/localstack:4.4.0
+        ports: ["4566:4566"]
+        volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+        options: --health-cmd "curl -fsS localhost:4566/_localstack/health" --health-interval 5s --health-timeout 5s --health-retries 30
+    defaults:
+      run:
+        working-directory: ${{ github.workspace }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: spine/package-lock.json
+      - name: The sealer's bundle, which the module deploys
+        working-directory: spine
+        run: npm ci && npm run bundle
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - name: Plan and apply, the way a tenant's pipeline does
+        run: |
+          scripts/deploy.sh plan --root spine/terraform/examples/local
+          scripts/deploy.sh apply --root spine/terraform/examples/local
+      - name: Destroy
+        if: always()
+        working-directory: spine/terraform/examples/local
+        # The record carries prevent_destroy by design and cannot be destroyed by anyone; on the
+        # stand-in it is dropped from state and goes with the container.
+        run: |
+          terraform state rm module.spine.aws_s3_bucket_object_lock_configuration.archive || true
+          terraform state rm module.spine.aws_s3_bucket.archive || true
+          terraform destroy -input=false -auto-approve

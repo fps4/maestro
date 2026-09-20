@@ -96,7 +96,11 @@ run "defaults" {
     error_message = "the sealer runs after midnight UTC"
   }
   assert {
-    condition     = aws_cloudwatch_metric_alarm.sealer_silent.treat_missing_data == "breaching"
+    condition     = length(aws_cloudwatch_metric_alarm.sealer_errors) == 1 && length(aws_cloudwatch_metric_alarm.sealer_silent) == 1
+    error_message = "both alarms exist unless the root is a LocalStack stand-in"
+  }
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.sealer_silent[0].treat_missing_data == "breaching"
     error_message = "a sealer that never reports is an alarm, not a quiet day"
   }
   assert {
@@ -133,6 +137,30 @@ run "compliance_with_prefix" {
   assert {
     condition     = output.relay_environment["ARCHIVE_PREFIX"] == "tenant-a/"
     error_message = "relays receive the prefix as given"
+  }
+}
+
+# The LocalStack stand-in (ADR-0017 §3) skips only what the Community edition cannot represent,
+# and nothing about the record: Object Lock stays on, versioning stays on, the sealer and its
+# schedule are still deployed. What is skipped is named in the README under "LocalStack".
+run "local_stand_in" {
+  command = plan
+
+  variables {
+    local_stand_in = true
+  }
+
+  assert {
+    condition     = length(aws_cloudwatch_metric_alarm.sealer_errors) == 0 && length(aws_cloudwatch_metric_alarm.sealer_silent) == 0
+    error_message = "the stand-in skips the alarms"
+  }
+  assert {
+    condition     = aws_s3_bucket.archive.object_lock_enabled == true && aws_s3_bucket_object_lock_configuration.archive.rule[0].default_retention[0].mode == "GOVERNANCE"
+    error_message = "the stand-in keeps Object Lock and its default retention: LocalStack represents them"
+  }
+  assert {
+    condition     = aws_lambda_function.sealer.runtime == "nodejs22.x" && aws_scheduler_schedule.sealer.schedule_expression == "cron(7 0 * * ? *)"
+    error_message = "the stand-in deploys the sealer and its schedule"
   }
 }
 

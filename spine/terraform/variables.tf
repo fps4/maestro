@@ -77,3 +77,9 @@ variable "tags" {
   type    = map(string)
   default = {}
 }
+
+variable "local_stand_in" {
+  description = "True only when the root targets a LocalStack stand-in (ADR-0017 §3): what the Community edition cannot represent is skipped, and each skip is named in the README under \"LocalStack\". Never true against an account."
+  type        = bool
+  default     = false
+}

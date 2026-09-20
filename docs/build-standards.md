@@ -7,6 +7,7 @@ What every maestro repository's CI runs on every PR ([ADR-0014](decisions/0014-t
 - Relative links in Markdown resolve (`scripts/check-links.sh`).
 - No path matches `tenants/**` or `config/tenants/**`; no `.env` other than `.env.example`.
 - No 12-digit AWS account id; no `arn:aws:` carrying an account.
+- No `runs-on: [self-hosted` — a self-hosted runner on a public repository runs strangers' code ([ADR-0017](decisions/0017-the-tenant-repository-runs-the-pipeline.md)); no `*.tfstate*` anywhere.
 - Every `Repository:` line in a component document resolves to a repository that exists.
 - Inside `fps4/maestro`, once it holds code: the domain module of a component imports nothing from its services or transport; a component imports nothing from another component (an import lint).
 

@@ -13,7 +13,7 @@ What keeps the choice reversible: no record stores an identity provider's subjec
 | Kind | Where | Public? |
 |---|---|---|
 | Component code, design, decisions | the component's repository | yes |
-| One fictional demo tenant (`aannemer-x`) | `config/examples/` in each component; `fps4/maestro-config-demo` | yes |
+| One fictional demo tenant (`aannemer-x`) | `config/examples/` in each component; the template below | yes |
 | A real tenant's configuration | `fps4/maestro-config-<tenant>` | **no** — private, one repository per tenant |
 | Secrets | Secrets Manager / SSM in the tenant's account, referenced by name | never in any repository |
 | An application's own maestro glue (the signals module applied, the deploy-event step) | the application's repository | the application's business |
@@ -23,9 +23,11 @@ What keeps the choice reversible: no record stores an identity provider's subjec
 Same layout in every tenant repository:
 
 ```
-README.md                 who, contacts, which components at which tag
-terraform.tfvars          account, region, domain, database endpoint name
-backend.hcl               the state bucket, in the tenant's account
+README.md                 who, contacts, which components at which tag; who holds the state mirror's key
+.github/workflows/deploy.yml   a dozen lines calling fps4/maestro's reusable workflow: runner, target, tags
+deploy/aws/               the root module for the tenant's account; backend.hcl names the state bucket
+deploy/local/             the same modules against LocalStack; local state, disposable
+terraform.tfvars          account, region, domain, database endpoint name, contacts
 workspaces/*.yaml         workspace definitions in the tenant's vocabulary (types, gates, labels)
 policy.yaml               severity × tier → clocks; agent ceilings; chase ladders; the SEV↔P mapping
 adapters.yaml             notifier targets by name (Slack channel id, SES sender); signal sources (topic ARNs)
@@ -33,7 +35,7 @@ applications/*.yaml       the tenant's applications: name, environments, tier, o
 secrets.md                the *names* of secrets in Secrets Manager / SSM — never values
 ```
 
-**How a deployment uses it.** The tenant repository's pipeline checks out each public component at a tag, builds it, and runs `terraform apply` on the root module, which composes the components' modules ([ADR-0016](decisions/0016-terraform-is-the-infrastructure-language.md)). The public repositories' own pipelines deploy only the demo tenant. `maestro-config-demo` proves the layout round-trips and may be public.
+**How a deployment uses it.** The tenant repository's pipeline — the reusable workflow from `fps4/maestro`, on the runner the tenant names — checks out each public component at a tag, builds it, plans on a pull request and applies on merge behind an environment gate, then mirrors the state ([ADR-0016](decisions/0016-terraform-is-the-infrastructure-language.md), [ADR-0017](decisions/0017-the-tenant-repository-runs-the-pipeline.md)). State is never in the repository: the S3 backend in the tenant's account is the authority, the runner keeps an encrypted mirror, `*.tfstate*` is ignored. The public repositories deploy to no account; the demo tenant is this layout with placeholder values, not a deployment.
 
 ## Guards in the public repositories
 

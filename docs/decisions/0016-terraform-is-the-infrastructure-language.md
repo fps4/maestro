@@ -1,6 +1,6 @@
 # ADR-0016 · Terraform is the infrastructure language; the tenant repository holds the root module
 
-**Status:** accepted · 2026-09-19 · supersedes the *infrastructure as CDK* clause of [ADR-0002](0002-serverless-aws-is-the-substrate.md)
+**Status:** accepted · 2026-09-19 · supersedes the *infrastructure as CDK* clause of [ADR-0002](0002-serverless-aws-is-the-substrate.md); the *apply for the demo tenant on merge* clause is withdrawn by [ADR-0017](0017-the-tenant-repository-runs-the-pipeline.md)
 
 ## Context
 

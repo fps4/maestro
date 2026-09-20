@@ -1,6 +1,6 @@
 # ADR-0017 · The tenant repository runs the pipeline: its runner, its targets, its state, its configuration
 
-**Status:** proposed · 2026-09-19 · narrows the *runners* clause of [ADR-0002](0002-serverless-aws-is-the-substrate.md); extends [ADR-0016](0016-terraform-is-the-infrastructure-language.md)
+**Status:** accepted · 2026-09-20 · narrows the *runners* clause of [ADR-0002](0002-serverless-aws-is-the-substrate.md); extends [ADR-0016](0016-terraform-is-the-infrastructure-language.md) and withdraws its demo-tenant apply
 
 ## Context
 
@@ -24,7 +24,7 @@ The tenant repository holds the caller (a dozen lines), its GitHub **environment
 
 - **Public repositories: GitHub-hosted, always.** ADR-0002 stands there, and the reason is now sharper than cost: a self-hosted runner attached to a public repository runs strangers' code. `maestro-specs`' DoD job moves to GitHub-hosted in M1 (already planned), and the org runner group stops admitting public repositories.
 - **Tenant repositories are private and choose their runner** through the workflow's input. fps4's own tenant runs on the **ds1 runner**; a tenant with its own runners names them; a tenant with none uses GitHub-hosted.
-- **The demo tenant is the public AWS example.** `fps4/maestro-config-demo` is public, GitHub-hosted, and deploys the demo account; it is bound by the public-repository guards like any other, so its account id and role ARN live in the repository's GitHub environment (`vars` and `secrets`, surfaced as `TF_VAR_…`), never in `terraform.tfvars`, which holds only region, domain and names.
+- **The demo tenant is a template, not a deployment.** The tenant repository's layout, with placeholder values, is documented in [tenancy-and-config.md](../tenancy-and-config.md); `fps4/maestro-config-demo` is created only if a template repository proves more useful than the page, and then holds the same placeholders and no pipeline that runs. **No public repository deploys to an account.**
 - **No credentials on any runner.** Whatever the runner, the job assumes the tenant's deploy role through **GitHub's OIDC provider**, with the trust policy scoped to `repo:fps4/maestro-config-<tenant>:environment:<env>`. Revoking a runner is editing a trust policy. ds1 holds no AWS keys.
 
 ### 3. Targets
@@ -36,7 +36,7 @@ deploy/aws/      the tenant's account — S3 backend, the real thing
 deploy/local/    LocalStack on ds1 — provider endpoints overridden, local backend, disposable
 ```
 
-`local` is the development loop's shape that ADR-0002 allows, applied by the same modules; **nothing is deployed to ds1 as a tenant**. A resource LocalStack cannot represent (Object Lock retention, the Scheduler if absent from the edition in use) is skipped under `target = "local"` and named in the manifest ([build-standards.md](../build-standards.md#the-manifest-rule)). A change to a module reaches `local` on every pull request and `aws` on merge.
+`local` is the development loop's shape that ADR-0002 allows, applied by the same modules; **nothing is deployed to ds1 as a tenant**. LocalStack runs on ds1 for fps4's tenant pipeline and as a job service container in a public repository's CI. A resource it cannot represent (Object Lock retention, the Scheduler if absent from the edition in use) is skipped under `target = "local"` and named in the manifest ([build-standards.md](../build-standards.md#the-manifest-rule)). A change to a module reaches `local` on every pull request — in the public repository and in the tenant's — and `aws` on merge in the tenant's.
 
 ### 4. State: one authority, three copies, none in a repository
 
@@ -50,7 +50,7 @@ deploy/local/    LocalStack on ds1 — provider endpoints overridden, local back
 
 - One script is the pipeline: `scripts/deploy.sh` runs identically on ds1, on GitHub-hosted, and on a laptop; the workflow is a thin caller. A tenant that cannot use GitHub Actions runs the script from its own pipeline with the same inputs.
 - The ds1 runner returns for private repositories only. Its upkeep is fps4's, as today; it gains an `age` recipient and a state path, nothing else.
-- LocalStack's gaps are named, not hidden; the demo tenant's account is what proves a module on real AWS on every merge.
+- ADR-0016's "apply for the demo tenant on merge" is withdrawn: a public repository's pipeline ends at `fmt`, `validate`, `terraform test` and the LocalStack apply. LocalStack's gaps are named, not hidden; the first real tenant is what proves a module on real AWS.
 - The state mirror is tenant-identifying and encrypted; the `age` recipient is a variable of the tenant repository's environment, the private key is held by a named person in the tenant's `README.md` and is never a repository secret.
 - ADR-0002's runner clause now reads: GitHub-hosted for the public repositories; a tenant's choice for its own. Its "docker compose is not a deployment target" holds unchanged.
 

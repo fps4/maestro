@@ -2,6 +2,10 @@
  * One structured log line per run, in CloudWatch's embedded metric format, so a count becomes a
  * metric an alarm can watch without a metrics client: relay refusals, segments sealed. The rest of
  * the line is the run's report, readable as it is.
+ *
+ * Written to stdout directly, not through `console.log`: with Lambda's JSON log format the runtime
+ * wraps console output under `message`, which moves `_aws` off the root of the log event and
+ * CloudWatch then extracts nothing. `process.stdout.write` is not wrapped.
  */
 
 export interface Metric {
@@ -15,7 +19,7 @@ export function emit(
   dimensions: Record<string, string>,
   metrics: readonly Metric[],
   report: Record<string, unknown>,
-  log: (line: string) => void = (line) => console.log(line),
+  log: (line: string) => void = (line) => process.stdout.write(`${line}\n`),
 ): void {
   const line: Record<string, unknown> = {
     _aws: {

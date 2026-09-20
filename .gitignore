@@ -7,7 +7,11 @@ coverage/
 .terraform.lock.hcl
 *.tfstate
 *.tfstate.*
+tfplan
 cdk.out/
+
+# The tenant pipeline's component checkout (checkout-components.sh)
+/components/
 
 # Agent worktrees
 .claude/worktrees/

@@ -2,7 +2,7 @@
 # Checks that every relative Markdown link resolves to a file and, where an #anchor is given,
 # that a heading with that GitHub-style slug exists in the target. Prints each failure; exits 1 if any.
 set -uo pipefail
-cd "$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel)" || exit 1
 
 slug() {
   printf '%s\n' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[`*_]//g; s/[^a-z0-9 -]//g; s/ /-/g'

@@ -2,7 +2,7 @@
 # Guards for a public repository: no tenant paths, no AWS account ids, no stray .env files.
 # A tenant-name pattern list is supplied by CI as $FORBIDDEN_PATTERNS_FILE and never committed.
 set -uo pipefail
-cd "$(git rev-parse --show-toplevel)"
+cd "$(git rev-parse --show-toplevel)" || exit 1
 fail=0
 if git ls-files --cached --others --exclude-standard | grep -E '^(config/)?tenants/' ; then echo "tenant path present"; fail=1; fi
 if git ls-files --cached --others --exclude-standard | grep -E '(^|/)\.env(\..*)?$' | grep -vE '\.env\.example$' ; then echo "env file present"; fail=1; fi

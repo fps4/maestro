@@ -46,6 +46,13 @@ NEXT_PUBLIC_IDENTITY_CLIENT_ID=… \
 npx @opennextjs/aws build   # runs `next build`, then writes .open-next/
 ```
 
+In the tenant pipeline that step is `scripts/checkout-components.sh`
+([ADR-0017](../docs/decisions/0017-the-tenant-repository-runs-the-pipeline.md)): each package with a
+lockfile gets `npm ci`, `npm run build` and `npm run bundle --if-present`, so a console's
+`package.json` carries `"bundle": "open-next build"` with `@opennextjs/aws` as a devDependency, the
+`NEXT_PUBLIC_*` values sit in the job's environment, and the root points `open_next_dir` at
+`components/<component>/<console>/.open-next`.
+
 Two things about that step:
 
 - **`NEXT_PUBLIC_*` is baked at build.** Next inlines those variables into the browser bundle;

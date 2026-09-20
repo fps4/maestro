@@ -29,7 +29,7 @@ variable "region" {
 }
 
 variable "open_next_dir" {
-  description = "The console's `.open-next/`, as `npx @opennextjs/aws build` left it. The tenant's pipeline checks the component out beside this root and builds it first."
+  description = "The console's `.open-next/`, as `npx @opennextjs/aws build` left it. In a tenant repository the pipeline's checkout-components.sh builds it under components/<component>/ (ADR-0017); here the default is a placeholder beside this checkout."
   type        = string
   default     = "../../../../maestro-specs/web/.open-next"
 }

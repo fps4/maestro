@@ -15,6 +15,8 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "bundle": "node scripts/bundle.mjs",
+    "sbom": "cyclonedx-npm --omit dev --output-format JSON --output-file dist/lambda/sealer.cdx.json --output-reproducible",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . && prettier --check .",
     "format": "prettier --write .",
@@ -22,11 +24,15 @@
     "verify": "tsx src/cli/verify.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1136.0",
+    "@aws-sdk/client-sns": "^3.1136.0",
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@cyclonedx/cyclonedx-npm": "^6.0.1",
     "@eslint/js": "^9.18.0",
     "@types/node": "^22.10.6",
+    "esbuild": "^0.28.2",
     "eslint": "^9.18.0",
     "prettier": "^3.4.2",
     "tsx": "^4.19.2",

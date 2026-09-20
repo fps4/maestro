@@ -32,23 +32,26 @@ All four are workspace configuration — a type with facets and body blocks, a g
 
 | Piece | |
 |---|---|
-| API | Fastify → Lambda Web Adapter → HTTP API Gateway |
+| API | Fastify → Lambda Web Adapter (layer, handler `run.sh`) → HTTP API Gateway v2, `$default` route — `maestro-specs` `terraform/` |
 | Console | Next.js → OpenNext → Lambda + CloudFront, through [`console/terraform`](../../console/README.md) — built per tenant, `NEXT_PUBLIC_*` at build |
 | Database | Atlas Flex, one database per workspace |
-| Object storage | S3 (attachments, body overflow) |
-| Record sink | outbox holding the spine's envelope, built at the act (`maestro-specs` ADR-0019) → the spine's relay, as a scheduled Lambda → the archive and the FIFO topic |
+| Object storage | S3 — one bucket for attachments and payloads (`maestro-specs` ADR-0020), versioned, never Object-Locked; the payload store is what a rebuild reads |
+| Record sink | outbox holding the spine's envelope, built at the act (`maestro-specs` ADR-0019) → the spine's relay handler as `<name>-relay`, EventBridge Scheduler every minute, one at a time, under the spine module's `relay_policy_json` → the archive and the FIFO topic |
 | Evaluator | HTTP adapter; `${VAR}` resolved from the environment |
 | Notifier | SES; Slack webhook |
 | MCP | stateless HTTP per request — Lambda-shaped already |
 
-Configuration comes from `fps4/maestro-config-<tenant>/workspaces/*.yaml`. The repository's own pipeline deploys the demo tenant only.
+Configuration comes from `fps4/maestro-config-<tenant>/workspaces/*.yaml`, and the tenant root passes the module its `environment`, `secrets` (Secrets Manager ARNs), `bucket_name`, `web_adapter_layer_arn` and the spine module's `relay_environment` + `relay_policy_json` as `archive`. The public repository deploys to no account ([ADR-0017](../decisions/0017-the-tenant-repository-runs-the-pipeline.md)): its CI ends at `fmt`, `validate`, `terraform test`, an example root that validates, and a bundle that boots.
 
 ## Changes the MVP asks of it
 
 | Change | Milestone | Size |
 |---|---|---|
-| Terraform module; the relay as a scheduled Lambda; S3 adapter for object storage | M1 | small |
+| Terraform module; the relay as a scheduled Lambda | M1 | done — `maestro-specs` PR #20 |
+| The outbox holds the spine's envelope; seats and the answerable human (ADR-0019) | M1 | done — `maestro-specs` PR #18 |
+| The payload store and the rebuild (ADR-0020): free text as payloads, `EvaluationRecorded`, a rebuilder that replays a verified archive — the M1 rebuild gate in code | M1 | done — `maestro-specs` PR #21 |
 | Today reads work-service and agent-service alongside its own decisions and questions | M2–M3 | small, in the console |
-| Move the DoD gate to GitHub-hosted runners (the self-hosted deployment configuration is already removed) | M1 | small |
+| Move the DoD gate to GitHub-hosted runners | M1 | done — `maestro-specs` PR #16 |
+| Read the `prn` claim identity-service now mints instead of minting a principal id on first sight | M2 | small |
 
 Nothing else. The OpenSpec block shape and the external reader role are [post-MVP](../beyond-mvp.md).

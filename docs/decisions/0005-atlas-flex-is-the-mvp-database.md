@@ -1,6 +1,6 @@
 # ADR-0005 · MongoDB Atlas Flex is the MVP database
 
-**Status:** accepted · 2026-09-18
+**Status:** superseded by [ADR-0018](0018-dynamodb-is-the-mvp-database.md) · 2026-09-20 (accepted 2026-09-18)
 
 ## Context
 

@@ -78,7 +78,7 @@ Per tenant, one Terraform root module composing the components' modules:
 | Consoles | OpenNext → Lambda (Function URL behind CloudFront, OAC) + S3 assets — [`console/terraform`](../console/README.md) |
 | Relays and clocks | EventBridge Scheduler → Lambda |
 | Record | S3 (archive, transcripts, attachments), SNS FIFO, SQS FIFO |
-| Database | Atlas Flex via private endpoint |
+| Database | DynamoDB, one table per component, the module's own ([ADR-0018](decisions/0018-dynamodb-is-the-mvp-database.md)) |
 | Identity | identity-service on Lambda, one realm |
 | Intake | SQS queues subscribed to tenant applications' `ops-signals` topics; EventBridge bus for deploys and findings |
 | Notification | SES; Slack webhook |

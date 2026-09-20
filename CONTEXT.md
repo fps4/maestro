@@ -12,7 +12,7 @@ One meaning per word, across every component and document. If a component needs 
 | **Seat** | A role in a process that a principal occupies — operations, owner, reviewer, decider. Which kind of principal may occupy a seat, and how far it may act alone, is the seat's **oversight level**. |
 | **Oversight level** | O0 human only · O1 agent proposes, human acts · O2 agent acts, human approves before effect · O3 agent acts, human may intervene · O4 agent acts, human notified. A seat's level is recorded on every act; some seats have a **ceiling** nothing can raise. |
 | **Tenant** | The party whose applications and records these are. By default a tenant is one deployment of maestro. |
-| **Workspace** | The isolation boundary inside a component — its own database, its own configuration. A tenant has one or more. |
+| **Workspace** | The isolation boundary inside a component — its own key prefix in the component's table, its own configuration. A tenant has one or more. |
 
 ## What is agreed
 
@@ -68,7 +68,7 @@ One meaning per word, across every component and document. If a component needs 
 | **Event** | An attributed fact a component emitted: who, under whose accountability, at what oversight level, about what. Structural body only; anything personal is a payload reference with a digest. |
 | **Outbox** | The component's transactional queue of events, drained by the relay. |
 | **Archive** | The S3 store every event lands in, sealed into daily segments with a hash chain computed in code. The system of record. |
-| **Projection** | Any component's database. Rebuildable from the archive; dropped and rebuilt as a build gate. |
+| **Projection** | Any component's table — what it serves reads from. Rebuildable from the archive; a workspace's prefix is deleted and rebuilt as a build gate. |
 | **Export** | The archive, its manifests, and the verifier — readable with every service off. The exit. |
 | **Classification** | A label on every payload and transcript saying what it may contain and how long it is kept. |
 

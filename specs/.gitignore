@@ -41,3 +41,5 @@ web/.npmrc
 
 # The local record sink's archive (RECORD_SINK=local writes here). The record is the spine's.
 archive/
+# The local payload store (RECORD_PAYLOAD_DIR): what the envelopes reference, erasable (ADR-0020).
+payloads/

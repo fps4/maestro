@@ -287,7 +287,7 @@ describe('questions on a version', () => {
     const directory = new PrincipalDirectory(harness.app.store);
     const verified = await createVerifier(harness.config).verify(AGENT);
     const ctx = await buildContext(
-      { store: harness.app.store, registry, directory },
+      { store: harness.app.store, registry, directory, payloads: harness.app.payloads },
       verified,
       harness.tenant,
     );

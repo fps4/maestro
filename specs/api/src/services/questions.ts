@@ -16,17 +16,24 @@
  */
 
 import { QUESTIONS, VERSIONS } from '../db/collections.js';
-import type { Recorder } from '../db/outbox.js';
+import { firstSeat, type Recorder } from '../db/outbox.js';
 import type { WorkspaceHandle } from '../db/handle.js';
 import { digestOf } from '../domain/digest.js';
 import { mintQuestionId } from '../domain/ids.js';
 import type { Answer, Question, Version } from '../domain/types.js';
+import { versionPayloadKey, writePayload, type PayloadStore } from '../record/payload-store.js';
 import { NotFound, Refused, type Actor } from './artifacts.js';
+
+/** What `QuestionRaised` and `QuestionAnswered` carry as their payload (ADR-0020 §2). */
+export interface TextPayload {
+  text: string;
+}
 
 export class QuestionService {
   constructor(
     private readonly handle: WorkspaceHandle,
     private readonly recorder?: Recorder,
+    private readonly payloads?: PayloadStore,
   ) {}
 
   private record(): Recorder {
@@ -34,15 +41,19 @@ export class QuestionService {
     return this.recorder;
   }
 
+  /** The text goes to the payload store before the transaction that names it (ADR-0020 §2). */
+  private async payload(subject: { artifact: string; ordinal: number }, what: string, text: string) {
+    if (!this.payloads) throw new Error('This service was built without a payload store and cannot write.');
+    const payload: TextPayload = { text };
+    return writePayload(this.payloads, versionPayloadKey(this.handle.workspace, subject, what), payload);
+  }
+
   /**
    * Asking and answering are anyone's acts: the seat is the first the actor holds. Resolving is
    * a human's, in `reviewer` — the person who needed the answer closes the loop (ADR-0014).
    */
-  private seatOf(actor: Actor): 'reviewer' | 'author' | 'workspace_admin' | 'auditor' {
-    for (const seat of ['reviewer', 'author', 'workspace_admin', 'auditor'] as const) {
-      if (actor.roles.includes(seat)) return seat;
-    }
-    throw new Refused(`\`${actor.principal}\` holds no role in this workspace.`);
+  private seatOf(actor: Actor) {
+    return firstSeat(actor, ['reviewer', 'author', 'workspace_admin', 'auditor'] as const);
   }
 
   private questions() {
@@ -92,6 +103,7 @@ export class QuestionService {
       asked_at: now,
       answers: [],
     };
+    const payload = await this.payload({ artifact, ordinal }, `question/${question.id}.json`, trimmed);
 
     await this.handle.transaction(async (session) => {
       await this.questions().insertOne(question, { session });
@@ -103,6 +115,7 @@ export class QuestionService {
           seat: this.seatOf(actor),
           body: { question: question.id, text_digest: digestOf(trimmed), asked_kind: actor.kind },
           occurred_at: now,
+          payload,
         },
       ]);
     });
@@ -131,6 +144,7 @@ export class QuestionService {
       kind: actor.kind,
       at: now,
     };
+    const payload = await this.payload(question, `answer/${answer.id}.json`, trimmed);
 
     return this.handle.transaction(async (session) => {
       const updated = await this.questions().findOneAndUpdate(
@@ -147,6 +161,7 @@ export class QuestionService {
           seat: this.seatOf(actor),
           body: { question: id, answer: answer.id, text_digest: digestOf(trimmed), kind: actor.kind },
           occurred_at: now,
+          payload,
         },
       ]);
       return updated;

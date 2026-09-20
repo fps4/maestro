@@ -37,9 +37,13 @@ const schema = z.object({
   /** Setting this both publishes the discovery document and adds the URL to accepted audiences. */
   MCP_RESOURCE_URL: z.string().optional(),
 
+  /**
+   * Object storage is on when `S3_BUCKET` is set. `S3_ENDPOINT` names MinIO locally; unset, the
+   * SDK's default endpoint for `S3_REGION` applies (AWS), with the credentials the runtime holds.
+   */
   S3_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().default('us-east-1'),
-  S3_BUCKET: z.string().default('mstr-specs'),
+  S3_BUCKET: z.string().optional(),
   S3_ACCESS_KEY: z.string().optional(),
   S3_SECRET_KEY: z.string().optional(),
   S3_FORCE_PATH_STYLE: booleanish.default('true'),
@@ -57,6 +61,18 @@ const schema = z.object({
   ARCHIVE_PREFIX: z.string().optional(),
   EVENTS_TOPIC_ARN: z.string().optional(),
 
+  /**
+   * The payload store (ADR-0020 §1): where a version's text, a decision's reasoning, a question, an
+   * answer and an evaluator's findings live, named on the event by a locator and a digest. `local`
+   * is a directory beside the archive's; `s3` is this service's own bucket under a prefix — the
+   * attachments bucket unless `PAYLOAD_BUCKET` says otherwise — reusing the S3 endpoint and
+   * credentials. Unset, it follows the sink: `local` under `RECORD_SINK=local`, `s3` otherwise.
+   */
+  PAYLOAD_STORE: z.enum(['local', 's3']).optional(),
+  RECORD_PAYLOAD_DIR: z.string().default('./payloads'),
+  PAYLOAD_BUCKET: z.string().optional(),
+  PAYLOAD_PREFIX: z.string().default('payloads'),
+
   EVALUATOR_BASE: z.string().optional(),
 
   /** The one workspace whose artifacts every tenant may read, and none may write (ADR-0008). */
@@ -68,7 +84,8 @@ const schema = z.object({
   CORS_ORIGINS: z.string().default(''),
 });
 
-export type Config = z.infer<typeof schema> & {
+export type Config = Omit<z.infer<typeof schema>, 'PAYLOAD_STORE'> & {
+  PAYLOAD_STORE: 'local' | 's3';
   corsOrigins: string[];
   isProduction: boolean;
 };
@@ -100,9 +117,18 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       if (!value[key]) throw new Error(`RECORD_SINK=s3 requires ${key}`);
     }
   }
+  const payloadStore = value.PAYLOAD_STORE ?? (value.RECORD_SINK === 'local' ? 'local' : 's3');
+  const payloadBucket = value.PAYLOAD_BUCKET ?? value.S3_BUCKET;
+  if (payloadStore === 's3' && !payloadBucket) {
+    throw new Error(
+      `PAYLOAD_STORE=s3${value.PAYLOAD_STORE ? '' : ` (the default under RECORD_SINK=${value.RECORD_SINK})`} requires PAYLOAD_BUCKET, or S3_BUCKET to default to`,
+    );
+  }
 
   return {
     ...value,
+    PAYLOAD_STORE: payloadStore,
+    ...(payloadBucket ? { PAYLOAD_BUCKET: payloadBucket } : {}),
     isProduction,
     corsOrigins: value.CORS_ORIGINS.split(',')
       .map((o) => o.trim())

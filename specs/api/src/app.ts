@@ -9,7 +9,8 @@ import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import type { Config } from './config.js';
 import { Store } from './db/client.js';
-import { createRelay, sinkFor, type Relay } from './relay/relay.js';
+import { createRelay, payloadStoreFor, sinkFor, type Relay } from './relay/relay.js';
+import type { PayloadStore } from './record/payload-store.js';
 import { createVerifier } from './auth/verify.js';
 import { registerRoutes } from './http/routes.js';
 import { registerMcp } from './mcp/route.js';
@@ -22,6 +23,8 @@ export interface App {
   store: Store;
   /** The relay the sink configured, or null under `RECORD_SINK=off`. */
   relay: Relay | null;
+  /** Where every free-text write goes before its event (ADR-0020). */
+  payloads: PayloadStore;
   stop(): Promise<void>;
 }
 
@@ -44,8 +47,17 @@ export async function buildApp(config: Config): Promise<App> {
   const directory = new PrincipalDirectory(store);
   const verifier = createVerifier(config);
   const signUrls = signedUrlFactory(config);
+  const payloads = payloadStoreFor(config);
 
-  const deps = { store, registry, directory, verifier, config, ...(signUrls ? { signUrls } : {}) };
+  const deps = {
+    store,
+    registry,
+    directory,
+    payloads,
+    verifier,
+    config,
+    ...(signUrls ? { signUrls } : {}),
+  };
 
   await registerRoutes(server, deps);
   await registerMcp(server, deps);
@@ -58,6 +70,7 @@ export async function buildApp(config: Config): Promise<App> {
     server,
     store,
     relay,
+    payloads,
     async stop() {
       if (timer) clearInterval(timer);
       await server.close();

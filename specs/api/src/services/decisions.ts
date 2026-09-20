@@ -20,6 +20,7 @@ import { freezePins } from '../domain/links.js';
 import { phaseAfterGate } from '../domain/lifecycle.js';
 import { nextState } from '../domain/versioning.js';
 import { acceptingOutcome, gateIn, profileIn, typeIn } from '../domain/workspace-definition.js';
+import { versionPayloadKey, writePayload, type PayloadStore } from '../record/payload-store.js';
 import type {
   Artifact,
   Attribution,
@@ -48,16 +49,28 @@ export interface DecideInput {
   materiality?: Materiality;
 }
 
+/** What `DecisionRecorded` carries as its payload (ADR-0020 §2): the prose, and what it was taken on. */
+export interface DecisionPayload {
+  reasoning?: string;
+  evaluations: EvaluationResult[];
+}
+
 export class DecisionService {
   constructor(
     private readonly handle: WorkspaceHandle,
     private readonly workspace: LoadedWorkspace,
     private readonly recorder?: Recorder,
+    private readonly payloads?: PayloadStore,
   ) {}
 
   private record(): Recorder {
     if (!this.recorder) throw new Error('This service was built without a recorder and cannot write.');
     return this.recorder;
+  }
+
+  private store(): PayloadStore {
+    if (!this.payloads) throw new Error('This service was built without a payload store and cannot write.');
+    return this.payloads;
   }
 
   private gateOrThrow(id: string) {
@@ -176,6 +189,19 @@ export class DecisionService {
     const reopens = gate.reopens_on === input.outcome;
     const now = new Date().toISOString();
 
+    // The reasoning is prose and the evaluations snapshot is what the decision was taken on: both
+    // go to the payload store before the transaction that records the decision (ADR-0020 §2).
+    const decisionId = mintDecisionId();
+    const payload: DecisionPayload = {
+      ...(input.reasoning ? { reasoning: input.reasoning } : {}),
+      evaluations,
+    };
+    const payloadRef = await writePayload(
+      this.store(),
+      versionPayloadKey(this.handle.workspace, input, `decision/${decisionId}.json`),
+      payload,
+    );
+
     return this.handle.transaction(async (session) => {
       const versions = this.handle.collection<Version>(VERSIONS);
       const state = nextState(version.state, {
@@ -243,7 +269,7 @@ export class DecisionService {
       );
 
       const decision: Decision = {
-        id: mintDecisionId(),
+        id: decisionId,
         workspace: this.handle.workspace,
         gate: gate.id,
         artifact: input.artifact,
@@ -345,6 +371,7 @@ export class DecisionService {
             ...(reopenedDraft ? { reopened_draft: reopenedDraft } : {}),
           },
           occurred_at: now,
+          payload: payloadRef,
           attribution: declared,
         },
         ...consequences,

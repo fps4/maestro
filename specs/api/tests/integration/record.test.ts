@@ -4,9 +4,13 @@
  * passes on what was sealed. This is maestro's M1 gate 1 from this side of the seam.
  */
 
-import { sealBefore, verifyRange, parseEventLine, type SpineEvent } from '@fps4/maestro-spine';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { sealBefore, sha256, verifyRange, parseEventLine, type SpineEvent } from '@fps4/maestro-spine';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { spineWorkspaceId } from '../../src/domain/ids.js';
+import { readPayload } from '../../src/record/payload-store.js';
+import type { VersionPayload } from '../../src/services/artifacts.js';
 import { call, grantMembership, startHarness, token, type Harness } from './helpers.js';
 
 let harness: Harness;
@@ -94,6 +98,47 @@ describe('the record', () => {
     expect(event.body).toMatchObject({ type: 'business_case', digest: proposed.body.version.digest });
   });
 
+  it('a proposal names its payload — the version under a file:/// ref whose bytes hash to the digest (ADR-0020)', async () => {
+    const proposed = await propose(AUTHOR, 'With a payload');
+    expect(proposed.status).toBe(201);
+    const events = await outbox();
+    const event = events.find(
+      (e) => e.type === 'VersionProposed' && e.subject_id.startsWith(proposed.body.version.artifact),
+    )!;
+    expect(event.payload_ref).toMatch(
+      new RegExp(
+        `^file:///.+/${spineWorkspaceId(harness.tenant)}/version/${event.subject_id}/version\\.json$`,
+      ),
+    );
+    expect(event.payload_digest).toMatch(/^sha256:[0-9a-f]{64}$/);
+    // The payload holds more than the subject, so its digest is not the subject digest.
+    expect(event.payload_digest).not.toBe(proposed.body.version.digest);
+
+    const bytes = await readFile(fileURLToPath(event.payload_ref!));
+    expect(sha256(bytes)).toBe(event.payload_digest);
+    const payload = await readPayload<VersionPayload>(harness.app.payloads, {
+      ref: event.payload_ref!,
+      digest: event.payload_digest!,
+    });
+    expect(payload.title).toBe('With a payload');
+    expect(payload.digest).toBe(proposed.body.version.digest);
+    expect(payload).not.toHaveProperty('state');
+    expect(payload).not.toHaveProperty('workspace');
+
+    // The builtin verdict recorded at propose is an event too, with its findings as the payload.
+    const evaluated = events.find(
+      (e) => e.type === 'EvaluationRecorded' && e.subject_id === event.subject_id,
+    )!;
+    expect(evaluated.body).toMatchObject({ evaluator: 'sufficiency', verdict: 'pass', findings: 5 });
+    expect(evaluated.seat).toBe('author');
+    expect(evaluated.payload_ref).toMatch(/\/evaluation\/sufficiency\/[0-9a-f]{64}\.json$/);
+    const findings = await readPayload<{ findings: unknown[] }>(harness.app.payloads, {
+      ref: evaluated.payload_ref!,
+      digest: evaluated.payload_digest!,
+    });
+    expect(findings.findings).toHaveLength(5);
+  });
+
   it('an agent with no answerable human cannot propose, and the refusal names why', async () => {
     const refused = await propose(STRAY, 'Stray');
     expect(refused.status).toBe(403);
@@ -127,8 +172,10 @@ describe('the record', () => {
       outcome: 'approve',
       subject_digest: proposed.body.version.digest,
     });
-    // Its proposal was event 1 of that subject; the decision is event 2.
-    expect(decision.subject_seq).toBe(2);
+    // Its proposal was event 1 of that subject, the builtin verdict event 2; the decision is 3.
+    expect(decision.subject_seq).toBe(3);
+    // The reasoning and the evaluations snapshot are the decision's payload (ADR-0020 §2).
+    expect(decision.payload_ref).toMatch(/\/decision\/dec-[a-z0-9]+\.json$/);
     const followers = events.filter((e) => e.causation_id === decision.event_id);
     for (const f of followers) expect(f.correlation_id).toBe(decision.correlation_id);
   });

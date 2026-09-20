@@ -58,6 +58,12 @@ export interface Act {
   body: Record<string, unknown>;
   occurred_at?: string;
   /**
+   * What the body cannot say — a version's text, a reasoning, a question — written to the payload
+   * store before this transaction and named here by locator and digest (ADR-0020 §2). Copied onto
+   * the envelope as `payload_ref` and `payload_digest`.
+   */
+  payload?: { ref: string; digest: string };
+  /**
    * A decision's attribution comes from its profile and must agree with the occupancy; anything
    * else is derived. Only a decision sets this.
    */
@@ -123,6 +129,17 @@ export function attributionFor(
     seat,
     oversight_level: (declared.oversight_level as OversightLevel | undefined) ?? level,
   };
+}
+
+/**
+ * The seat an ordinary act is authorised under: the first of `seats` the actor holds (ADR-0019
+ * §2 — raising a question, recording an evaluation). Deciding is resolved per gate, never here.
+ */
+export function firstSeat<S extends Seat>(actor: Actor, seats: readonly S[]): S {
+  for (const seat of seats) if (actor.roles.includes(seat)) return seat;
+  throw new ActRefused(
+    `\`${actor.principal}\` holds none of ${seats.map((s) => `\`${s}\``).join(', ')} in this workspace.`,
+  );
 }
 
 export interface Recorder {
@@ -193,6 +210,7 @@ export function createRecorder(deps: RecorderDeps): Recorder {
           causation_id: i === 0 ? causation : events[0]!.event_id,
           correlation_id: deps.correlation_id,
           body: act.body,
+          ...(act.payload ? { payload_ref: act.payload.ref, payload_digest: act.payload.digest } : {}),
         };
         // The spine's own rules, at emit. An event the relay would refuse never reaches the outbox.
         events.push(assertEvent(candidate, resolve, types));

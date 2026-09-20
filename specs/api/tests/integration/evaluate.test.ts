@@ -57,6 +57,18 @@ afterAll(async () => {
 
 const base = () => `/v1/workspaces/${harness.tenant}`;
 
+/** A request context for a token, as a route would build one. */
+async function contextFor(as: string) {
+  const registry = new WorkspaceRegistry(harness.app.store);
+  const directory = new PrincipalDirectory(harness.app.store);
+  const verified = await createVerifier(harness.config).verify(as);
+  return buildContext(
+    { store: harness.app.store, registry, directory, payloads: harness.app.payloads },
+    verified,
+    harness.tenant,
+  );
+}
+
 describe('readiness', () => {
   it('tells an author what is still missing, in the schema’s words, before they hit a 422', async () => {
     const created = await call<{ draft: { id: string; revision: number } }>(
@@ -122,19 +134,25 @@ describe('the endpoint adapter', () => {
     }>(harness, 'POST', `${base()}/drafts/${created.body.draft.id}/propose`, { as: AUTHOR });
     const version = proposed.body.version;
 
-    // Run the port directly with the environment the deployment would set.
-    const handle = await harness.app.store.handle(harness.tenant);
-    const workspace = await new WorkspaceRegistry(harness.app.store).load(harness.tenant);
-    const service = new EvaluationService(handle, workspace, {
-      EVALUATOR_BASE: `http://127.0.0.1:${evaluatorPort}`,
-    });
+    // Run the port directly with the environment the deployment would set, under the author's
+    // own context: a verdict is recorded under a seat (ADR-0020 §3).
+    const ctx = await contextFor(AUTHOR);
+    const service = new EvaluationService(
+      ctx.handle,
+      ctx.workspace,
+      { recorder: ctx.recorder, payloads: ctx.payloads },
+      { EVALUATOR_BASE: `http://127.0.0.1:${evaluatorPort}` },
+    );
     const full = await call<{ version: { facets: Record<string, unknown> } }>(
       harness,
       'GET',
       `${base()}/artifacts/${version.artifact}/versions/${version.ordinal}`,
       { as: AUTHOR },
     );
-    const runs = await service.run({ ...full.body.version, ...version } as Parameters<typeof service.run>[0]);
+    const runs = await service.run(
+      { ...full.body.version, ...version } as Parameters<typeof service.run>[0],
+      ctx.actor,
+    );
     expect(runs).toEqual([{ evaluator: 'conformance', status: 'recorded', verdict: 'pass' }]);
 
     expect(received).toHaveLength(1);
@@ -154,16 +172,23 @@ describe('the endpoint adapter', () => {
   });
 
   it('records nothing and says why when the evaluator is unreachable', async () => {
-    const handle = await harness.app.store.handle(harness.tenant);
-    const workspace = await new WorkspaceRegistry(harness.app.store).load(harness.tenant);
-    const dead = new EvaluationService(handle, workspace, { EVALUATOR_BASE: 'http://127.0.0.1:1' });
-    const runs = await dead.run({
-      artifact: 'art-none',
-      ordinal: 1,
-      type: 'specification',
-      digest: 'sha256:0',
-      facets: {},
-    } as Parameters<typeof dead.run>[0]);
+    const ctx = await contextFor(AUTHOR);
+    const dead = new EvaluationService(
+      ctx.handle,
+      ctx.workspace,
+      { recorder: ctx.recorder, payloads: ctx.payloads },
+      { EVALUATOR_BASE: 'http://127.0.0.1:1' },
+    );
+    const runs = await dead.run(
+      {
+        artifact: 'art-none',
+        ordinal: 1,
+        type: 'specification',
+        digest: 'sha256:0',
+        facets: {},
+      } as Parameters<typeof dead.run>[0],
+      ctx.actor,
+    );
     expect(runs[0]).toMatchObject({ evaluator: 'conformance', status: 'unavailable' });
     expect(runs[0]!.reason).toMatch(/could not be reached/);
   });
@@ -171,14 +196,7 @@ describe('the endpoint adapter', () => {
 
 describe('over MCP', () => {
   it('lets an agent read readiness, propose, and re-run evaluations — and still not decide', async () => {
-    const registry = new WorkspaceRegistry(harness.app.store);
-    const directory = new PrincipalDirectory(harness.app.store);
-    const verified = await createVerifier(harness.config).verify(AGENT);
-    const ctx = await buildContext(
-      { store: harness.app.store, registry, directory },
-      verified,
-      harness.tenant,
-    );
+    const ctx = await contextFor(AGENT);
 
     const draft = (await callTool('create_draft', ctx, {
       type: 'business_case',

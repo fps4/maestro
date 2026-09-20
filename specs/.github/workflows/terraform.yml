@@ -68,11 +68,12 @@ jobs:
       - name: The bundles resolve every module on their own
         # The relay exports its handler. The API is started the way the adapter starts it and must
         # get as far as the database: a connection refused is the expected end, a module it cannot
-        # find is not.
+        # find is not. There is no S3 here, so the payload store is `local` (under `RECORD_SINK=off`
+        # it would default to `s3` and ask for a bucket before reaching the database).
         run: |
           node -e "import('./bundle/relay/index.mjs').then(m => { if (typeof m.handler !== 'function') { console.error('relay: no handler'); process.exit(1) } console.log('relay: handler ok') })"
           set +e
-          (cd bundle/api && PORT=18080 MONGO_URI='mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=2000' RECORD_SINK=off \
+          (cd bundle/api && PORT=18080 MONGO_URI='mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=2000' RECORD_SINK=off PAYLOAD_STORE=local \
             bash run.sh > ../api-boot.log 2>&1)
           set -e
           if grep -q 'MongoServerSelectionError\|ECONNREFUSED' bundle/api-boot.log; then

@@ -11,6 +11,7 @@ import { MEMBERSHIPS } from '../db/collections.js';
 import type { Store } from '../db/client.js';
 import type { CatalogueHandle, WorkspaceHandle } from '../db/handle.js';
 import { createRecorder, type Actor, type Recorder } from '../db/outbox.js';
+import type { PayloadStore } from '../record/payload-store.js';
 import type { PrincipalDirectory, PrincipalRecord } from '../services/principals.js';
 import type { LoadedWorkspace, WorkspaceRegistry } from '../services/workspaces.js';
 import type { VerifiedToken } from './verify.js';
@@ -45,12 +46,15 @@ export interface RequestContext {
   /** One per request; every event the request records carries it. */
   correlation_id: string;
   recorder: Recorder;
+  /** Where a payload is written before the transaction that names it (ADR-0020). */
+  payloads: PayloadStore;
 }
 
 export interface ContextDeps {
   store: Store;
   registry: WorkspaceRegistry;
   directory: PrincipalDirectory;
+  payloads: PayloadStore;
 }
 
 /**
@@ -122,6 +126,7 @@ export async function buildContext(
     actor,
     correlation_id,
     recorder,
+    payloads: deps.payloads,
   };
 }
 

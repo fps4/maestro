@@ -14,6 +14,12 @@ import { ARTIFACTS, DRAFTS, VERSIONS, WITHOUT_BODY } from '../db/collections.js'
 import { digestOf } from '../domain/digest.js';
 import type { Actor, Recorder } from '../db/outbox.js';
 import type { WorkspaceHandle } from '../db/handle.js';
+import {
+  versionPayloadKey,
+  writePayload,
+  type PayloadRef,
+  type PayloadStore,
+} from '../record/payload-store.js';
 import { mintArtifactId, mintDraftId } from '../domain/ids.js';
 import { confirmFacet, invalidateConfirmations } from '../domain/facets.js';
 import { assertLinksDeclared, assertPinsUnchanged } from '../domain/links.js';
@@ -79,17 +85,47 @@ export interface SaveDraftInput {
   effective?: EffectiveWindow;
 }
 
+/**
+ * What `VersionProposed` carries as its payload (ADR-0020 §2): everything immutable about the
+ * version. The mutable and derived fields — `state`, `decided_at`, `materiality`, `redacted_at`,
+ * the pin a later acceptance freezes — are what the later events say; `workspace` is where the
+ * rebuild puts it.
+ */
+export type VersionPayload = Omit<
+  Version,
+  'workspace' | 'state' | 'decided_at' | 'materiality' | 'redacted_at'
+>;
+
+export function versionPayloadOf(version: Version): VersionPayload {
+  const {
+    workspace: _workspace,
+    state: _state,
+    decided_at: _decided,
+    materiality: _m,
+    redacted_at: _r,
+    ...rest
+  } = version;
+  return rest;
+}
+
 export class ArtifactService {
-  /** `recorder` is per request; a read-only caller (a packet, a lineage) may omit it. */
+  /** `recorder` and `payloads` are per request; a read-only caller (a packet, a lineage) may omit them. */
   constructor(
     private readonly handle: WorkspaceHandle,
     private readonly workspace: LoadedWorkspace,
     private readonly recorder?: Recorder,
+    private readonly payloads?: PayloadStore,
   ) {}
 
   private record(): Recorder {
     if (!this.recorder) throw new Error('This service was built without a recorder and cannot write.');
     return this.recorder;
+  }
+
+  /** Written before the transaction that names it; an orphan from a failed transaction is harmless. */
+  private async payload(subject: { artifact: string; ordinal: number }, what: string, value: unknown) {
+    if (!this.payloads) throw new Error('This service was built without a payload store and cannot write.');
+    return writePayload(this.payloads, versionPayloadKey(this.handle.workspace, subject, what), value);
   }
 
   private drafts() {
@@ -361,26 +397,38 @@ export class ArtifactService {
     this.workspace.validator.assert(draft.type, draft.facets);
     assertLinksDeclared(draft.links, type);
 
-    return this.handle.transaction(async (session) => {
-      const artifactId = draft.artifact ?? mintArtifactId();
-      const now = new Date().toISOString();
+    const artifactId = draft.artifact ?? mintArtifactId();
+    const now = new Date().toISOString();
 
+    // The ordinal is read before the transaction so the payload can be written before it
+    // (ADR-0020 §1); the unique index on (artifact, ordinal) and the re-read below make a race
+    // a refusal rather than a second @n.
+    const seen = draft.artifact ? await this.artifacts().findOne({ id: artifactId }) : null;
+    if (draft.artifact && !seen) throw new NotFound(`Artifact \`${artifactId}\``);
+
+    const ordinal = (seen?.latest_ordinal ?? 0) + 1;
+    const version = proposeVersion({
+      draft: { ...draft, artifact: artifactId },
+      ordinal,
+      ...(seen?.accepted_ordinal ? { supersedes: seen.accepted_ordinal } : {}),
+      definition_version: this.workspace.definition.definition_version,
+      proposed_by: actor.principal,
+      at: now,
+      body_ceiling_bytes: bodyCeilingBytes,
+      classification_required: type.classification_required,
+    });
+    const payload = await this.payload(version, 'version.json', versionPayloadOf(version));
+
+    return this.handle.transaction(async (session) => {
       const artifact = draft.artifact
         ? await this.artifacts().findOne({ id: artifactId }, { session })
         : null;
       if (draft.artifact && !artifact) throw new NotFound(`Artifact \`${artifactId}\``);
-
-      const ordinal = (artifact?.latest_ordinal ?? 0) + 1;
-      const version = proposeVersion({
-        draft: { ...draft, artifact: artifactId },
-        ordinal,
-        ...(artifact?.accepted_ordinal ? { supersedes: artifact.accepted_ordinal } : {}),
-        definition_version: this.workspace.definition.definition_version,
-        proposed_by: actor.principal,
-        at: now,
-        body_ceiling_bytes: bodyCeilingBytes,
-        classification_required: type.classification_required,
-      });
+      if ((artifact?.latest_ordinal ?? 0) + 1 !== ordinal) {
+        throw new Refused(
+          `\`${artifactId}\` moved on while this draft was being proposed. Propose it again.`,
+        );
+      }
 
       await this.versions().insertOne(version, { session });
 
@@ -414,7 +462,7 @@ export class ArtifactService {
       // the same intent, and the whole point of the split is that only one of them is a record.
       await this.drafts().deleteOne({ id: draftId }, { session });
 
-      await this.emitVersionProposed(session, version);
+      await this.emitVersionProposed(session, version, payload);
       return version;
     });
   }
@@ -436,6 +484,11 @@ export class ArtifactService {
     }
     const state = nextState(version.state, { kind: 'withdraw', by: actor.principal });
     const now = new Date().toISOString();
+    // The reason is prose: the record carries its digest (ADR-0019 §4) and the payload store the
+    // text (ADR-0020 §2). A withdrawal without a reason has no payload.
+    const payload = reason
+      ? await this.payload({ artifact: artifactId, ordinal }, 'withdrawal.json', { reason })
+      : undefined;
     return this.handle.transaction(async (session) => {
       const updated = await this.versions().findOneAndUpdate(
         { artifact: artifactId, ordinal, state: 'proposed' },
@@ -443,7 +496,6 @@ export class ArtifactService {
         { session, returnDocument: 'after', projection: { _id: 0 } },
       );
       if (!updated) throw new Refused(`\`${artifactId}@${ordinal}\` is no longer proposed.`);
-      // The reason is prose and stays on the version; the record carries its digest (ADR-0019 §4).
       await this.record().emit(session, [
         {
           type: 'VersionWithdrawn',
@@ -452,6 +504,7 @@ export class ArtifactService {
           seat: 'author',
           body: reason ? { reason_digest: digestOf(reason) } : {},
           occurred_at: now,
+          ...(payload ? { payload } : {}),
         },
       ]);
       return updated;
@@ -466,13 +519,15 @@ export class ArtifactService {
       .toArray();
   }
 
-  private async emitVersionProposed(session: ClientSession, version: Version) {
+  private async emitVersionProposed(session: ClientSession, version: Version, payload: PayloadRef) {
     await this.record().emit(session, [
       {
         type: 'VersionProposed',
         subject: { artifact: version.artifact, ordinal: version.ordinal },
         artifact_type: version.type,
         seat: 'author',
+        // `digest` stays the subject digest a decision cites; the payload holds more than the
+        // subject, so its own digest differs (ADR-0020 §2).
         body: {
           type: version.type,
           digest: version.digest,
@@ -480,6 +535,7 @@ export class ArtifactService {
           contributors: version.contributors.map((c) => c.principal),
         },
         occurred_at: version.proposed_at,
+        payload,
       },
     ]);
   }

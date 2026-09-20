@@ -54,6 +54,7 @@ export function testConfig(suffix: string): Config {
     CATALOGUE_WORKSPACE: `cat-${suffix}`,
     RECORD_SINK: 'local',
     RECORD_ARCHIVE_DIR: mkdtempSync(join(tmpdir(), `specs-archive-${suffix}-`)),
+    RECORD_PAYLOAD_DIR: mkdtempSync(join(tmpdir(), `specs-payloads-${suffix}-`)),
     LOG_LEVEL: 'silent',
   } as NodeJS.ProcessEnv);
 }

@@ -18,6 +18,29 @@ export const MEMBERSHIPS = 'memberships';
 export const OUTBOX = 'outbox';
 export const ACCEPTANCES = 'acceptances';
 export const QUESTIONS = 'questions';
+export const COUNTERS = 'counters';
+/** One document, `projection`: which projection wrote this database (ADR-0020 §4). */
+export const META = 'meta';
+
+/**
+ * How events are projected into this database. A change to the projection — a new field derived
+ * from an event, a collection reshaped — bumps this, and a database whose `meta.projection_version`
+ * is behind refuses to serve until it is rebuilt from the archive. Never an in-place migration.
+ */
+export const PROJECTION_VERSION = 1;
+
+/** The collections the rebuilder writes — the record's projection. Memberships are grants, not record. */
+export const RECORD_COLLECTIONS = [
+  ARTIFACTS,
+  DRAFTS,
+  VERSIONS,
+  DECISIONS,
+  EVALUATIONS,
+  QUESTIONS,
+  OUTBOX,
+  COUNTERS,
+  ACCEPTANCES,
+] as const;
 
 /** Control database — never per workspace. */
 export const WORKSPACES = 'workspaces';
@@ -86,6 +109,44 @@ const CONTROL_INDEXES: Record<string, IndexDef[]> = {
 
 export async function ensureWorkspaceIndexes(db: Db): Promise<void> {
   await applyIndexes(db, WORKSPACE_INDEXES);
+}
+
+export interface ProjectionMeta {
+  _id: 'projection';
+  projection_version: number;
+}
+
+export class ProjectionBehind extends Error {
+  constructor(
+    readonly workspace: string,
+    readonly found: number,
+  ) {
+    super(
+      `Workspace \`${workspace}\` was projected at version ${found}; this service projects at ${PROJECTION_VERSION}. ` +
+        'Rebuild it from the archive (`npm run workspace:rebuild -- --workspace <id> --force`); nothing migrates in place.',
+    );
+    this.name = 'ProjectionBehind';
+  }
+}
+
+/**
+ * Stamp a database the running service created with the current projection version, and refuse
+ * one written by an older projection (ADR-0020 §4). Called where indexes are ensured — once per
+ * workspace per process.
+ */
+export async function ensureProjectionVersion(db: Db, workspace: string): Promise<void> {
+  const meta = db.collection<ProjectionMeta>(META);
+  const found = await meta.findOne({ _id: 'projection' });
+  if (!found) {
+    await meta.updateOne(
+      { _id: 'projection' },
+      { $setOnInsert: { projection_version: PROJECTION_VERSION } },
+      { upsert: true },
+    );
+    return;
+  }
+  if (found.projection_version < PROJECTION_VERSION)
+    throw new ProjectionBehind(workspace, found.projection_version);
 }
 
 export async function ensureControlIndexes(db: Db): Promise<void> {

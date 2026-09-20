@@ -36,6 +36,16 @@ const bodies: Record<string, z.ZodTypeAny> = {
       reopened_draft: id.optional(),
     })
     .strict(),
+  // A gate opens or stays shut on a verdict, so a verdict is on the record (ADR-0020 §3). The
+  // findings are the payload; the body says how many there were.
+  EvaluationRecorded: z
+    .object({
+      evaluator: id,
+      verdict: z.enum(['pass', 'fail', 'not_applicable']),
+      subject_digest: digest,
+      findings: z.number().int().nonnegative(),
+    })
+    .strict(),
   DecisionRefused: z
     .object({
       gate: id,

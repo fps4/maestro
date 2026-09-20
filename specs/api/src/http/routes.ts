@@ -102,12 +102,15 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
   function services(ctx: RequestContext) {
     const reader = new CatalogueReader(ctx.catalogue);
     return {
-      artifacts: new ArtifactService(ctx.handle, ctx.workspace, ctx.recorder),
-      decisions: new DecisionService(ctx.handle, ctx.workspace, ctx.recorder),
+      artifacts: new ArtifactService(ctx.handle, ctx.workspace, ctx.recorder, ctx.payloads),
+      decisions: new DecisionService(ctx.handle, ctx.workspace, ctx.recorder, ctx.payloads),
       lineage: new LineageService(ctx.handle, ctx.workspace),
       catalogue: reader,
       acceptances: new AcceptanceService(ctx.handle, reader),
-      evaluations: new EvaluationService(ctx.handle, ctx.workspace),
+      evaluations: new EvaluationService(ctx.handle, ctx.workspace, {
+        recorder: ctx.recorder,
+        payloads: ctx.payloads,
+      }),
     };
   }
 
@@ -240,7 +243,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     // The evaluations a gate requires run against the version as soon as it exists. They are facts
     // about the digest, recorded outside the proposal's transaction; an unavailable evaluator is
     // reported here rather than leaving the reader to wonder why the gate says "no verdict".
-    const evaluations = await svc.evaluations.run(version);
+    const evaluations = await svc.evaluations.run(version, ctx.actor);
     return reply.code(201).send({ version, evaluations });
   });
 
@@ -304,7 +307,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     const ctx = await context(request, workspace);
     const svc = services(ctx);
     const version = await svc.artifacts.getVersion(id, ordinal);
-    return { evaluations: await svc.evaluations.run(version) };
+    return { evaluations: await svc.evaluations.run(version, ctx.actor) };
   });
 
   app.get('/v1/workspaces/:ws/artifacts/:id/versions/:ordinal/document', async (request) => {
@@ -352,7 +355,12 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     const { ws: workspace, id, ordinal } = versionParams.parse(request.params);
     const { text } = questionText.parse(request.body);
     const ctx = await context(request, workspace);
-    const question = await new QuestionService(ctx.handle, ctx.recorder).ask(id, ordinal, text, ctx.actor);
+    const question = await new QuestionService(ctx.handle, ctx.recorder, ctx.payloads).ask(
+      id,
+      ordinal,
+      text,
+      ctx.actor,
+    );
     return reply.code(201).send({ question });
   });
 
@@ -364,7 +372,11 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
       const { ws: workspace, question } = questionParams.parse(request.params);
       const { text } = questionText.parse(request.body);
       const ctx = await context(request, workspace);
-      const updated = await new QuestionService(ctx.handle, ctx.recorder).answer(question, text, ctx.actor);
+      const updated = await new QuestionService(ctx.handle, ctx.recorder, ctx.payloads).answer(
+        question,
+        text,
+        ctx.actor,
+      );
       return reply.code(201).send({ question: updated });
     },
   );
@@ -498,17 +510,8 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     const { ws: workspace } = ws.parse(request.params);
     const input = evaluation.parse(request.body);
     const ctx = await context(request, workspace);
-
-    // A verdict against bytes we do not hold is not a verdict about anything here.
-    const version = await services(ctx).artifacts.getVersion(input.artifact, input.ordinal);
-    if (version.digest !== input.subject_digest) {
-      throw new Refused(
-        `This verdict names digest ${input.subject_digest}, and ${input.artifact}@${input.ordinal} is ${version.digest}. ` +
-          'A verdict reached against different bytes is not a verdict about this version.',
-      );
-    }
-
-    const record = await services(ctx).evaluations.record(input);
+    // The one write path checks the digest: a verdict against bytes we do not hold is refused there.
+    const record = await services(ctx).evaluations.record(input, ctx.actor);
     return reply.code(201).send({ evaluation: record });
   });
 

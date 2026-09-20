@@ -11,7 +11,12 @@ import { MongoClient, type Db } from 'mongodb';
 import type { Config } from '../config.js';
 import { databaseNameFor } from '../domain/ids.js';
 import { catalogueHandle, workspaceHandle, type CatalogueHandle, type WorkspaceHandle } from './handle.js';
-import { ensureControlIndexes, ensureWorkspaceIndexes, WORKSPACES } from './collections.js';
+import {
+  ensureControlIndexes,
+  ensureProjectionVersion,
+  ensureWorkspaceIndexes,
+  WORKSPACES,
+} from './collections.js';
 
 export interface WorkspaceRecord {
   id: string;
@@ -91,10 +96,25 @@ export class Store {
     if (!record) throw new UnknownWorkspace(workspace);
     const db = this.client.db(databaseNameFor(workspace, this.config.MONGO_DB_PREFIX));
     if (!this.indexed.has(workspace)) {
+      // A database an older projection wrote is refused here, before a handle exists (ADR-0020 §4).
+      await ensureProjectionVersion(db, workspace);
       await ensureWorkspaceIndexes(db);
       this.indexed.add(workspace);
     }
     return { db, record };
+  }
+
+  /**
+   * Drop a workspace's database — the rebuilder's `--force`, and nothing else's (ADR-0020 §4).
+   *
+   * On the Store rather than reached through a handle, because a handle is what a request holds and
+   * a request must never be able to do this. The control database is untouched: definitions and
+   * principals are not the workspace's.
+   */
+  async dropWorkspace(workspace: string): Promise<void> {
+    if (!(await this.workspaceRecord(workspace))) throw new UnknownWorkspace(workspace);
+    await this.client.db(databaseNameFor(workspace, this.config.MONGO_DB_PREFIX)).dropDatabase();
+    this.indexed.delete(workspace);
   }
 
   /**

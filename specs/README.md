@@ -113,9 +113,22 @@ every value has a local default:
 - `AUTH_MODE` — `dev` (default, no identity provider needed) or `jwks`, with `AUTH_JWKS_URL`,
   `AUTH_ISSUER` and `AUTH_AUDIENCE` pointing at your `identity-service` deployment
 - `MONGO_URI`, `MONGO_USER`, `MONGO_PASSWORD`, `MONGO_CONTROL_DB`, `MONGO_DB_PREFIX`
-- `S3_ENDPOINT`, `S3_BUCKET` — MinIO locally
+- `S3_BUCKET` — set it and object storage is on (attachments, and the payload store's `s3` adapter); `S3_ENDPOINT` names MinIO locally, and unset it is the SDK's default endpoint for `S3_REGION` (AWS); `S3_ACCESS_KEY`/`S3_SECRET_KEY` when the runtime's own credentials are not the ones to use
 - `RECORD_SINK` — `local` (default): the outbox relays to a filesystem archive at `RECORD_ARCHIVE_DIR` (`./archive`) — the laptop's spine, readable by `spine-verify` with everything off; `s3`: maestro's spine, with `ARCHIVE_BUCKET`, `ARCHIVE_PREFIX` and `EVENTS_TOPIC_ARN` as the spine's Terraform module outputs them; `off`: write the outbox, relay nothing (the scheduled relay Lambda drains it)
+- `PAYLOAD_STORE` — where the payloads go ([ADR-0020](docs/design/decisions/0020-the-payload-store-and-the-rebuild.md)): a version's text, a decision's reasoning, a question, an answer, an evaluator's findings — written before the event that names them by locator and digest. `local`: a directory at `RECORD_PAYLOAD_DIR` (`./payloads`); `s3`: this service's own bucket, `PAYLOAD_BUCKET` (default `S3_BUCKET`) under `PAYLOAD_PREFIX` (`payloads`), with the `S3_*` endpoint and credentials — versioned, never Object-Locked, so erasure stays possible. Unset, it follows the sink: `local` under `RECORD_SINK=local`, `s3` otherwise
 - `EVALUATOR_BASE` — optional; without it, evaluations are recorded but never requested
+
+**The rebuild gate.** The archive is the record and this database a projection of it, and that is
+checked rather than said: `npm run workspace:rebuild -- --workspace <id> [--force]` verifies the
+workspace's archive with the spine's verifier, refuses a populated target unless `--force` drops
+it, replays every event in order — fetching each payload by reference and checking it against the
+digest the event carries — and writes the projection back: artifacts, versions, decisions,
+evaluations, questions, the outbox and its counters, a reopened draft as it was at reopen.
+Memberships are grants, not record; re-apply them from the tenant's configuration afterwards.
+`tests/integration/rebuild.test.ts` runs the loop over HTTP, drops the database, rebuilds, and
+compares every collection and read — equal — and is a DoD gate. A database written by an older
+projection (`meta.projection_version` behind the code's `PROJECTION_VERSION`) refuses to serve
+until rebuilt; nothing migrates in place.
 
 Against a real `identity-service`, register the service as an Application with the role catalogue
 (`author`, `reviewer`, `workspace_admin`, `auditor`), a public client for the console, and a

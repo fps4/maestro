@@ -17,16 +17,31 @@ import { parseSize, type TypeDeclaration } from '../domain/workspace-definition.
 import type { AttachmentRef } from '../domain/types.js';
 import { Refused } from './artifacts.js';
 
-export function createS3(config: Config): S3Client | null {
-  if (!config.S3_ENDPOINT) return null;
+/**
+ * The S3 client this deployment's `S3_*` configuration describes: MinIO when `S3_ENDPOINT` names
+ * it, the SDK's default endpoint for `S3_REGION` when it does not (AWS), static credentials when
+ * both keys are set and the runtime's own otherwise. Shared by attachments and the payload store.
+ */
+export function s3ClientFor(
+  config: Pick<
+    Config,
+    'S3_ENDPOINT' | 'S3_REGION' | 'S3_FORCE_PATH_STYLE' | 'S3_ACCESS_KEY' | 'S3_SECRET_KEY'
+  >,
+): S3Client {
   return new S3Client({
-    endpoint: config.S3_ENDPOINT,
+    ...(config.S3_ENDPOINT ? { endpoint: config.S3_ENDPOINT } : {}),
     region: config.S3_REGION,
     forcePathStyle: config.S3_FORCE_PATH_STYLE,
     ...(config.S3_ACCESS_KEY && config.S3_SECRET_KEY
       ? { credentials: { accessKeyId: config.S3_ACCESS_KEY, secretAccessKey: config.S3_SECRET_KEY } }
       : {}),
   });
+}
+
+/** Object storage for attachments: on when `S3_BUCKET` is set, off — no client — when it is not. */
+export function createS3(config: Config): S3Client | null {
+  if (!config.S3_BUCKET) return null;
+  return s3ClientFor(config);
 }
 
 export class AttachmentService {

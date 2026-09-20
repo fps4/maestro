@@ -7,7 +7,7 @@
  * as "no function here returns a modified version" and checkable by reading it.
  */
 
-import { digestVersion } from './digest.js';
+import { canonicalise, digestVersion } from './digest.js';
 import { facetsMissingProvenance, unconfirmedExtractions } from './facets.js';
 import type { Contributor, Draft, PrincipalId, Version, VersionState } from './types.js';
 
@@ -183,7 +183,11 @@ export function proposeVersion(input: ProposeInput): Version {
   // refusal belongs at the point of consequence.
   void unconfirmed;
 
-  return version;
+  // A version is stored in its canonical form — keys sorted, at every depth — because that is the
+  // form the record carries (ADR-0020): the payload an event names is canonical JSON, and a
+  // workspace rebuilt from it must read identically to one the service wrote. Key order is not
+  // information; a draft keeps the author's, a version does not have one.
+  return JSON.parse(canonicalise(version)) as Version;
 }
 
 /**

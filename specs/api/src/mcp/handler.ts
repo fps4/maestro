@@ -37,15 +37,18 @@ export interface McpTool {
 const services = (ctx: RequestContext) => {
   const catalogue = new CatalogueReader(ctx.catalogue);
   return {
-    artifacts: new ArtifactService(ctx.handle, ctx.workspace, ctx.recorder),
+    artifacts: new ArtifactService(ctx.handle, ctx.workspace, ctx.recorder, ctx.payloads),
     lineage: new LineageService(ctx.handle, ctx.workspace),
     catalogue,
     acceptances: new AcceptanceService(ctx.handle, catalogue),
     // No URL signer over MCP: an attachment reference is reported as unresolved rather than handed
     // to an agent as a signed URL it has no business forwarding.
     packets: new PacketService(ctx.handle, ctx.workspace, undefined),
-    questions: new QuestionService(ctx.handle, ctx.recorder),
-    evaluations: new EvaluationService(ctx.handle, ctx.workspace),
+    questions: new QuestionService(ctx.handle, ctx.recorder, ctx.payloads),
+    evaluations: new EvaluationService(ctx.handle, ctx.workspace, {
+      recorder: ctx.recorder,
+      payloads: ctx.payloads,
+    }),
   };
 };
 
@@ -168,7 +171,7 @@ export const TOOLS: McpTool[] = [
         .parse(input);
       const svc = services(ctx);
       const version = await svc.artifacts.getVersion(artifact, ordinal);
-      return { evaluations: await svc.evaluations.run(version) };
+      return { evaluations: await svc.evaluations.run(version, ctx.actor) };
     },
   },
   {
@@ -404,7 +407,7 @@ export const TOOLS: McpTool[] = [
       const { draft } = z.object({ draft: z.string() }).parse(input);
       const svc = services(ctx);
       const version = await svc.artifacts.propose(draft, ctx.actor, 1_048_576);
-      const evaluations = await svc.evaluations.run(version);
+      const evaluations = await svc.evaluations.run(version, ctx.actor);
       return {
         version,
         evaluations,

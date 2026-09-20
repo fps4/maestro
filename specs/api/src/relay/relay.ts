@@ -18,6 +18,8 @@ import {
 import type { Config } from '../config.js';
 import type { Store } from '../db/client.js';
 import { RECORD_TYPES } from '../db/record-types.js';
+import { FsPayloadStore, S3PayloadStore, type PayloadStore } from '../record/payload-store.js';
+import { s3ClientFor } from '../services/attachments.js';
 import type { PrincipalDirectory } from '../services/principals.js';
 import { MongoOutboxSource } from './source.js';
 
@@ -28,23 +30,49 @@ export interface Relay {
   readonly delivery: Delivery;
 }
 
-export function sinkFor(
-  config: Pick<
-    Config,
-    'RECORD_SINK' | 'RECORD_ARCHIVE_DIR' | 'ARCHIVE_BUCKET' | 'ARCHIVE_PREFIX' | 'EVENTS_TOPIC_ARN'
-  >,
-): {
+type SinkConfig = Pick<
+  Config,
+  'RECORD_SINK' | 'RECORD_ARCHIVE_DIR' | 'ARCHIVE_BUCKET' | 'ARCHIVE_PREFIX' | 'EVENTS_TOPIC_ARN'
+>;
+
+/**
+ * The archive the configuration names — for the relay to write and the rebuilder to read. Under
+ * `off` the relay is a Lambda elsewhere, but the archive is still maestro's when the bucket is
+ * named; a rebuild reads it from here.
+ */
+export function archiveFor(config: SinkConfig): ArchiveStore | null {
+  if (config.RECORD_SINK === 'local') return new FsArchive(config.RECORD_ARCHIVE_DIR);
+  if (!config.ARCHIVE_BUCKET) return null;
+  return new S3Archive({ bucket: config.ARCHIVE_BUCKET, prefix: config.ARCHIVE_PREFIX });
+}
+
+export function sinkFor(config: SinkConfig): {
   archive: ArchiveStore;
   delivery: Delivery;
 } | null {
   if (config.RECORD_SINK === 'off') return null;
+  const archive = archiveFor(config)!;
   if (config.RECORD_SINK === 's3') {
-    return {
-      archive: new S3Archive({ bucket: config.ARCHIVE_BUCKET!, prefix: config.ARCHIVE_PREFIX }),
-      delivery: new SnsFifoDelivery({ topicArn: config.EVENTS_TOPIC_ARN! }),
-    };
+    return { archive, delivery: new SnsFifoDelivery({ topicArn: config.EVENTS_TOPIC_ARN! }) };
   }
-  return { archive: new FsArchive(config.RECORD_ARCHIVE_DIR), delivery: new InProcessDelivery() };
+  return { archive, delivery: new InProcessDelivery() };
+}
+
+/**
+ * The payload store the sink's configuration names (ADR-0020 §1) — the one place that chooses it,
+ * for the running service and for the rebuilder alike, so a rebuild reads exactly where the
+ * service wrote.
+ */
+export function payloadStoreFor(config: Config): PayloadStore {
+  if (config.PAYLOAD_STORE === 's3') {
+    // `loadConfig` refused an s3 store without a bucket; the client is the attachments' own.
+    return new S3PayloadStore({
+      bucket: config.PAYLOAD_BUCKET!,
+      prefix: config.PAYLOAD_PREFIX,
+      client: s3ClientFor(config),
+    });
+  }
+  return new FsPayloadStore(config.RECORD_PAYLOAD_DIR);
 }
 
 export function createRelay(

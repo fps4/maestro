@@ -14,13 +14,26 @@
  * Either way the service **records** a verdict against a digest. An evaluator that is unreachable,
  * unresolved, or slow records nothing — the gate then says "no verdict has been recorded", which is
  * the truth, and `run` reports why so the reader is not left guessing.
+ *
+ * A verdict is on the record (ADR-0020 §3): a gate opens or stays shut on it, so `record` emits
+ * `EvaluationRecorded` in the transaction with its upsert, under the seat of whoever ran it — an
+ * agent through MCP, a person through the console, the proposer at propose — with the findings as
+ * the payload.
  */
 
-import { EVALUATIONS } from '../db/collections.js';
+import { EVALUATIONS, VERSIONS } from '../db/collections.js';
+import { firstSeat, type Actor, type Recorder } from '../db/outbox.js';
 import type { WorkspaceHandle } from '../db/handle.js';
 import { facetSchemaEvaluation } from '../domain/builtin-evaluators.js';
 import type { EvaluationResult, Version } from '../domain/types.js';
 import { evaluatorIn, gatesDecidingOn, type EvaluatorDeclaration } from '../domain/workspace-definition.js';
+import {
+  PAYLOAD_CONTENT_TYPE,
+  encodePayload,
+  versionPayloadKey,
+  type PayloadStore,
+} from '../record/payload-store.js';
+import { NotFound, Refused } from './artifacts.js';
 import type { LoadedWorkspace } from './workspaces.js';
 
 export interface EvaluationRun {
@@ -36,27 +49,100 @@ interface EndpointReply {
   findings?: EvaluationResult['findings'];
 }
 
+/** What `EvaluationRecorded` carries as its payload (ADR-0020 §2). */
+export interface EvaluationPayload {
+  findings?: EvaluationResult['findings'];
+}
+
+/** What recording needs beyond the handle: the record, and where the findings go first. */
+export interface EvaluationWriter {
+  recorder: Recorder;
+  payloads: PayloadStore;
+}
+
 export class EvaluationService {
   constructor(
     private readonly handle: WorkspaceHandle,
     private readonly workspace: LoadedWorkspace,
+    private readonly writer?: EvaluationWriter,
     private readonly env: NodeJS.ProcessEnv = process.env,
     private readonly fetchImpl: typeof fetch = fetch,
   ) {}
 
-  /** Record a verdict against exactly one version's digest. The one write path, shared with the API. */
-  async record(input: Omit<EvaluationResult, 'recorded_at'>): Promise<EvaluationResult> {
-    const record: EvaluationResult = { ...input, recorded_at: new Date().toISOString() };
-    await this.handle
-      .collection<EvaluationResult>(EVALUATIONS)
-      .replaceOne({ artifact: input.artifact, ordinal: input.ordinal, evaluator: input.evaluator }, record, {
-        upsert: true,
-      });
-    return record;
+  private write(): EvaluationWriter {
+    if (!this.writer) throw new Error('This service was built without a recorder and cannot write.');
+    return this.writer;
+  }
+
+  /**
+   * Record a verdict against exactly one version's digest. The one write path, shared with the API.
+   *
+   * The upsert and the event are one transaction. The findings are written to the payload store
+   * first, under a content-addressed key — a re-run with the same findings overwrites the same
+   * bytes, and one with different findings never overwrites what an earlier event names.
+   */
+  async record(input: Omit<EvaluationResult, 'recorded_at'>, actor: Actor): Promise<EvaluationResult> {
+    const version = await this.handle
+      .collection<Version>(VERSIONS)
+      .findOne({ artifact: input.artifact, ordinal: input.ordinal }, { projection: { type: 1, digest: 1 } });
+    if (!version) throw new NotFound(`Version \`${input.artifact}@${input.ordinal}\``);
+    // A verdict against bytes we do not hold is not a verdict about anything here.
+    if (version.digest !== input.subject_digest) {
+      throw new Refused(
+        `This verdict names digest ${input.subject_digest}, and ${input.artifact}@${input.ordinal} is ${version.digest}. ` +
+          'A verdict reached against different bytes is not a verdict about this version.',
+      );
+    }
+
+    const { recorder, payloads } = this.write();
+    const seat = firstSeat(actor, ['reviewer', 'author'] as const);
+    const payload: EvaluationPayload = { ...(input.findings ? { findings: input.findings } : {}) };
+    const { bytes, digest } = encodePayload(payload);
+    const ref = await payloads.put(
+      versionPayloadKey(
+        this.handle.workspace,
+        input,
+        `evaluation/${input.evaluator}/${digest.slice('sha256:'.length)}.json`,
+      ),
+      bytes,
+      PAYLOAD_CONTENT_TYPE,
+    );
+
+    const now = new Date().toISOString();
+    const record: EvaluationResult = { ...input, recorded_at: now };
+    return this.handle.transaction(async (session) => {
+      await this.handle
+        .collection<EvaluationResult>(EVALUATIONS)
+        .replaceOne(
+          { artifact: input.artifact, ordinal: input.ordinal, evaluator: input.evaluator },
+          record,
+          {
+            upsert: true,
+            session,
+          },
+        );
+      await recorder.emit(session, [
+        {
+          type: 'EvaluationRecorded',
+          subject: { artifact: input.artifact, ordinal: input.ordinal },
+          artifact_type: version.type,
+          seat,
+          body: {
+            evaluator: input.evaluator,
+            verdict: input.verdict,
+            subject_digest: input.subject_digest,
+            findings: input.findings?.length ?? 0,
+          },
+          occurred_at: now,
+          payload: ref,
+        },
+      ]);
+      return record;
+    });
   }
 
   /** Every evaluator any gate on this type requires, run once each against this version. */
-  async run(version: Version): Promise<EvaluationRun[]> {
+  async run(version: Version, actor: Actor): Promise<EvaluationRun[]> {
     const def = this.workspace.definition;
     const required = new Set(gatesDecidingOn(def, version.type).flatMap((g) => g.requires.evaluations));
     const runs: EvaluationRun[] = [];
@@ -66,26 +152,33 @@ export class EvaluationService {
         runs.push({ evaluator: id, status: 'unavailable', reason: 'not declared in this workspace' });
         continue;
       }
-      runs.push(await this.runOne(declared, version));
+      runs.push(await this.runOne(declared, version, actor));
     }
     return runs;
   }
 
-  private async runOne(evaluator: EvaluatorDeclaration, version: Version): Promise<EvaluationRun> {
+  private async runOne(
+    evaluator: EvaluatorDeclaration,
+    version: Version,
+    actor: Actor,
+  ): Promise<EvaluationRun> {
     if (evaluator.builtin === 'facet_schema') {
       const schema = (this.workspace.facet_schemas[version.type] ?? {}) as Parameters<
         typeof facetSchemaEvaluation
       >[0];
       const issues = this.workspace.validator.check(version.type, version.facets);
       const { verdict, findings } = facetSchemaEvaluation(schema, version.facets, issues);
-      await this.record({
-        evaluator: evaluator.id,
-        artifact: version.artifact,
-        ordinal: version.ordinal,
-        verdict,
-        findings,
-        subject_digest: version.digest,
-      });
+      await this.record(
+        {
+          evaluator: evaluator.id,
+          artifact: version.artifact,
+          ordinal: version.ordinal,
+          verdict,
+          findings,
+          subject_digest: version.digest,
+        },
+        actor,
+      );
       return { evaluator: evaluator.id, status: 'recorded', verdict };
     }
 
@@ -129,14 +222,17 @@ export class EvaluationService {
           reason: 'evaluator answered without a verdict',
         };
       }
-      await this.record({
-        evaluator: evaluator.id,
-        artifact: version.artifact,
-        ordinal: version.ordinal,
-        verdict: reply.verdict,
-        ...(reply.findings ? { findings: reply.findings } : {}),
-        subject_digest: version.digest,
-      });
+      await this.record(
+        {
+          evaluator: evaluator.id,
+          artifact: version.artifact,
+          ordinal: version.ordinal,
+          verdict: reply.verdict,
+          ...(reply.findings ? { findings: reply.findings } : {}),
+          subject_digest: version.digest,
+        },
+        actor,
+      );
       return { evaluator: evaluator.id, status: 'recorded', verdict: reply.verdict };
     } catch (error) {
       const reason =

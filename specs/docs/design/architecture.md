@@ -1,7 +1,7 @@
 ---
 title: specs-service architecture
 status: draft
-last_updated: 2026-09-18
+last_updated: 2026-09-20
 owners: [architect]
 related:
   - ./decisions/0001-artifact-types-are-configuration.md
@@ -11,11 +11,13 @@ related:
   - ./decisions/0005-agents-may-author-never-decide.md
   - ./decisions/0006-workspace-isolation-by-database.md
   - ./decisions/0007-mongodb-with-inline-bodies.md
+  - ./decisions/0019-the-outbox-holds-spine-envelopes.md
+  - ./decisions/0020-the-payload-store-and-the-rebuild.md
 ---
 
 # specs-service — architecture
 
-**Status:** Draft v1.2
+**Status:** Draft v1.3
 **Scope:** The whole product. Model, authoring, rendering, configuration, ports, isolation,
 interfaces, storage, build order.
 **Shape:** A full end-to-end service with its own domain, its own console, and SSO through
@@ -373,7 +375,7 @@ port with a working local default.
 
 | Port | Local default | Production adapter | Consumer |
 |---|---|---|---|
-| **Record sink** | Outbox collection holding the spine's envelope, relayed to a filesystem archive | maestro's spine: a scheduled relay drains the outbox to an S3 archive; SNS/SQS deliver to consumers; replay reads the archive | maestro — the archive becomes the record and this database a projection (ADR-0019) |
+| **Record sink** | Outbox collection holding the spine's envelope, relayed to a filesystem archive; payloads — a version's text, a reasoning, a question, findings — in a directory beside it, named on the event by locator and digest | maestro's spine: a scheduled relay drains the outbox to an S3 archive; SNS/SQS deliver to consumers; payloads in this service's own bucket, erasable; the rebuilder replays the verified archive and its payloads into an empty workspace database | maestro — the archive becomes the record and this database a projection (ADR-0019, ADR-0020); the rebuild is the M1 gate |
 | **Evaluator** | `builtin: facet_schema` — the type's own schema, one finding per required facet (ADR-0015) | HTTP callout, `${VAR}` resolved from the environment; result recorded on the version | maestro: the builtin floor in the MVP; a standards engine only in its regulated branch. maestro v1: spec-lint, EARS check |
 | **Notifier** | Log line | HTTP webhook (Slack); SES | Gate awaiting a decision; changes requested |
 | **Object storage** | MinIO | S3 | Attachments, and body overflow |
@@ -486,8 +488,11 @@ Per-workspace database:
 | `decisions` | Immutable gate decisions |
 | `evaluations` | Verdicts recorded against versions |
 | `memberships` | Who may author, who may decide |
+| `questions` | Questions on a version, with their answers and who closed them (ADR-0014) |
+| `acceptances` | This tenant's acceptances of catalogue standards, with their status (ADR-0010) |
 | `outbox` | The record sink: spine envelopes with the relay's bookkeeping (ADR-0019) |
 | `counters` | The workspace's `seq` and each subject's `subject_seq`, allocated in the emitting transaction |
+| `meta` | One document: the `projection_version` this database was written by; behind the code's, it refuses to serve until rebuilt (ADR-0020) |
 
 Control database: `workspaces`, `workspace_definitions`, `principals`.
 
@@ -605,6 +610,8 @@ version is admitted on that test. Comments on drafts, page trees and freeform sp
 | D18 | A specification may be a file next to the code; `specs propose` and a GitHub Action propose, nothing in CI decides; a version must carry its declared pin | [ADR-0016](decisions/0016-the-git-native-path.md) |
 | D19 | One document is the artifact; facets are derived from it at save; `body_blocks` declare which table is which facet | [ADR-0017](decisions/0017-one-document.md) |
 | D20 | specs-service stays the record for every maestro repository; OpenSpec is interoperated with — its requirement/scenario layout as a block shape, EARS statements with GIVEN/WHEN/THEN scenarios — and not adopted as a system | [ADR-0018](decisions/0018-openspec-interoperate-not-adopt.md) — *accepted* |
+| D21 | The outbox holds the spine's envelope, built and validated in the transaction; an agent acts under a seat occupancy naming the answerable human; free text leaves the body; principal ids carry the kind | [ADR-0019](decisions/0019-the-outbox-holds-spine-envelopes.md) — *accepted* |
+| D22 | What the record cannot say goes to an erasable payload store, named on the event by locator and digest; evaluations are events; a workspace is rebuilt from a verified archive and its payloads alone, and a stale projection refuses to serve; memberships are grants, drafts are not record | [ADR-0020](decisions/0020-the-payload-store-and-the-rebuild.md) — *accepted* |
 
 ---
 
@@ -649,6 +656,7 @@ Steps 1–7 are the product. Everything after makes it complete.
 
 | Version | Date | Change |
 |---|---|---|
+| 1.3 | 2026-09-20 | **The payload store and the rebuild** (D22, ADR-0020; D21 recorded for ADR-0019). Every free-text write — a version, a decision's reasoning and its evaluations snapshot, a question, an answer, a withdrawal's reason, an evaluator's findings — is a payload in an erasable store (`PAYLOAD_STORE`: a directory or this service's bucket), written before the transaction and named on the event by `payload_ref` and `payload_digest`. `EvaluationRecorded` joins the record: a gate's openness is a function of it. A version is stored in canonical key order, the form the record carries. `RebuildService` and `workspace:rebuild` replay a verified archive and its payloads into an empty workspace database; `meta.projection_version` refuses a stale projection. `tests/integration/rebuild.test.ts` is the M1 gate. §5 and §8.1 amended |
 | 1.2 | 2026-09-18 | **Aligned with the maestro MVP.** maestro was re-scoped on 2026-09-18 from a governed application platform to an ops engine, its design corpus retired (tag `corpus-2026-09` on `fps4/maestro`) and rewritten; this service is one of its components. §1.1's maestro column now reads in the MVP's words; §5 names the spine the record sink drains to (an S3 archive via a relay, SNS/SQS delivery) and drops Kafka as the example; §6 records that tenant = deployment is maestro's default; §9 gains the deployment shape (Lambda + API Gateway, OpenNext, Atlas Flex, S3, CDK). The shipped demo workspace is `config/workspaces/aannemer-x.yaml` v2 — cause analysis, intake assessment, specification, change record — and the earlier chain lives on as the integration fixture; the console shows the catalogue only for a workspace that declares `catalogue_refs`. The self-hosted deployment configuration and workflow are removed. No model, port or decision changed |
 | 1.1 | 2026-09-15 | **OpenSpec: interoperate, do not adopt** (D20, ADR-0018 — the first *accepted* decision). Its requirement/scenario layout becomes the second `body_blocks` shape; requirement statements stay EARS with GIVEN/WHEN/THEN scenarios; no `openspec/` directory in a maestro repository. The change workflow is recorded as owed by work-service and skills, not by a spec convention |
 | 1.0 | 2026-09-15 | **One document** (D19, ADR-0017). ADR-0004's split stays in the record and leaves authoring: a draft is saved as one markdown text (`PUT /drafts/:id/document`), the facets derived from front-matter and from the type's declared `body_blocks` — a table under a named heading is a facet — with provenance from the saver and a human's confirmation surviving an unchanged value. A version composes its document from the record; the digest is unchanged. The console editor is one textarea with the derived projection beside it; the second form is gone. The CLI sends the file as the document; MCP gains `read_document` and `save_document`. The specification type declares its acceptance-criteria table. §2.4 amended |

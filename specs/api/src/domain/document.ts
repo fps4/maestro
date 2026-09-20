@@ -21,6 +21,7 @@
  */
 
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
+import { canonicalise } from './digest.js';
 import type { Body, CatalogueRef, Classification, EffectiveWindow, Facets, Link } from './types.js';
 import type { TypeDeclaration } from './workspace-definition.js';
 
@@ -199,19 +200,25 @@ export function composeDocument(
   type: Pick<TypeDeclaration, 'body_blocks'>,
 ): string {
   const blockFacets = new Set(type.body_blocks.map((b) => b.facet));
+  // Every value in the front-matter is written in canonical key order, so the document is the same
+  // text whether it is composed from a draft (which keeps the author's order) or from the version
+  // it became (stored canonically, ADR-0020) — and after a rebuild. The top-level order is fixed
+  // here: title, classification, links, catalogue_refs, effective, facets.
+  const canon = <T>(value: T): T => JSON.parse(canonicalise(value)) as T;
   const facets = Object.fromEntries(Object.entries(input.facets).filter(([k]) => !blockFacets.has(k)));
   const meta: Record<string, unknown> = { title: input.title };
-  if (input.classification) meta.classification = input.classification;
+  if (input.classification) meta.classification = canon(input.classification);
   // A link that follows the lineage carries `pinned_to: null` in storage; in the document that is
   // noise. A frozen pin is a fact about the version and stays.
   if (input.links && input.links.length > 0) {
-    meta.links = input.links.map(({ pinned_to, ...link }) =>
-      pinned_to != null ? { ...link, pinned_to } : link,
+    meta.links = canon(
+      input.links.map(({ pinned_to, ...link }) => (pinned_to != null ? { ...link, pinned_to } : link)),
     );
   }
-  if (input.catalogue_refs && input.catalogue_refs.length > 0) meta.catalogue_refs = input.catalogue_refs;
-  if (input.effective) meta.effective = input.effective;
-  if (Object.keys(facets).length > 0) meta.facets = facets;
+  if (input.catalogue_refs && input.catalogue_refs.length > 0)
+    meta.catalogue_refs = canon(input.catalogue_refs);
+  if (input.effective) meta.effective = canon(input.effective);
+  if (Object.keys(facets).length > 0) meta.facets = canon(facets);
   const front = stringifyYaml(meta, { lineWidth: 0 }).trimEnd();
   return `---\n${front}\n---\n${input.body.content}`;
 }

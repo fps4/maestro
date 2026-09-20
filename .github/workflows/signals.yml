@@ -1,0 +1,45 @@
+name: signals
+on:
+  pull_request:
+    paths: ['signals/**', '.github/workflows/signals.yml']
+  push:
+    branches: [main]
+    paths: ['signals/**', '.github/workflows/signals.yml']
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: signals/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive -diff
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+      - name: Module tests (mocked provider)
+        run: terraform test
+      - name: Example root validates
+        working-directory: signals/terraform/examples/app1
+        run: terraform init -backend=false -input=false && terraform validate
+  cdk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: signals/cdk
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: signals/cdk/package-lock.json
+      - run: npm ci
+      - name: Dependencies (build-standards §3)
+        run: npm audit --audit-level=high
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build

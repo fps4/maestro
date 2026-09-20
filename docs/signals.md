@@ -25,6 +25,18 @@ maestro ships the application-side half as a Terraform module and a CDK construc
 - an alarm-action helper that wires an alarm's ALARM and OK actions to the topic;
 - an optional heartbeat metric the application emits, so silence is detectable.
 
+It lives in [`signals/terraform`](../signals/terraform/) and [`signals/cdk`](../signals/cdk/) ([`signals/README.md`](../signals/README.md)); an application applies it per environment from its own infrastructure code:
+
+```hcl
+module "signals" {
+  source             = "github.com/fps4/maestro//signals/terraform?ref=<tag>"
+  application        = "app1"
+  environment        = "production"
+  tier               = "tier1"
+  maestro_account_id = var.maestro_account_id
+}
+```
+
 Onboarding at **N1** = the module applied and maestro subscribed; observe only. **N2** = agents may act under ceilings ([governance-model.md](governance-model.md)).
 
 ## The envelope

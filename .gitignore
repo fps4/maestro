@@ -7,6 +7,7 @@ coverage/
 .terraform.lock.hcl
 *.tfstate
 *.tfstate.*
+cdk.out/
 
 # Agent worktrees
 .claude/worktrees/

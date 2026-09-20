@@ -6,6 +6,15 @@ dist/
 .next/
 *.tsbuildinfo
 
+# Lambda bundles and their SBOMs (`npm run bundle`, `npm run sbom` in api/): what terraform/ deploys.
+api/bundle/
+
+# Terraform's working directories. State never lands here (maestro ADR-0017); the guards fail on it.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+
 # Environment / secrets. A deployment's values live in the tenant's configuration repository
 # (fps4/maestro-config-<tenant>), never here.
 .env

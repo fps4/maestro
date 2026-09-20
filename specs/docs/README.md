@@ -42,10 +42,9 @@ Two planes: a **Docs** plane you read, and a **Delivery** plane you track.
 | [0017](design/decisions/0017-one-document.md) | One document is the artifact; the facets are a projection of it, derived at save; typed blocks are declared, not coded |
 | [0018](design/decisions/0018-openspec-interoperate-not-adopt.md) | specs-service stays the record; OpenSpec is interoperated with (a block shape, one notation), not adopted — **accepted** |
 | [0019](design/decisions/0019-the-outbox-holds-spine-envelopes.md) | The outbox holds maestro's spine envelope, built and validated in the transaction; an agent acts under a seat occupancy that names the answerable human; free text leaves the body; principal ids carry the kind — **accepted** |
-| [0020](design/decisions/0020-the-payload-store-and-the-rebuild.md) | What the record cannot say goes to the payload store — erasable, named on the event by locator and digest; evaluations become events; a workspace is rebuilt from a verified archive and its payloads alone; memberships are grants, drafts are not record — **accepted** |
 
 0001–0017 are `status: proposed`: the builds exist, but nothing has run against real content yet,
-so they remain a design under review rather than a record of commitments made. 0018–0020 are
+so they remain a design under review rather than a record of commitments made. 0018 and 0019 are
 `accepted` — taken explicitly by the architect, and constraining work rather than describing a
 design.
 

@@ -1,0 +1,93 @@
+name: terraform
+
+# The module and the bundles it deploys (maestro ADR-0016, ADR-0017, build-standards §4). Runs on
+# GitHub-hosted runners and ends at the gate: fmt, validate, the mocked-provider tests, the example
+# root, and a bundle that boots. Nothing here deploys to an account; a tenant's pipeline does.
+
+on:
+  pull_request:
+    paths:
+      - 'terraform/**'
+      - 'api/scripts/**'
+      - 'api/package.json'
+      - 'api/package-lock.json'
+      - '.github/workflows/terraform.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'terraform/**'
+      - 'api/scripts/**'
+      - 'api/package.json'
+      - 'api/package-lock.json'
+      - '.github/workflows/terraform.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terraform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive -diff
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+      - name: Module tests (mocked provider)
+        run: terraform test
+      - name: Example root validates (fetches the spine's module at its tag)
+        working-directory: terraform/examples/demo
+        run: terraform init -backend=false -input=false && terraform validate
+
+  bundle:
+    # Green once @fps4/maestro-spine at the version api/package.json names is on npm; until then
+    # `npm ci` fails on the lockfile, which is the expected state, not a defect in this job.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - run: npm ci
+      - name: Lambda bundles
+        run: npm run bundle
+      - name: The bundles resolve every module on their own
+        # The relay exports its handler. The API is started the way the adapter starts it and must
+        # get as far as the database: a connection refused is the expected end, a module it cannot
+        # find is not.
+        run: |
+          node -e "import('./bundle/relay/index.mjs').then(m => { if (typeof m.handler !== 'function') { console.error('relay: no handler'); process.exit(1) } console.log('relay: handler ok') })"
+          set +e
+          (cd bundle/api && PORT=18080 MONGO_URI='mongodb://127.0.0.1:1/?serverSelectionTimeoutMS=2000' RECORD_SINK=off \
+            bash run.sh > ../api-boot.log 2>&1)
+          set -e
+          if grep -q 'MongoServerSelectionError\|ECONNREFUSED' bundle/api-boot.log; then
+            echo 'api: booted as far as the database'
+          else
+            echo '::error::the API bundle did not reach the database'; cat bundle/api-boot.log; exit 1
+          fi
+      - name: SBOM (build-standards §4)
+        run: npm run sbom
+      - uses: actions/upload-artifact@v4
+        with:
+          name: specs-lambda-bundles
+          path: |
+            api/bundle/api.zip
+            api/bundle/relay.zip
+            api/bundle/api.cdx.json
+            api/bundle/relay.cdx.json
+          if-no-files-found: error

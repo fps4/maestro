@@ -11,6 +11,8 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.build.json",
+    "bundle": "node scripts/bundle.mjs",
+    "sbom": "cyclonedx-npm --omit dev --output-format JSON --output-reproducible --output-file bundle/api.cdx.json && cyclonedx-npm --omit dev --output-format JSON --output-reproducible --output-file bundle/relay.cdx.json",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . && prettier --check .",
@@ -27,7 +29,7 @@
     "@aws-sdk/s3-request-presigner": "^3.716.0",
     "@fastify/cors": "^10.0.2",
     "@fastify/multipart": "^9.0.3",
-    "@fps4/maestro-spine": "^0.1.0",
+    "@fps4/maestro-spine": "^0.2.0",
     "@modelcontextprotocol/sdk": "^1.13.0",
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
@@ -41,11 +43,13 @@
     "zod": "^3.24.1"
   },
   "devDependencies": {
+    "@cyclonedx/cyclonedx-npm": "^6.0.1",
     "@eslint/js": "^9.18.0",
     "@types/diff": "^6.0.0",
     "@types/markdown-it": "^14.1.2",
     "@types/node": "^22.10.6",
     "@types/sanitize-html": "^2.13.0",
+    "esbuild": "^0.28.2",
     "eslint": "^9.18.0",
     "prettier": "^3.4.2",
     "tsx": "^4.19.2",

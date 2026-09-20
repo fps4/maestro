@@ -78,6 +78,7 @@ maestro-specs/
  ├── web/              # The console (Next.js) — author, review, decide, read the standards
  ├── config/workspaces/  # THE domain model, as data: the demo tenant (aannemer-x) and the catalogue
  ├── infra/docker/     # Dockerfiles + compose — the local loop and CI, not a deployment target
+ ├── terraform/        # The module a tenant's root deploys: the store, the API, the relay (M1)
  └── docs/             # design/ · design/ui/ (the approved console design) · decisions/
 ```
 
@@ -121,14 +122,107 @@ Against a real `identity-service`, register the service as an Application with t
 client-credentials principal for agents — `identity-service/config/seed.mstr-specs.yaml` is the
 structural seed a deployment registers.
 
-Deployment is serverless AWS as a Terraform module this repository will ship (`terraform/`), composed
-by a tenant's private configuration repository (`fps4/maestro-config-<tenant>` —
-[`../maestro/docs/tenancy-and-config.md`](../maestro/docs/tenancy-and-config.md)) and applied by the
-tenant's own pipeline; maestro's ADR-0016 and ADR-0017. The module is M1 of maestro's roadmap. Nothing
-in this repository deploys anywhere — its CI runs on GitHub-hosted runners and ends at the gate — and
-the earlier self-hosted deployment is gone.
-
 Health at `GET /health`.
+
+## Deployment
+
+Serverless AWS, as a Terraform module in [`terraform/`](terraform/) (maestro's
+[ADR-0002](../maestro/docs/decisions/0002-serverless-aws-is-the-substrate.md),
+[ADR-0016](../maestro/docs/decisions/0016-terraform-is-the-infrastructure-language.md)). A tenant's
+private configuration repository (`fps4/maestro-config-<tenant>` —
+[`../maestro/docs/tenancy-and-config.md`](../maestro/docs/tenancy-and-config.md)) holds the root module
+that composes it with the spine's, and the tenant's own pipeline applies it
+([ADR-0017](../maestro/docs/decisions/0017-the-tenant-repository-runs-the-pipeline.md)). Nothing in
+this repository deploys anywhere: its CI runs on GitHub-hosted runners and ends at the gate — `fmt`,
+`validate`, the module's tests against a mocked provider, the example root, and a bundle that boots.
+
+### What the module deploys
+
+| Resource | Notes |
+|---|---|
+| the store (`bucket_name`) | attachments and payloads (ADR-0020); versioned, encrypted, never public, **never Object-Locked** — a payload must be erasable; `prevent_destroy`; plaintext transport denied |
+| `<name>-api` | the Fastify server, unchanged, as a zip on `nodejs22.x`/arm64 behind the [Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter) layer; handler `run.sh`; `RECORD_SINK=off` — it writes the outbox and relays nothing; role: its log and its bucket, nothing else |
+| an HTTP API Gateway | one `$default` route, Lambda proxy in payload format 2.0, auto-deployed, access-logged; CORS is the application's (`CORS_ORIGINS`), not the gateway's |
+| `<name>-relay` | the spine's relay handler over this service's outbox ([ADR-0019](docs/design/decisions/0019-the-outbox-holds-spine-envelopes.md)); EventBridge Scheduler every minute, one invocation at a time; role: its log plus the spine's `relay_policy_json`, attached unchanged |
+| four alarms | `<name>-api-5xx` (five server errors in five minutes), `<name>-relay-errors`, `<name>-relay-silent` (no run in fifteen minutes), `<name>-relay-refused` (the spine refused an event; that workspace's relay is stopped until a person looks) → `alarm_actions` |
+
+### Inputs
+
+| Input | Default | |
+|---|---|---|
+| `name` | `maestro-specs` | prefix for every named resource |
+| `api_package`, `relay_package` | — | the zips `npm run bundle` writes to `api/bundle/` |
+| `web_adapter_layer_arn` | — | the Web Adapter layer for the region, arm64; see below |
+| `bucket_name` | — | the store; globally unique, the tenant's to choose |
+| `environment` | `{}` | configuration the service reads (`api/src/config.ts` is the schema): `AUTH_MODE` and the `AUTH_*` URLs, `MONGO_CONTROL_DB`, `MONGO_DB_PREFIX`, `CORS_ORIGINS`, `MCP_RESOURCE_URL`, `EVALUATOR_BASE`, `LOG_LEVEL`, … `NODE_ENV` defaults to `production`, which refuses `AUTH_MODE=dev`; the module's own variables — the port, the bucket, `RECORD_SINK` — cannot be overridden |
+| `secrets` | `{}` | environment variable name → Secrets Manager secret ARN: `MONGO_URI`, `MONGO_PASSWORD`, … see below |
+| `archive` | — | `{ relay_environment = module.spine.relay_environment, relay_policy_json = module.spine.relay_policy_json }` — the spine module's outputs, passed through |
+| `relay_schedule` | `rate(1 minute)` | the latency between an act and its record |
+| `api_memory_mb`, `api_timeout_seconds` | `1024`, `29` | the timeout is capped at 29 — API Gateway's ceiling |
+| `relay_memory_mb`, `relay_timeout_seconds` | `512`, `300` | |
+| `log_retention_days` | `90` | |
+| `alarm_actions` | `[]` | ARNs the alarms notify — the tenant's ops-signals topic |
+| `tags` | `{}` | |
+
+Outputs: `api_url`, `api_id`, `bucket_name`, `bucket_arn`, `api_function_name`, `relay_function_name`.
+
+### A tenant's root
+
+```hcl
+module "spine" {
+  source              = "github.com/fps4/maestro//spine/terraform?ref=spine-v0.2.0"
+  name                = "aannemer-x"
+  archive_bucket_name = "aannemer-x-maestro-archive"
+  archive_prefix      = "specs/"
+  digest_contacts     = ["ops@aannemer-x.example"]
+  sealer_package      = "${path.module}/../build/spine/sealer.zip"
+}
+
+module "specs" {
+  source                = "github.com/fps4/maestro-specs//terraform?ref=<tag>"
+  name                  = "aannemer-x-specs"
+  bucket_name           = "aannemer-x-maestro-specs"
+  api_package           = "${path.module}/../build/specs/api.zip"
+  relay_package         = "${path.module}/../build/specs/relay.zip"
+  web_adapter_layer_arn = "arn:aws:lambda:eu-west-1:<aws-account-id>:layer:LambdaAdapterLayerArm64:30"
+  environment           = { AUTH_MODE = "jwks", AUTH_JWKS_URL = "…", AUTH_ISSUER = "…", AUTH_AUDIENCE = "specs" }
+  secrets               = { MONGO_URI = aws_secretsmanager_secret.mongo_uri.arn }
+  archive = {
+    relay_environment = module.spine.relay_environment
+    relay_policy_json = module.spine.relay_policy_json
+  }
+}
+```
+
+[`terraform/examples/demo/`](terraform/examples/demo/main.tf) is this root for the demo tenant, with
+placeholder values; `terraform init -backend=false && terraform validate` there fetches the spine's
+module at its tag.
+
+**The Web Adapter layer.** AWS publishes the adapter as a public layer per region under its own
+account, so the ARN carries an account id and cannot be a default in a public repository. Take it
+from the adapter's README, [*Lambda functions packaged as Zip package for AWS managed
+runtimes*](https://github.com/awslabs/aws-lambda-web-adapter#lambda-functions-packaged-as-zip-package-for-aws-managed-runtimes):
+the `LambdaAdapterLayerArm64` ARN for your region. The module sets `AWS_LAMBDA_EXEC_WRAPPER=/opt/bootstrap`,
+`PORT=8080`, `AWS_LWA_READINESS_CHECK_PATH=/health` and `AWS_LWA_ASYNC_INIT=true` (the server connects
+to the database before it listens, and a cold start may need longer than Lambda's ten-second init
+budget); the handler is the bundle's `run.sh`.
+
+**Secrets.** The module reads each secret in `secrets` with `data.aws_secretsmanager_secret_version`
+and sets it as the named variable on both functions, so the value is also in Terraform state. ADR-0017
+keeps that state in an encrypted, private bucket with an encrypted mirror and never in a repository,
+which is acceptable for M1. The follow-up that keeps values out of state altogether is the Secrets
+Manager Lambda extension, reading at runtime.
+
+### Building the bundles
+
+```bash
+cd api && npm ci && npm run bundle && npm run sbom
+```
+
+`bundle/api.zip` (the server as one ESM file plus `run.sh`) and `bundle/relay.zip`, built
+reproducibly so Terraform's `source_code_hash` moves only when the code does, each with a CycloneDX
+SBOM beside it (maestro's [build-standards §4](../maestro/docs/build-standards.md)). The module takes
+the zips as inputs; bundling is the package's job, not the module's.
 
 ## API Summary
 
@@ -184,7 +278,7 @@ now carries the four types the MVP uses — `cause_analysis` at `rca_review`, `i
 `intake`, `specification`, `change_record` at `release` — and the earlier chain is the integration
 fixture. The console shows the catalogue only for a workspace that declares `catalogue_refs`; the
 standards surface waits for maestro's regulated branch. The self-hosted deployment configuration is
-removed; the CDK stack is M1.
+removed; the Terraform module and the Lambda bundles are in (`terraform/`, `npm run bundle`).
 
 **Second build (2026-09-15).** The first build made the record trustworthy; this one made it
 usable by the three kinds of reader it has — a person who decides, a person who writes next to the

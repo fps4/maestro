@@ -25,9 +25,9 @@ Same layout in every tenant repository:
 ```
 README.md                 who, contacts, which components at which tag; who holds the state mirror's key
 .github/workflows/deploy.yml   a dozen lines calling fps4/maestro's reusable workflow: runner, target, tags
-deploy/aws/               the root module for the tenant's account; backend.hcl names the state bucket
+deploy/aws/               the root module for the tenant's account; backend.hcl names the state bucket,
+                          terraform.tfvars carries account, region, domain, database endpoint name, contacts
 deploy/local/             the same modules against LocalStack; local state, disposable
-terraform.tfvars          account, region, domain, database endpoint name, contacts
 workspaces/*.yaml         workspace definitions in the tenant's vocabulary (types, gates, labels)
 policy.yaml               severity × tier → clocks; agent ceilings; chase ladders; the SEV↔P mapping
 adapters.yaml             notifier targets by name (Slack channel id, SES sender); signal sources (topic ARNs)
@@ -36,6 +36,85 @@ secrets.md                the *names* of secrets in Secrets Manager / SSM — ne
 ```
 
 **How a deployment uses it.** The tenant repository's pipeline — the reusable workflow from `fps4/maestro`, on the runner the tenant names — checks out each public component at a tag, builds it, plans on a pull request and applies on merge behind an environment gate, then mirrors the state ([ADR-0016](decisions/0016-terraform-is-the-infrastructure-language.md), [ADR-0017](decisions/0017-the-tenant-repository-runs-the-pipeline.md)). State is never in the repository: the S3 backend in the tenant's account is the authority, the runner keeps an encrypted mirror, `*.tfstate*` is ignored. The public repositories deploy to no account; the demo tenant is this layout with placeholder values, not a deployment.
+
+### The caller
+
+`.github/workflows/deploy.yml` is a dozen lines. The shape it calls is [`tenant-deploy.yml`](../.github/workflows/tenant-deploy.yml) in `fps4/maestro`; the scripts it runs come from the `maestro` component at the tag named in `components`, so `uses:` and `components.maestro` carry the same tag. `runner` is JSON: an array of labels for the tenant's own runners, a double-quoted string for a hosted one.
+
+```yaml
+name: deploy
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  aws:
+    uses: fps4/maestro/.github/workflows/tenant-deploy.yml@spine-v0.1.2
+    with:
+      runner: '["self-hosted","ds1"]'   # or '"ubuntu-latest"'
+      tenant: aannemer-x
+      components: '{"maestro":"spine-v0.1.2","maestro-specs":"v0.3.0"}'
+    secrets:
+      aws_role_arn: ${{ secrets.AWS_ROLE_ARN }}
+      state_recipient: ${{ secrets.STATE_RECIPIENT }}
+  local:
+    uses: fps4/maestro/.github/workflows/tenant-deploy.yml@spine-v0.1.2
+    with:
+      runner: '["self-hosted","ds1"]'
+      target: local
+      tenant: aannemer-x
+      components: '{"maestro":"spine-v0.1.2","maestro-specs":"v0.3.0"}'
+```
+
+What the tenant repository holds besides: the `production` environment with a required reviewer — the apply job runs in it, so the gate is a person; the deploy role's trust policy admitting `repo:fps4/maestro-config-aannemer-x:environment:production` (the apply) and `repo:fps4/maestro-config-aannemer-x:pull_request` (the plan); `AWS_ROLE_ARN` and `STATE_RECIPIENT` — the age public key; its private half is held by the person `README.md` names and is never in GitHub. On a hosted runner the mirror is a workflow artefact kept seven days; on the tenant's own runner it is written under `/srv/maestro/state/<tenant>/`.
+
+The roots compose the component modules from the checkout the workflow made, by path:
+
+```hcl
+# deploy/aws/main.tf
+terraform {
+  required_version = ">= 1.6"
+  backend "s3" {}                          # the bucket, key and region come from backend.hcl
+  required_providers {
+    aws = { source = "hashicorp/aws", version = ">= 5.80" }
+  }
+}
+provider "aws" { region = var.region }
+
+module "spine" {
+  source              = "../../components/maestro/spine/terraform"
+  name                = var.tenant
+  archive_bucket_name = "${var.tenant}-maestro-archive"
+  digest_contacts     = var.digest_contacts
+  sealer_package      = abspath("${path.module}/../../components/maestro/spine/bundle/sealer.zip")
+}
+```
+
+```hcl
+# deploy/aws/backend.hcl — the one thing created by hand (ADR-0017 §4)
+bucket       = "aannemer-x-maestro-state"
+key          = "aws/terraform.tfstate"
+region       = "eu-west-1"
+use_lockfile = true
+encrypt      = true
+```
+
+```hcl
+# deploy/aws/terraform.tfvars
+tenant          = "aannemer-x"
+region          = "eu-west-1"
+account_id      = "<account-id>"
+domain          = "maestro.aannemer-x.example"
+atlas_endpoint  = "aannemer-x-flex.<cluster-id>.mongodb.net"
+digest_contacts = ["ops@aannemer-x.example", "audit@aannemer-x.example"]
+```
+
+`deploy/local/main.tf` is the same composition with the provider pointed at LocalStack, `local_stand_in = true` and no backend — a tested copy is [`.github/self-test/deploy/local/main.tf`](../.github/self-test/deploy/local/main.tf), which this repository's CI applies through the reusable workflow on every pull request. What the stand-in cannot represent is named in the [spine README](../spine/README.md#localstack).
+
+**Atlas Flex.** The cluster is created out of band, in the tenant's Atlas project ([ADR-0016](decisions/0016-terraform-is-the-infrastructure-language.md): joining it to the root module is a later change). Its endpoint name goes in `terraform.tfvars`; the connection string, which carries a credential, lives in Secrets Manager in the tenant's account under a name listed in `secrets.md` — the components read it by name at start, and no repository ever holds it.
 
 ## Guards in the public repositories
 

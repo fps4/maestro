@@ -109,23 +109,56 @@ bundled by `npm run bundle`.
 | `<name>-spine-events.fifo` | the delivery topic; deduplication by the relay's id                                                                                                     |
 | `<name>-spine-digests`     | one email subscription per `digest_contacts` entry                                                                                                      |
 | `<name>-spine-sealer`      | Node 22 on arm64, from `sealer_package`; EventBridge Scheduler at `cron(7 0 * * ? *)` UTC; role reads and writes the archive, never deletes             |
-| two alarms                 | `-errors` (the sealer failed) and `-silent` (it has not run in a day) → `alarm_actions`                                                                 |
+| two alarms                 | `-errors` (the sealer failed) and `-silent` (it has not run in a day) → `alarm_actions`; not on a LocalStack stand-in (below)                           |
 
 Inputs a tenant sets: `archive_bucket_name`, `digest_contacts`, `sealer_package`; optionally
 `object_lock_mode` (`GOVERNANCE` by default — an account administrator can still clean up a
 mistake; `COMPLIANCE` makes every object immovable for `object_lock_retention_days`, by anyone),
-`archive_prefix`, `alarm_actions`. Outputs for the components' modules: `relay_policy_json`,
-`relay_environment`, `reader_policy_json`, the topic ARNs.
+`archive_prefix`, `alarm_actions`; `local_stand_in = true` only in a root that targets LocalStack.
+Outputs for the components' modules: `relay_policy_json`, `relay_environment`,
+`reader_policy_json`, the topic ARNs.
 
 ```sh
 npm run bundle
 cd terraform && terraform init -backend=false && terraform test   # mocked provider; Terraform ≥ 1.11
 ```
 
-`examples/demo/` shows a root calling the module with the demo tenant's placeholder values. Nothing
-in this repository deploys to an account.
+`examples/demo/` shows a root calling the module with the demo tenant's placeholder values;
+`examples/local/` is the same call against a LocalStack stand-in. Nothing in this repository
+deploys to an account.
+
+### LocalStack
+
+A public repository's pipeline ends at `fmt`, `validate`, `terraform test` and an apply to a
+LocalStack stand-in ([ADR-0017](../docs/decisions/0017-the-tenant-repository-runs-the-pipeline.md) §3):
+`examples/local/` points the provider at `localhost:4566` with LocalStack's fixture credentials,
+keeps local, disposable state, and sets `local_stand_in = true`. `scripts/deploy.sh local-up`
+starts the container on a laptop or on ds1; CI runs it as a service container on every pull
+request, applies the root with `deploy.sh plan` and `apply`, and destroys it. The image is
+`localstack/localstack:4.4.0`, the last Community release that starts without an auth token, with
+the Docker socket mounted because LocalStack creates a Lambda function by preparing a container
+for it.
+
+`local_stand_in` skips only what the edition cannot represent. Each skip, and each thing the
+stand-in accepts without enforcing, is proven only on real AWS — by the first tenant, not by CI
+(the [manifest rule](../docs/build-standards.md#the-manifest-rule)):
+
+| On the stand-in                                 | Why                                                                                                                                  |
+| ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| the two alarms — skipped (`count = 0`)          | 4.4.0 predates the CloudWatch protocol the AWS provider ≥ 6 speaks; `PutMetricAlarm` returns 500 and the provider retries forever    |
+| IAM — accepted, not enforced                    | the sealer's and the scheduler's role policies and the bucket policy's two denies are stored; the Community edition enforces none    |
+| the schedule and the subscriptions — never fire | the Scheduler schedule and the email subscriptions are created; nothing invokes the sealer or confirms an address                    |
+| bucket tags — set on the second apply           | 4.4.0 ignores the tags the provider passes on `CreateBucket`; the next apply sets them with `PutBucketTagging` and the plan is clean |
+
+Not skipped, because 4.4.0 represents them: Object Lock at creation and the default retention (a
+locked version's delete is refused), versioning, `If-None-Match` writes, SSE, the FIFO topic, the
+Lambda on Node 22, the Scheduler schedule. The record carries `prevent_destroy` on the stand-in as
+anywhere else; CI drops the bucket and its lock configuration from state before
+`terraform destroy`, and they go with the container.
 
 ## Status
 
-M1. Next: specs-service's outbox exposed as an `OutboxSource` and its relay deployed from
-`maestro-specs`' own module against this one; the reusable tenant workflow and `deploy.sh`.
+M1. The tenant pipeline's shape is in place — [`tenant-deploy.yml`](../.github/workflows/tenant-deploy.yml)
+and [`scripts/deploy.sh`](../scripts/deploy.sh); how a tenant calls it is in
+[tenancy-and-config.md](../docs/tenancy-and-config.md). Next: specs-service's outbox exposed as an
+`OutboxSource` and its relay deployed from `maestro-specs`' own module against this one.

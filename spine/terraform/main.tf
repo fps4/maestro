@@ -243,8 +243,11 @@ resource "aws_scheduler_schedule" "sealer" {
   }
 }
 
-# The sealer failed.
+# The sealer failed. Both alarms are skipped on a LocalStack stand-in: the Community edition
+# predates the CloudWatch protocol the provider speaks, so PutMetricAlarm never lands (README,
+# "LocalStack"). Alarms are proven on real AWS only.
 resource "aws_cloudwatch_metric_alarm" "sealer_errors" {
+  count               = var.local_stand_in ? 0 : 1
   alarm_name          = "${local.sealer_name}-errors"
   alarm_description   = "The spine's sealer errored; a day is not sealed."
   namespace           = "AWS/Lambda"
@@ -263,6 +266,7 @@ resource "aws_cloudwatch_metric_alarm" "sealer_errors" {
 
 # The sealer did not run. Silence is the failure a component cannot report about itself.
 resource "aws_cloudwatch_metric_alarm" "sealer_silent" {
+  count               = var.local_stand_in ? 0 : 1
   alarm_name          = "${local.sealer_name}-silent"
   alarm_description   = "The spine's sealer has not run in a day."
   namespace           = "AWS/Lambda"

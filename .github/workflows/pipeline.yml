@@ -1,0 +1,57 @@
+name: pipeline
+
+# The tenant pipeline's shape, checked here because no tenant checks it for us (ADR-0017): the
+# scripts lint and their tests pass, the workflows parse, and the reusable workflow runs end to
+# end against a LocalStack stand-in, called the way a tenant repository calls it.
+
+on:
+  pull_request:
+    paths: ['scripts/**', '.github/**', 'spine/terraform/**', 'spine/package*.json']
+  push:
+    branches: [main]
+    paths: ['scripts/**', '.github/**', 'spine/terraform/**', 'spine/package*.json']
+
+permissions:
+  contents: read
+
+jobs:
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: shellcheck
+        run: shellcheck -S style scripts/*.sh scripts/tests/*.sh
+      - name: actionlint
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash) 1.7.12 "$RUNNER_TEMP" >/dev/null
+          "$RUNNER_TEMP/actionlint" -color
+      - name: age, for the mirror test
+        run: sudo apt-get update -q && sudo apt-get install -y -q age
+      - name: The mirror's retention rule
+        run: scripts/tests/deploy-mirror.test.sh
+
+  self-test:
+    # Called as a tenant would call it, at this commit, with the demo tenant's placeholders. The
+    # caller grants what the called workflow asks for; a tenant's deploy.yml does the same.
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/tenant-deploy.yml
+    with:
+      target: local
+      tenant: aannemer-x
+      components: '{"maestro":"${{ github.sha }}"}'
+      root: .github/self-test/deploy
+
+  self-test-labels:
+    # The same call with the runner as an array of labels, the form a tenant's own runners take.
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/tenant-deploy.yml
+    with:
+      runner: '["ubuntu-latest"]'
+      target: local
+      tenant: aannemer-x
+      components: '{"maestro":"${{ github.sha }}"}'
+      root: .github/self-test/deploy

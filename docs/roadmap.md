@@ -23,6 +23,15 @@ gantt
 
 **Gate:** specs-service serves from AWS. A workspace's database is dropped and rebuilt from the archive alone. The verifier checks the chain with the service off.
 
+**Where it stands (2026-09-20).** In code and merged: the spine (core, S3/SNS, sealer, Terraform module with a LocalStack stand-in — `spine/`), the tenant pipeline ([ADR-0017](decisions/0017-the-tenant-repository-runs-the-pipeline.md): `tenant-deploy.yml`, `scripts/deploy.sh`), the signals module (`signals/`), the console module (`console/`), identity-service's module, relay and lifecycle events, specs-service's envelope, payload store, rebuilder and module. The rebuild gate and the verifier gate pass in code (`maestro-specs` `tests/integration/rebuild.test.ts`; the spine's `spine-verify`). What remains is the run on real AWS, which needs a tenant: an account with the OIDC deploy role and the state bucket, an Atlas Flex cluster, the `maestro-config-<tenant>` repository composing the modules, and `@fps4/maestro-spine` on npm. The procedure:
+
+1. Publish the spine (`spine-v*` tag → `spine-publish.yml`, trusted publishing) and land the component PRs that depend on it.
+2. Create the tenant repository from the layout in [tenancy-and-config.md](tenancy-and-config.md); bootstrap by hand: the state bucket, the deploy role trusting GitHub's OIDC provider, the secrets in Secrets Manager, the Atlas cluster and its access list.
+3. `deploy.sh plan` on a pull request, `apply` on merge behind the environment gate: spine → identity-service → specs-service → the consoles. Seed identity-service; apply the workspace definitions.
+4. Gate 1: propose and decide through specs-service on AWS; the relay lands the events in the archive; a subscribed FIFO queue receives them in order.
+5. Gate 2: after the sealer has run, `npm run workspace:rebuild -- --workspace <id> --force` against the archive and the payload store; every read returns identically.
+6. Gate 3: `aws s3 sync` the workspace's archive prefix to a laptop; `spine-verify` passes with every service off.
+
 ## M2 · work-service v1 (~4 weeks)
 
 **Builds:** the work item envelope and six classes; policy (severity × tier → clocks; ceilings per agent per class; chase ladders); authority checked at claim; evidence plans; signals intake with SNS, EventBridge and GitHub adapters; Slack and SES notifier adapters; the frontier and the board with milestone and application filters; MCP with the tracker contract (publish / fetch / claim / resolve / frontier / blocking) as the acceptance test; "Today".

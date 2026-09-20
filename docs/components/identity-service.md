@@ -41,18 +41,20 @@ An advisor who operates in several tenants authenticates once, carries an explic
 
 | Piece | |
 |---|---|
-| Service | Express → Lambda Web Adapter → HTTP API Gateway; one realm per tenant deployment |
+| Service | Express → Lambda Web Adapter (layer, handler `run.sh`) → HTTP API Gateway v2; one realm per tenant deployment — `identity-service` `terraform/` |
 | Console | OpenNext → Lambda + CloudFront, through [`console/terraform`](../../console/README.md) — built per tenant, `NEXT_PUBLIC_*` at build |
 | Database | Atlas Flex |
 | Seed | `config/seed.yaml` stays gitignored; per-tenant seed comes from `maestro-config-<tenant>` |
-| Backups | the existing encrypted backup job as a scheduled Lambda to S3 |
+| Backups | a scheduled Lambda writes every collection as gzipped canonical Extended JSON to S3, optionally AES-256-GCM under a passphrase secret (the earlier job was a plaintext `mongodump`; the module is the first encrypted one) |
+| Record sink | an outbox holding the spine's envelope; the spine's relay handler as a scheduled Lambda, given `MONGO_URI` only — never the signing-key passphrase |
 
 ## Changes the MVP asks of it
 
 | Change | Milestone | Size |
 |---|---|---|
-| Terraform module | M1 | small |
-| Principal lifecycle events (`PrincipalRegistered`, `PrincipalSuspended`, `SeatOccupancyChanged`) emitted by the registry to the spine | M1 | small, in the registry library shared by components |
+| Terraform module | M1 | done — `identity-service` PR #107, the relay in #109 |
+| Principal lifecycle events (`PrincipalRegistered`, `PrincipalSuspended`, `PrincipalReinstated`, `SeatOccupancyChanged`) emitted by the registry to the spine; maestro principal ids (`prn-h-…`) minted here and carried as the token claim `prn` | M1 | done — `identity-service` PR #108 (its ADR-0022) |
+| CI off the ds1 runner; the ds1 deploy, seed and migration workflows retired | M1 | done — `identity-service` PR #105 |
 | An enumeration endpoint for principals in a realm, for the registry to reconcile | M2 | small |
 
 The Slack↔principal link and the external population are [post-MVP](../beyond-mvp.md).

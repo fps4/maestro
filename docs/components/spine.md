@@ -1,6 +1,6 @@
 # The spine
 
-**Repository:** `fps4/maestro`, in [`spine/`](../../spine/) · **Status:** built for M1 — the core, the S3 and SNS adapters, the sealer, the Terraform module (with a LocalStack stand-in), and the relays of specs-service and identity-service are in code; the gate on real AWS is the first tenant's · **Decision:** [ADR-0003](../decisions/0003-the-spine-is-an-archive-and-a-queue.md)
+**Repository:** `fps4/maestro`, in [`spine/`](../../spine/) · **Status:** M1 closed 2026-09-22 — the core, the S3 and SNS adapters, the sealer, the Terraform module (with a LocalStack stand-in) and the relays of specs-service and identity-service are deployed on the first tenant; the three gates passed there ([roadmap](../roadmap.md)) · **Decision:** [ADR-0003](../decisions/0003-the-spine-is-an-archive-and-a-queue.md)
 
 The record every component writes to and every auditor reads from. An S3 archive as the system of record, SNS/SQS for delivery, a relay from every outbox, and a verifier that runs with every service off. [Figure 3](../diagrams.md#figure-3--the-spine).
 

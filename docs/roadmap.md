@@ -8,8 +8,8 @@ gantt
     dateFormat  YYYY-MM-DD
     axisFormat  %b
     section MVP
-    M1 Foundation on AWS        :m1, 2026-10-01, 21d
-    M2 work-service v1          :m2, after m1, 28d
+    M1 Foundation on AWS        :done, m1, 2026-09-19, 2026-09-22
+    M2 work-service v1          :m2, 2026-09-23, 28d
     M3 Agent runs               :m3, after m2, 21d
     M4 Use case 1 on app1       :m4, after m3, 21d
     section After
@@ -17,20 +17,21 @@ gantt
     Branch R forks here          :milestone, after m4, 0d
 ```
 
-## M1 · Foundation on AWS (~3 weeks)
+## M1 · Foundation on AWS (2026-09-19 → 2026-09-22, closed)
 
 **Builds:** Terraform modules for identity-service and specs-service on Lambda, each with its DynamoDB table ([ADR-0018](decisions/0018-dynamodb-is-the-mvp-database.md)); the S3 archive relay and SNS/SQS delivery; the reusable tenant workflow and `deploy.sh`; GitHub-hosted CI; the [signals module](signals.md) — its Terraform half published from the repository, its CDK construct in the repository until the first CDK application publishes it; the self-hosted runner pool retired for these repositories.
 
 **Gate:** specs-service serves from AWS. A workspace's database is dropped and rebuilt from the archive alone. The verifier checks the chain with the service off.
 
-**Where it stands (2026-09-20).** In code and merged: the spine (core, S3/SNS, sealer, Terraform module with a LocalStack stand-in — `spine/`), the tenant pipeline ([ADR-0017](decisions/0017-the-tenant-repository-runs-the-pipeline.md): `tenant-deploy.yml`, `scripts/deploy.sh`), the signals module (`signals/`), the console module (`console/`), identity-service's module, relay and lifecycle events, specs-service's envelope, payload store, rebuilder and module. The rebuild gate and the verifier gate pass in code (`maestro-specs` `tests/integration/rebuild.test.ts`; the spine's `spine-verify`). **Then, the same day, [ADR-0018](decisions/0018-dynamodb-is-the-mvp-database.md):** the record store moves to DynamoDB before the gate runs — the rewrite of both services' store layers and test suites, each module creating its table; the gate then runs on DynamoDB. What remains after it is the run on real AWS, which needs a tenant: an account with the OIDC deploy role and the state bucket, an Atlas Flex cluster, the `maestro-config-<tenant>` repository composing the modules, and `@fps4/maestro-spine` on npm. The procedure:
+**Closed 2026-09-22.** Every build item is in code and merged: the spine (core, S3/SNS, sealer, Terraform module with a LocalStack stand-in — `spine/`, on npm as `@fps4/maestro-spine` by trusted publishing), the tenant pipeline ([ADR-0017](decisions/0017-the-tenant-repository-runs-the-pipeline.md): `tenant-deploy.yml`, `scripts/deploy.sh`), the signals module (`signals/`), the console module (`console/`), identity-service's module, relay, lifecycle events and set-password links, specs-service's envelope, payload store, rebuilder, module and `workspace:member` — all on DynamoDB after [ADR-0018](decisions/0018-dynamodb-is-the-mvp-database.md) moved the record store before the gate. The first tenant is fps4's own deployment (`maestro-config-fps4`, a private repository), applied through its pipeline by the deploy role through OIDC, 87 resources in one apply; maestro's own services are its first applications.
 
-1. Publish the spine (`spine-v*` tag → `spine-publish.yml`, trusted publishing) and land the component PRs that depend on it.
-2. Create the tenant repository from the layout in [tenancy-and-config.md](tenancy-and-config.md); bootstrap by hand: the state bucket, the deploy role trusting GitHub's OIDC provider, the secrets in Secrets Manager.
-3. `deploy.sh plan` on a pull request, `apply` on merge behind the environment gate: spine → identity-service → specs-service → the consoles. Seed identity-service; apply the workspace definitions.
-4. Gate 1: propose and decide through specs-service on AWS; the relay lands the events in the archive; a subscribed FIFO queue receives them in order.
-5. Gate 2: after the sealer has run, `npm run workspace:rebuild -- --workspace <id> --force` against the archive and the payload store; every read returns identically.
-6. Gate 3: `aws s3 sync` the workspace's archive prefix to a laptop; `spine-verify` passes with every service off.
+The gate ran on that deployment on 2026-09-22, every step as [first-deployment.md](first-deployment.md) now records it:
+
+1. **Gate 1 — passed.** A human, seeded and holding a password through a set-password link, admitted to the tenant's workspace by a membership, proposed an intake assessment and decided it at a gate through the specs API. The relay landed the three events (`VersionProposed`, `EvaluationRecorded`, `DecisionRecorded`, seats author, reviewer, decider) in the archive within the minute; a FIFO queue subscribed to the events topic received them in order.
+2. **Gate 2 — passed.** After the day was sealed (the sealer run under the operator's credentials with the next day as its clock, as the schedule would at 00:07 UTC), the workspace was dropped and rebuilt from the archive and the payload store alone; 315 lines of reads — the artifact, the version, the gate's view, the register — identical before and after.
+3. **Gate 3 — passed.** Every function at zero concurrency, the workspace's archive prefix synced to a laptop, `spine-verify`: `pass ws-fps4-ops seq 1–3 1 segment(s)`.
+
+What the gate found and fixed on the way: two IAM grants DynamoDB Local could not check (`ConditionCheckItem`, `DescribeTimeToLive` — both modules now hold their grant to the commands the code sends), the specs relay dying at boot without the store's name, a workspace definition in an earlier shape, the first human with no way to a password of their own, and no operator command to admit a member. Carried to M2: specs-service reads the `prn` claim identity-service mints (today each component mints its own id for one human); the consoles' OpenNext bundles; the Secrets Manager extension in place of values in state.
 
 ## M2 · work-service v1 (~4 weeks)
 

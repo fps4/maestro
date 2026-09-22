@@ -34,7 +34,7 @@ All four are workspace configuration — a type with facets and body blocks, a g
 |---|---|
 | API | Fastify → Lambda Web Adapter (layer, handler `run.sh`) → HTTP API Gateway v2, `$default` route — `maestro-specs` `terraform/` |
 | Console | Next.js → OpenNext → Lambda + CloudFront, through [`console/terraform`](../../console/README.md) — built per tenant, `NEXT_PUBLIC_*` at build |
-| Database | DynamoDB, one table, one key prefix per workspace ([ADR-0018](../decisions/0018-dynamodb-is-the-mvp-database.md)); the rewrite from MongoDB is in progress |
+| Database | DynamoDB, one table, one key prefix per workspace ([ADR-0018](../decisions/0018-dynamodb-is-the-mvp-database.md)) |
 | Object storage | S3 — one bucket for attachments and payloads (`maestro-specs` ADR-0020), versioned, never Object-Locked; the payload store is what a rebuild reads |
 | Record sink | outbox holding the spine's envelope, built at the act (`maestro-specs` ADR-0019) → the spine's relay handler as `<name>-relay`, EventBridge Scheduler every minute, one at a time, under the spine module's `relay_policy_json` → the archive and the FIFO topic |
 | Evaluator | HTTP adapter; `${VAR}` resolved from the environment |

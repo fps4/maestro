@@ -219,8 +219,8 @@ run "defaults" {
     error_message = "the relay runs the bundle on Node 22"
   }
   assert {
-    condition     = aws_lambda_function.relay.environment[0].variables["ARCHIVE_BUCKET"] == "aannemer-x-maestro-archive" && aws_lambda_function.relay.environment[0].variables["ARCHIVE_PREFIX"] == "specs/" && aws_lambda_function.relay.environment[0].variables["EVENTS_TOPIC_ARN"] == "arn:aws:sns:eu-west-1::aannemer-x-spine-events.fifo"
-    error_message = "the relay carries the spine's three names as the spine's module output them"
+    condition     = aws_lambda_function.relay.environment[0].variables["ARCHIVE_BUCKET"] == "aannemer-x-maestro-archive" && aws_lambda_function.relay.environment[0].variables["ARCHIVE_PREFIX"] == "specs/" && aws_lambda_function.relay.environment[0].variables["EVENTS_TOPIC_ARN"] == "arn:aws:sns:eu-west-1::aannemer-x-spine-events.fifo" && aws_lambda_function.relay.environment[0].variables["PAYLOAD_BUCKET"] == "aannemer-x-maestro-specs" && !contains(keys(aws_lambda_function.relay.environment[0].variables), "PORT")
+    error_message = "the relay carries the spine's three names as the spine's module output them, and the deployment's store, which its config refuses to load without — and none of the API's adapter settings"
   }
   assert {
     condition     = aws_lambda_function.relay.environment[0].variables["TABLE_NAME"] == "maestro-specs" && aws_lambda_function.relay.environment[0].variables["EVALUATOR_TOKEN"] == "mocked-secret-value" && aws_lambda_function.relay.environment[0].variables["AUTH_MODE"] == "jwks"

@@ -25,17 +25,23 @@ locals {
   table_environment = {
     TABLE_NAME = aws_dynamodb_table.records.name
   }
-  api_environment = merge(local.table_environment, {
+  # The deployment's one object store, named to every function that loads the service's config:
+  # the API reads and writes it; the relay never touches it, but its config is the same config, and
+  # under RECORD_SINK=off the payload store defaults to `s3` and refuses to load without a bucket.
+  # Naming it is not granting it — the relay's role has no S3 action.
+  store_environment = {
+    S3_BUCKET           = aws_s3_bucket.store.bucket
+    S3_REGION           = aws_s3_bucket.store.region
+    S3_FORCE_PATH_STYLE = "false"
+    PAYLOAD_BUCKET      = aws_s3_bucket.store.bucket
+  }
+  api_environment = merge(local.table_environment, local.store_environment, {
     AWS_LAMBDA_EXEC_WRAPPER      = "/opt/bootstrap"
     AWS_LWA_READINESS_CHECK_PATH = "/health"
     AWS_LWA_ASYNC_INIT           = "true" # describe the table past Lambda's 10 s init budget if need be
     PORT                         = "8080"
     HOST                         = "0.0.0.0"
     RECORD_SINK                  = "off"
-    S3_BUCKET                    = aws_s3_bucket.store.bucket
-    S3_REGION                    = aws_s3_bucket.store.region
-    S3_FORCE_PATH_STYLE          = "false"
-    PAYLOAD_BUCKET               = aws_s3_bucket.store.bucket
   })
 
   # What each function may do to the table: the item operations the service uses, on the table
@@ -438,7 +444,7 @@ resource "aws_lambda_function" "relay" {
   tags                           = local.tags
 
   environment {
-    variables = merge(local.environment_defaults, var.environment, local.secret_env, local.table_environment, var.archive.relay_environment)
+    variables = merge(local.environment_defaults, var.environment, local.secret_env, local.table_environment, local.store_environment, var.archive.relay_environment)
   }
 
   logging_config {

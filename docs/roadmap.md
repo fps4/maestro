@@ -19,7 +19,7 @@ gantt
 
 ## M1 · Foundation on AWS (~3 weeks)
 
-**Builds:** Terraform modules for identity-service and specs-service on Lambda, each with its DynamoDB table ([ADR-0018](decisions/0018-dynamodb-is-the-mvp-database.md)); the S3 archive relay and SNS/SQS delivery; the reusable tenant workflow and `deploy.sh`; GitHub-hosted CI; the [signals module](signals.md) (Terraform + CDK construct) published; the self-hosted runner pool retired for these repositories.
+**Builds:** Terraform modules for identity-service and specs-service on Lambda, each with its DynamoDB table ([ADR-0018](decisions/0018-dynamodb-is-the-mvp-database.md)); the S3 archive relay and SNS/SQS delivery; the reusable tenant workflow and `deploy.sh`; GitHub-hosted CI; the [signals module](signals.md) — its Terraform half published from the repository, its CDK construct in the repository until the first CDK application publishes it; the self-hosted runner pool retired for these repositories.
 
 **Gate:** specs-service serves from AWS. A workspace's database is dropped and rebuilt from the archive alone. The verifier checks the chain with the service off.
 

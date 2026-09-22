@@ -50,4 +50,9 @@ jobs:
           tar xzf "$dir"/*.tgz -C "$dir"
           (cd "$dir/package" && npm install --omit=dev --ignore-scripts >/dev/null && node -e "import('./dist/index.js').then(m => console.log('imports ok:', Object.keys(m).length, 'exports'))")
       - name: Publish
+        # npm's OIDC exchange never throws: a missing or mismatched trusted publisher falls through to
+        # setup-node's placeholder token, and the registry answers the PUT with a bare 404. At verbose
+        # the exchange's own failure is in the log (`oidc: Failed token exchange request …`).
+        env:
+          NPM_CONFIG_LOGLEVEL: verbose
         run: npm publish --access public

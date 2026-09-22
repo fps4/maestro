@@ -122,6 +122,16 @@ every value but the table's name has a local default:
 - `PAYLOAD_STORE` — where the payloads go ([ADR-0020](docs/design/decisions/0020-the-payload-store-and-the-rebuild.md)): a version's text, a decision's reasoning, a question, an answer, an evaluator's findings — written before the event that names them by locator and digest. `local`: a directory at `RECORD_PAYLOAD_DIR` (`./payloads`); `s3`: this service's own bucket, `PAYLOAD_BUCKET` (default `S3_BUCKET`) under `PAYLOAD_PREFIX` (`payloads`), with the `S3_*` endpoint and credentials — versioned, never Object-Locked, so erasure stays possible. Unset, it follows the sink: `local` under `RECORD_SINK=local`, `s3` otherwise
 - `EVALUATOR_BASE` — optional; without it, evaluations are recorded but never requested
 
+**Admitting a principal.** A token names who someone is — its issuer and subject; the membership names
+what a workspace lets them do, and membership is granted in the workspace, never by the token
+([ADR-0019](docs/design/decisions/0019-the-outbox-holds-spine-envelopes.md)). The operator's grant is
+`npm run workspace:member -- <workspace> --issuer <iss> --subject <sub> --roles a,b [--kind human|agent|service] [--gates g1,g2] [--accountable <prn-h-…>] [--display-name <name>]`:
+the principal is resolved as the first request would resolve it — minted on first sight of the
+identity, found on every sight after — and the membership written is the one that request reads. An
+agent's grant must name the human answerable for it. Memberships are grants, not record: nothing is
+emitted to the spine. The first human of a fresh deployment is admitted this way; the issuer is the
+identity-service's, the subject its user id.
+
 **The rebuild gate.** The archive is the record and this table a projection of it, and that is
 checked rather than said: `npm run workspace:rebuild -- --workspace <id> [--force]` verifies the
 workspace's archive with the spine's verifier, refuses a populated target unless `--force` deletes

@@ -115,6 +115,8 @@ digest_contacts = ["ops@aannemer-x.example", "audit@aannemer-x.example"]
 
 **The database.** Each component's DynamoDB table is its module's ([ADR-0018](decisions/0018-dynamodb-is-the-mvp-database.md)): created in the apply, granted to the functions that read it, nothing made out of band and no connection credential anywhere. `secrets.md` names the secrets that remain — identity-service's signing and admin secrets.
 
+The order in which all of this is done, and what the first tenant taught, is [first-deployment.md](first-deployment.md).
+
 ## Guards in the public repositories
 
 CI in every public maestro repository fails on:

@@ -1,6 +1,6 @@
 # work-service
 
-**Repository:** [`fps4/maestro-work`](https://github.com/fps4/maestro-work) · **Status:** building (M2) · **Decisions:** [ADR-0009](../decisions/0009-one-severity-scale.md), [ADR-0012](../decisions/0012-the-application-owns-detection-maestro-owns-response.md), [ADR-0019](../decisions/0019-work-services-table.md) (the table, proposed)
+**Repository:** [`fps4/maestro-work`](https://github.com/fps4/maestro-work) · **Status:** building (M2) · **Decisions:** [ADR-0009](../decisions/0009-one-severity-scale.md), [ADR-0012](../decisions/0012-the-application-owns-detection-maestro-owns-response.md), [ADR-0019](../decisions/0019-work-services-table.md) (the table)
 
 Who owes what, by when, under whose authority — and whether it happened. The component that turns signals into commitments, checks authority when work is claimed, derives every clock from policy, and records every outcome. Its MCP server is the board agents work from.
 

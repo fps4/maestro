@@ -22,6 +22,6 @@ Architecture decision records, numbered from 0001. Each states context in a few 
 | [0016](0016-terraform-is-the-infrastructure-language.md) | Terraform is the infrastructure language; the tenant repository holds the root module | accepted; the demo-tenant apply withdrawn by 0017; the Atlas clause moot by 0018 |
 | [0017](0017-the-tenant-repository-runs-the-pipeline.md) | The tenant repository runs the pipeline: its runner, its targets, its state, its configuration | accepted |
 | [0018](0018-dynamodb-is-the-mvp-database.md) | DynamoDB is the MVP database; the module creates its table; the pipeline applies it | accepted |
-| [0019](0019-work-services-table.md) | work-service's table: a partition per item, the open set as an index, clocks by a sweep | proposed |
+| [0019](0019-work-services-table.md) | work-service's table: a partition per item, the open set as an index, clocks by a sweep | accepted |
 
 The component-level decisions of specs-service live in `fps4/maestro-specs` (`docs/design/decisions/`, ADR-0001–0018 there) and are not repeated here.

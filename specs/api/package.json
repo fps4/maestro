@@ -23,6 +23,7 @@
     "workspace:validate": "tsx src/cli/validate-workspaces.ts",
     "workspace:rebuild": "tsx src/cli/rebuild.ts",
     "workspace:member": "tsx src/cli/member.ts",
+    "principal:adopt": "tsx src/cli/adopt.ts",
     "workspace:seed": "tsx src/cli/seed.ts",
     "specs": "tsx src/cli/specs.ts",
     "table:create": "tsx src/cli/create-table.ts"

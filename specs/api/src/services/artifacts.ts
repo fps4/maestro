@@ -40,6 +40,7 @@ import type {
   ProvenanceMap,
   Version,
 } from '../domain/types.js';
+import { isPrincipal } from '../domain/types.js';
 import type { LoadedWorkspace } from './workspaces.js';
 
 export class NotFound extends Error {
@@ -453,7 +454,7 @@ export class ArtifactService {
    */
   async withdraw(artifactId: string, ordinal: number, actor: Actor, reason?: string): Promise<Version> {
     const version = await this.getVersion(artifactId, ordinal);
-    if (version.proposed_by !== actor.principal) {
+    if (!isPrincipal({ id: actor.principal, supersedes: actor.supersedes }, version.proposed_by)) {
       throw new Refused(
         `Only the proposer withdraws a version. \`${artifactId}@${ordinal}\` was proposed by \`${version.proposed_by}\`.`,
       );

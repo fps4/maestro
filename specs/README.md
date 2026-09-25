@@ -122,15 +122,27 @@ every value but the table's name has a local default:
 - `PAYLOAD_STORE` — where the payloads go ([ADR-0020](docs/design/decisions/0020-the-payload-store-and-the-rebuild.md)): a version's text, a decision's reasoning, a question, an answer, an evaluator's findings — written before the event that names them by locator and digest. `local`: a directory at `RECORD_PAYLOAD_DIR` (`./payloads`); `s3`: this service's own bucket, `PAYLOAD_BUCKET` (default `S3_BUCKET`) under `PAYLOAD_PREFIX` (`payloads`), with the `S3_*` endpoint and credentials — versioned, never Object-Locked, so erasure stays possible. Unset, it follows the sink: `local` under `RECORD_SINK=local`, `s3` otherwise
 - `EVALUATOR_BASE` — optional; without it, evaluations are recorded but never requested
 
-**Admitting a principal.** A token names who someone is — its issuer and subject; the membership names
-what a workspace lets them do, and membership is granted in the workspace, never by the token
+**Admitting a principal.** A token names who someone is — its issuer and subject, and the `prn`
+claim: the maestro principal id identity-service mints, which is the id this service writes on every
+record and the only one ([ADR-0022](docs/design/decisions/0022-the-principal-id-is-identity-services.md));
+a verified token without it is refused. The membership names what a workspace lets them do, and
+membership is granted in the workspace, never by the token
 ([ADR-0019](docs/design/decisions/0019-the-outbox-holds-spine-envelopes.md)). The operator's grant is
-`npm run workspace:member -- <workspace> --issuer <iss> --subject <sub> --roles a,b [--kind human|agent|service] [--gates g1,g2] [--accountable <prn-h-…>] [--display-name <name>]`:
-the principal is resolved as the first request would resolve it — minted on first sight of the
-identity, found on every sight after — and the membership written is the one that request reads. An
-agent's grant must name the human answerable for it. Memberships are grants, not record: nothing is
-emitted to the spine. The first human of a fresh deployment is admitted this way; the issuer is the
-identity-service's, the subject its user id.
+`npm run workspace:member -- <workspace> --issuer <iss> --subject <sub> --prn <prn-…> --roles a,b [--kind human|agent|service] [--gates g1,g2] [--accountable <prn-h-…>] [--display-name <name>]`:
+the principal is resolved as the first request would resolve it — registered under its `prn` on
+first sight of the identity, found on every sight after — and the membership written is the one that
+request reads. `--prn` is required for an identity not seen yet (the development issuer's excepted,
+whose ids are still minted here). An agent's grant must name the human answerable for it.
+Memberships are grants, not record: nothing is emitted to the spine. The first human of a fresh
+deployment is admitted this way; the issuer is the identity-service's, the subject its user id.
+
+**An identity registered before `prn`.** A deployment that first saw someone before this service
+read `prn` holds them under an id it minted, and refuses their token until an operator aligns the
+two, once: `npm run principal:adopt -- --issuer <iss> --subject <sub> --prn <prn-…> [--dry-run]`. It
+registers the `prn` superseding the old id, re-points the identity, and moves the grants —
+memberships, and any agent answerable to the old id; the records that name the old id stay as the
+archive has them, and separation of duties still treats both ids as one person. `--dry-run` prints
+the plan and writes nothing; a second run is a no-op.
 
 **The rebuild gate.** The archive is the record and this table a projection of it, and that is
 checked rather than said: `npm run workspace:rebuild -- --workspace <id> [--force]` verifies the

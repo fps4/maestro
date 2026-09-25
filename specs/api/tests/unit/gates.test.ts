@@ -170,6 +170,51 @@ describe('mayDecide', () => {
     expect(mayDecide(assigned).allowed).toBe(true);
     expect(mayDecide({ ...assigned, assigned: [] }).allowed).toBe(false);
   });
+
+  // An id this service minted before it read identity-service's `prn` names the same person as the
+  // `prn` that superseded it (ADR-0022): the record keeps the old id, and the rules still see through it.
+  describe('a principal that supersedes an older id', () => {
+    const adopted: Principal = { ...human, id: 'prn-h-identity', supersedes: ['prn-dekker'] };
+
+    it('is still the creator separation of duties excludes', () => {
+      const verdict = mayDecide({ ...decider, decider: adopted, created_by: 'prn-dekker' });
+      expect(verdict.allowed).toBe(false);
+      expect(verdict.reason).toMatch(/exclude_creator/);
+    });
+
+    it('is still the proposer exclude_proposer excludes', () => {
+      const verdict = mayDecide({
+        ...decider,
+        gate: { ...gate, separation_of_duties: 'exclude_proposer' },
+        decider: adopted,
+        proposed_by: 'prn-dekker',
+      });
+      expect(verdict.allowed).toBe(false);
+      expect(verdict.reason).toMatch(/exclude_proposer/);
+    });
+
+    it('is still the one a routing table or an assignment names by the old id', () => {
+      const routed = {
+        ...decider,
+        decider: adopted,
+        gate: {
+          ...gate,
+          owner: { resolver: 'routing_table' as const, table: './reviewers.yaml', key: 'sponsor' },
+        },
+        roles: [],
+        routed: ['prn-dekker'],
+      };
+      expect(mayDecide(routed).allowed).toBe(true);
+      const assigned = {
+        ...decider,
+        decider: adopted,
+        gate: { ...gate, owner: { resolver: 'assignment' as const } },
+        roles: [],
+        assigned: ['prn-dekker'],
+      };
+      expect(mayDecide(assigned).allowed).toBe(true);
+    });
+  });
 });
 
 const profile: AttributionProfile = {

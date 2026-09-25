@@ -516,6 +516,41 @@ export class MembershipRepository {
       ...membership,
     });
   }
+
+  /** Every membership of the workspace. An operator's read (`principal:adopt`); no request makes it. */
+  async list(): Promise<Membership[]> {
+    const items = await this.b.items.query(this.b.keys.memberships);
+    return items.map((i) => strip<Membership>(i));
+  }
+
+  /**
+   * Move a grant from a superseded principal id to the one that replaced it (ADR-0022 §3): the
+   * same roles, gates and answerable human under the new id, and the old grant gone, in one
+   * transaction. A membership is a grant, not record — nothing is emitted, and moving it rewrites
+   * no history. Refused if the new id already holds one here: two grants for one person is an
+   * operator's call, not this command's.
+   */
+  async move(from: Membership, to: string): Promise<void> {
+    const tx = this.b.items.transaction();
+    tx.insert(
+      { ...this.b.keys.membership(to), kind: KINDS.membership, ...from, principal: to },
+      `\`${to}\` already holds a membership here; merge the two grants by hand.`,
+    );
+    tx.delete(this.b.keys.membership(from.principal), {
+      condition: (e) => `attribute_exists(${e.n(PK)})`,
+      onConflict: `\`${from.principal}\`'s membership was removed meanwhile.`,
+    });
+    await tx.commit();
+  }
+
+  /** Re-point an agent's answerable human from a superseded id to the one that replaced it. */
+  async setAccountable(principal: string, from: string, to: string): Promise<void> {
+    await this.b.items.update(this.b.keys.membership(principal), {
+      set: { accountable: to },
+      condition: (e) => `${e.n('accountable')} = ${e.v(from)}`,
+      onConflict: `\`${principal}\`'s answerable human changed meanwhile.`,
+    });
+  }
 }
 
 function questionToItem(keys: WorkspaceKeys, question: Question): Item {

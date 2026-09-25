@@ -33,6 +33,13 @@ export interface PrincipalRecord extends Principal {
   subject?: string;
   /** The human answerable for an agent's work. Never the agent, and never a credential. */
   operated_by?: string;
+  /**
+   * On an id this service minted before it read identity-service's `prn`: the principal that
+   * replaced it (ADR-0022). The item stays — records name it, and a reader still resolves it to a
+   * name — and no token resolves to it again.
+   */
+  superseded_by?: string;
+  superseded_at?: string;
   created_at: string;
   last_seen_at?: string;
 }
@@ -153,6 +160,51 @@ export class PrincipalRepository {
       if (error instanceof Conflict) return { inserted: false };
       throw error;
     }
+  }
+
+  /** Every principal the registry holds. An operator's read; no request makes it. */
+  async list(): Promise<PrincipalRecord[]> {
+    const items = await this.items.query(controlKeys.principals);
+    return items.map((i) => principalFromItem(i));
+  }
+
+  /**
+   * Adopt identity-service's id for an identity registered under one this service minted
+   * (ADR-0022 §3), in one transaction: the principal under its new id, superseding the old; the old
+   * item marked `superseded_by` and kept; the `(issuer, subject)` mapping re-pointed. Each write is
+   * conditioned on the state it was read in, so a concurrent first sight or a second operator
+   * refuses the whole rather than half of it.
+   */
+  async adopt(old: PrincipalRecord, next: PrincipalRecord, now: string): Promise<void> {
+    if (old.issuer === undefined || old.subject === undefined) {
+      throw new Error(`\`${old.id}\` has no (issuer, subject) to re-point.`);
+    }
+    const { kind, ...fields } = next;
+    const tx = this.items.transaction();
+    tx.insert(
+      { ...controlKeys.principal(next.id), kind: KINDS.principal, principal_kind: kind, ...fields },
+      `Principal \`${next.id}\` already exists.`,
+    );
+    tx.update(controlKeys.principal(old.id), {
+      set: { superseded_by: next.id, superseded_at: now },
+      condition: (e) => `attribute_exists(${e.n(PK)}) AND attribute_not_exists(${e.n('superseded_by')})`,
+      onConflict: `\`${old.id}\` was superseded meanwhile.`,
+    });
+    tx.update(controlKeys.principalBySubject(old.issuer, old.subject), {
+      set: { principal: next.id },
+      condition: (e) => `${e.n('principal')} = ${e.v(old.id)}`,
+      onConflict: `The identity behind \`${old.id}\` was re-pointed meanwhile.`,
+    });
+    await tx.commit();
+  }
+
+  /** Re-point an agent's `operated_by` from a superseded human to the id that replaced it. */
+  async setOperatedBy(id: string, from: string, to: string): Promise<void> {
+    await this.items.update(controlKeys.principal(id), {
+      set: { operated_by: to },
+      condition: (e) => `${e.n('operated_by')} = ${e.v(from)}`,
+      onConflict: `\`${id}\`'s operator changed meanwhile.`,
+    });
   }
 
   async touch(id: string, fields: { display_name?: string; last_seen_at: string }): Promise<void> {

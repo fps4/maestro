@@ -64,6 +64,7 @@ export async function buildContext(
     subject: token.subject,
     kind: token.kind,
     display_name: token.display_name,
+    ...(token.prn ? { prn: token.prn } : {}),
   });
 
   const workspace = await deps.registry.load(workspaceId);
@@ -92,6 +93,7 @@ export async function buildContext(
     kind: principal.kind,
     roles,
     ...(membership?.accountable ? { accountable: membership.accountable } : {}),
+    ...(principal.supersedes?.length ? { supersedes: principal.supersedes } : {}),
   };
   const correlation_id = uuidv7();
   const recorder = createRecorder({

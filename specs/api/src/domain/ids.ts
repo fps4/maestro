@@ -36,6 +36,19 @@ export const mintDraftId = (): string => `dft-${token(10).toLowerCase()}`;
  */
 export const mintPrincipalId = (kind: 'human' | 'agent' | 'service'): string =>
   `prn-${kind === 'human' ? 'h' : kind === 'agent' ? 'a' : 'w'}-${token(12).toLowerCase()}`;
+
+/**
+ * A maestro principal id as the spine's grammar admits it. identity-service mints them and carries
+ * one in every token as `prn` (its ADR-0022); this service reads it (ADR-0022 here).
+ */
+export const PRINCIPAL_ID = /^prn-[haw]-[a-z0-9][a-z0-9._-]{0,62}$/;
+
+/** The kind a principal id claims by its letter — `w`, a workload, is our `service`. */
+export function kindOfPrincipalId(id: string): 'human' | 'agent' | 'service' | undefined {
+  if (!PRINCIPAL_ID.test(id)) return undefined;
+  const letter = id.slice(4, 5);
+  return letter === 'h' ? 'human' : letter === 'a' ? 'agent' : 'service';
+}
 export const mintAttachmentId = (): string => `att-${token(10).toLowerCase()}`;
 export const mintDecisionId = (): string => `dec-${token(12).toLowerCase()}`;
 export const mintQuestionId = (): string => `qst-${token(10).toLowerCase()}`;

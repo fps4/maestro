@@ -459,10 +459,13 @@ Decision Point.
 Gate ownership resolves through a declared resolver — role claim, explicit assignment, or a routing
 table — which is how maestro v1's `reviewers.yaml` and maestro's tenant roles become one mechanism.
 
-**Principal ids are ours.** A registry maps `(issuer, subject) → principal id`, and only the local id
-is written to a draft, version, decision, or export. An issuer's subject is minted per deployment;
-move the identity deployment and every subject re-mints, against decisions retained for years. The
-indirection costs one collection now and is unavailable later.
+**Principal ids are maestro's, never an issuer's subject.** A registry maps `(issuer, subject) →
+principal id`, and only the principal id is written to a draft, version, decision, or export. An
+issuer's subject is minted per deployment; move the identity deployment and every subject re-mints,
+against decisions retained for years. The id is the one identity-service mints and carries in every
+token as `prn`, registered here on first sight; this service mints none for a real identity, and an
+id it minted before it read `prn` is superseded by the operator's `principal:adopt`, the record left
+as it is ([ADR-0022](decisions/0022-the-principal-id-is-identity-services.md)).
 
 **Agents are principals of kind `agent`**, distinct from the credential they authenticate with and
 from the human accountable for their work — which is what makes §2.8's rule enforceable.
@@ -607,7 +610,7 @@ version is admitted on that test. Comments on drafts, page trees and freeform sp
 | D5 | Agents author and propose; only a named human decides; no decision surface on MCP | [ADR-0005](decisions/0005-agents-may-author-never-decide.md) |
 | D6 | Workspace isolation is one key prefix per workspace, bound once per request | [ADR-0006](decisions/0006-workspace-isolation-by-database.md), amended by [ADR-0021](decisions/0021-the-store-is-dynamodb.md) |
 | D7 | Bodies inline; attachments content-addressed in object storage | [ADR-0007](decisions/0007-mongodb-with-inline-bodies.md), superseded by [ADR-0021](decisions/0021-the-store-is-dynamodb.md) |
-| D8 | Principal ids are local; an issuer's `sub` is never stored on a record | §7.2 |
+| D8 | Principal ids are maestro's (identity-service's `prn` since ADR-0022); an issuer's `sub` is never stored on a record | §7.2 |
 | D9 | At most one link per type is pinned, resolved to a version at acceptance and frozen | §2.6 |
 | D10 | Redaction is the single permitted mutation, recorded, and detectable by digest mismatch | §8.3 |
 | D11 | The catalogue is a workspace, reached read-only; a tenant carries a reference, never a link | [ADR-0008](decisions/0008-the-catalogue-is-a-workspace.md) |
@@ -623,6 +626,7 @@ version is admitted on that test. Comments on drafts, page trees and freeform sp
 | D21 | The outbox holds the spine's envelope, built and validated in the transaction; an agent acts under a seat occupancy naming the answerable human; free text leaves the body; principal ids carry the kind | [ADR-0019](decisions/0019-the-outbox-holds-spine-envelopes.md) — *accepted* |
 | D22 | What the record cannot say goes to an erasable payload store, named on the event by locator and digest; evaluations are events; a workspace is rebuilt from a verified archive and its payloads alone, and a stale projection refuses to serve; memberships are grants, drafts are not record | [ADR-0020](decisions/0020-the-payload-store-and-the-rebuild.md) — *accepted* |
 | D23 | The store is one DynamoDB table (maestro ADR-0018): a prefix per workspace under the same handle, every query a key or an index, the outbox one transaction conditioned on the workspace's counter, the relay on a sparse index, search a filtered read, expiry the table's TTL, the rebuild a deleted prefix; no database credential | [ADR-0021](decisions/0021-the-store-is-dynamodb.md) — *accepted* |
+| D24 | The principal id is the token's `prn`, identity-service's; none is minted here for a real identity; an id minted before is superseded by an operator's `principal:adopt` that moves grants and rewrites no record, and separation of duties reads the supersession | [ADR-0022](decisions/0022-the-principal-id-is-identity-services.md) — *accepted* |
 
 ---
 

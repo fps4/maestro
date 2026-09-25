@@ -9,7 +9,14 @@
  */
 
 import { gateReadiness } from './facets.js';
-import type { EvaluationResult, Facets, Principal, PrincipalId, ProvenanceMap } from './types.js';
+import {
+  isPrincipal,
+  type EvaluationResult,
+  type Facets,
+  type Principal,
+  type PrincipalId,
+  type ProvenanceMap,
+} from './types.js';
 import type { GateDeclaration } from './workspace-definition.js';
 
 export interface Requirement {
@@ -195,13 +202,13 @@ export function mayDecide(input: DeciderInput): DeciderVerdict {
   const owner = resolvesAsOwner(input);
   if (!owner.allowed) return owner;
 
-  if (gate.separation_of_duties === 'exclude_proposer' && decider.id === input.proposed_by) {
+  if (gate.separation_of_duties === 'exclude_proposer' && isPrincipal(decider, input.proposed_by)) {
     return {
       allowed: false,
       reason: `You proposed this version, and \`${gate.id}\` declares separation of duties (exclude_proposer).`,
     };
   }
-  if (gate.separation_of_duties === 'exclude_creator' && decider.id === input.created_by) {
+  if (gate.separation_of_duties === 'exclude_creator' && isPrincipal(decider, input.created_by)) {
     return {
       allowed: false,
       reason: `You created this artifact, and \`${gate.id}\` declares separation of duties (exclude_creator).`,
@@ -224,7 +231,8 @@ function resolvesAsOwner(input: DeciderInput): DeciderVerdict {
       };
     }
     case 'routing_table': {
-      const has = input.routed.includes(decider.id) || input.routed.some((r) => roles.includes(r));
+      const has =
+        input.routed.some((r) => isPrincipal(decider, r)) || input.routed.some((r) => roles.includes(r));
       return {
         allowed: has,
         reason: has
@@ -233,7 +241,7 @@ function resolvesAsOwner(input: DeciderInput): DeciderVerdict {
       };
     }
     case 'assignment': {
-      const has = input.assigned.includes(decider.id);
+      const has = input.assigned.some((a) => isPrincipal(decider, a));
       return {
         allowed: has,
         reason: has

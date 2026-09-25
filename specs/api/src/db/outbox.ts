@@ -38,6 +38,8 @@ export interface Actor {
   kind: PrincipalKind;
   roles: string[];
   accountable?: string;
+  /** Ids this principal was known by here before `prn` (ADR-0022); never written to a record. */
+  supersedes?: string[];
 }
 
 /** What a service records. Everything the envelope needs beyond this is derived at emit. */

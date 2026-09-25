@@ -30,6 +30,20 @@ export interface Principal {
   display_name: string;
   /** The consumer's own identifier for this principal, if it keeps one. Never an issuer `sub`. */
   external_ref?: string;
+  /**
+   * Ids this service knew the same principal by before it read identity-service's `prn` (ADR-0022).
+   * The records that name them are history and are not rewritten; a rule that asks "is this the
+   * same person" — separation of duties, the proposer's withdrawal — asks it of these too.
+   */
+  supersedes?: PrincipalId[];
+}
+
+/** Whether `id` names this principal: its own id, or one it supersedes (ADR-0022). */
+export function isPrincipal(
+  principal: { id: PrincipalId; supersedes?: PrincipalId[] },
+  id: PrincipalId,
+): boolean {
+  return principal.id === id || (principal.supersedes?.includes(id) ?? false);
 }
 
 /**

@@ -54,11 +54,14 @@ export async function buildApp(config: Config, options: AppOptions = {}): Promis
   const relay = sink ? createRelay(store, sink) : null;
   const timer = relay ? startRelay(server, relay, config) : null;
 
+  // The sweep's principal is resolved at boot when this process sweeps, so a deployment missing it
+  // fails to start; otherwise only if a sweep is ever asked of it — the API on AWS never is.
+  const sweeper = config.SWEEP_MODE === 'in_process' ? sweepPrincipal(config) : undefined;
   const sweep = new SweepService({
     store,
     payloads,
     notifier: options.notifier ?? notifierFor(config),
-    principal: sweepPrincipal(config),
+    principal: () => sweeper ?? sweepPrincipal(config),
     now: options.now ?? (() => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z')),
   });
   const sweepTimer = config.SWEEP_MODE === 'in_process' ? startSweep(server, sweep, config) : null;

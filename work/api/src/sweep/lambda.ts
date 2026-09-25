@@ -14,11 +14,12 @@ let sweep: SweepService | undefined;
 async function connect(): Promise<SweepService> {
   if (sweep) return sweep;
   const config = loadConfig({ ...process.env, RECORD_SINK: 'off', SWEEP_MODE: 'off' });
+  const principal = sweepPrincipal(config);
   sweep = new SweepService({
     store: await Store.connect(config),
     payloads: payloadStoreFor(config),
     notifier: notifierFor(config),
-    principal: sweepPrincipal(config),
+    principal: () => principal,
     now: () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
   });
   return sweep;

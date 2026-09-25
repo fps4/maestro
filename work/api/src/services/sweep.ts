@@ -18,8 +18,11 @@ export interface SweepDeps {
   store: Store;
   payloads: PayloadStore;
   notifier: Notifier;
-  /** The workload principal the sweep acts as (prn-w-…). */
-  principal: string;
+  /**
+   * The workload principal the sweep acts as (prn-w-…), resolved when a sweep runs — a process that
+   * never sweeps (the API under `SWEEP_MODE=off`) is never asked for one.
+   */
+  principal: () => string;
   now: () => string;
 }
 
@@ -45,8 +48,9 @@ export class SweepService {
 
   async once(): Promise<SweepReport> {
     const at = this.deps.now();
+    const principal = this.deps.principal();
     const report: SweepReport = { at, workspaces: 0, due: 0, events: {}, failed: [] };
-    await this.deps.store.control.principals.seen(this.deps.principal, 'workload', at);
+    await this.deps.store.control.principals.seen(principal, 'workload', at);
     const workspaces = (await this.deps.store.control.workspaces.list()).filter(
       (w) => w.definition_version > 0,
     );
@@ -56,7 +60,7 @@ export class SweepService {
       const scope = {
         workspace,
         handle,
-        actor: { principal: this.deps.principal, kind: 'workload' as const, roles: [] },
+        actor: { principal, kind: 'workload' as const, roles: [] },
       };
       for (const item of await handle.items.due(at)) {
         report.due += 1;

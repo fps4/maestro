@@ -19,6 +19,8 @@ import { Conflict, type Transaction } from '../db/handle.js';
 import type { Edge } from '../db/work-items.js';
 import * as decide from '../domain/decide.js';
 import type { Actor, ClaimResult, Env, RaiseInput, ResolveOutcome } from '../domain/decide.js';
+import type { WorkspaceHandle } from '../db/handle.js';
+import type { Notifier } from '../notify/notifier.js';
 import { evolve, talliesOf, type ItemEvent } from '../domain/events.js';
 import { itemId, type PrincipalKind } from '../domain/ids.js';
 import { isHeld, nextAt, type State, type WorkItem } from '../domain/item.js';
@@ -68,11 +70,22 @@ export interface Rates {
   months: Array<{ month: string; metric: string; count: number }>;
 }
 
-const actorOf = (ctx: RequestContext): Actor => ({
-  principal: ctx.caller.principal,
-  kind: ctx.caller.kind,
-  roles: ctx.caller.roles,
-  ...(ctx.caller.accountable ? { accountable: ctx.caller.accountable } : {}),
+/** Who acts, where: a request's caller, or the sweep acting as this service's workload. */
+export interface Scope {
+  workspace: string;
+  handle: WorkspaceHandle;
+  actor: Actor;
+}
+
+export const scopeOf = (ctx: RequestContext): Scope => ({
+  workspace: ctx.workspace,
+  handle: ctx.handle,
+  actor: {
+    principal: ctx.caller.principal,
+    kind: ctx.caller.kind,
+    roles: ctx.caller.roles,
+    ...(ctx.caller.accountable ? { accountable: ctx.caller.accountable } : {}),
+  },
 });
 
 /** Who a person reaches next about an item: its human holder, else its accountable human. */
@@ -83,10 +96,10 @@ export function nextHumanTouchpoint(item: WorkItem): string {
 export class WorkItemService {
   constructor(private readonly deps: WorkItemDeps) {}
 
-  private async env(ctx: RequestContext): Promise<Env> {
+  private async env(scope: Scope): Promise<Env> {
     return {
-      definition: await this.deps.workspaces.current(ctx.workspace),
-      actor: actorOf(ctx),
+      definition: await this.deps.workspaces.current(scope.workspace),
+      actor: scope.actor,
       now: this.deps.now(),
     };
   }
@@ -101,7 +114,7 @@ export class WorkItemService {
    */
   private async stage(
     tx: Transaction,
-    ctx: RequestContext,
+    ctx: Scope,
     correlation: string,
     before: WorkItem | null,
     events: ItemEvent[],
@@ -144,10 +157,11 @@ export class WorkItemService {
     return head;
   }
 
-  async raise(ctx: RequestContext, input: RaiseInput, key?: string): Promise<Raised> {
+  async raise(request: RequestContext, input: RaiseInput, key?: string): Promise<Raised> {
+    const ctx = scopeOf(request);
     const { handle } = ctx;
     if (key) {
-      const seen = await handle.requests.get(ctx.caller.principal, key);
+      const seen = await handle.requests.get(ctx.actor.principal, key);
       if (seen) return { item: (await handle.items.get(seen.item_id))!, replayed: true };
     }
     const env = await this.env(ctx);
@@ -167,7 +181,7 @@ export class WorkItemService {
         const id = itemId(n + 1);
         const events = decide.raise(env, id, input);
         handle.counters.bump('item', n, 1, tx);
-        if (key) handle.requests.stage(tx, { principal: ctx.caller.principal, key, item_id: id }, env.now);
+        if (key) handle.requests.stage(tx, { principal: ctx.actor.principal, key, item_id: id }, env.now);
         const item = await this.stage(
           tx,
           ctx,
@@ -181,7 +195,7 @@ export class WorkItemService {
     } catch (error) {
       // Two publishes with one key raced, and the other won: answer with what it raised.
       if (key && error instanceof Conflict && !error.retry) {
-        const seen = await handle.requests.get(ctx.caller.principal, key);
+        const seen = await handle.requests.get(ctx.actor.principal, key);
         if (seen) return { item: (await handle.items.get(seen.item_id))!, replayed: true };
       }
       throw error;
@@ -189,33 +203,40 @@ export class WorkItemService {
   }
 
   private async act<R>(
-    ctx: RequestContext,
+    ctx: Scope,
     id: string,
-    command: (env: Env, head: WorkItem) => { events: ItemEvent[]; result: R },
+    command: (
+      env: Env,
+      head: WorkItem,
+    ) => { events: ItemEvent[]; result: R } | Promise<{ events: ItemEvent[]; result: R }>,
   ): Promise<{ item: WorkItem; result: R }> {
     const env = await this.env(ctx);
     const correlation = uuidv7();
     return ctx.handle.transaction(async (tx) => {
       const head = await ctx.handle.items.get(id);
       if (!head) throw new NotFound(`No item \`${id}\` in this workspace.`);
-      const { events, result } = command({ ...env, now: this.deps.now() }, head);
+      const { events, result } = await command({ ...env, now: this.deps.now() }, head);
       const item = await this.stage(tx, ctx, correlation, head, events);
       return { item: item!, result };
     });
   }
 
   claim(ctx: RequestContext, id: string): Promise<{ item: WorkItem; result: ClaimResult }> {
-    return this.act(ctx, id, (env, head) => decide.claim(env, head));
+    return this.act(scopeOf(ctx), id, (env, head) => decide.claim(env, head));
   }
 
   async release(ctx: RequestContext, id: string): Promise<WorkItem> {
-    return (await this.act(ctx, id, (env, head) => ({ events: decide.release(env, head), result: null })))
-      .item;
+    return (
+      await this.act(scopeOf(ctx), id, (env, head) => ({ events: decide.release(env, head), result: null }))
+    ).item;
   }
 
   async transition(ctx: RequestContext, id: string, to: State): Promise<WorkItem> {
     return (
-      await this.act(ctx, id, (env, head) => ({ events: decide.transition(env, head, to), result: null }))
+      await this.act(scopeOf(ctx), id, (env, head) => ({
+        events: decide.transition(env, head, to),
+        result: null,
+      }))
     ).item;
   }
 
@@ -226,11 +247,42 @@ export class WorkItemService {
     reason?: string,
   ): Promise<WorkItem> {
     return (
-      await this.act(ctx, id, (env, head) => ({
+      await this.act(scopeOf(ctx), id, (env, head) => ({
         events: decide.resolve(env, head, outcome, reason),
         result: null,
       }))
     ).item;
+  }
+
+  async heartbeat(ctx: RequestContext, id: string): Promise<WorkItem> {
+    return (
+      await this.act(scopeOf(ctx), id, (env, head) => ({ events: decide.heartbeat(env, head), result: null }))
+    ).item;
+  }
+
+  /**
+   * The passing of time, for one item (ADR-0019 §6): decided by `tick`, each ladder step delivered
+   * through the notifier before the transaction, and what the delivery did recorded on its event.
+   * Returns the events recorded — none when another sweep got there first.
+   */
+  async tick(scope: Scope, id: string, notifier: Notifier): Promise<ItemEvent[]> {
+    const { result } = await this.act(scope, id, async (env, head) => {
+      const events = decide.tick(env, head);
+      for (const event of events) {
+        if (event.type !== 'WorkItemChased' || !event.body.to) continue;
+        event.body.delivery = await notifier.deliver({
+          workspace: scope.workspace,
+          item_id: head.item_id,
+          title: head.title,
+          step: event.body.step,
+          to: event.body.to,
+          accountable: head.accountable,
+          ...(head.resolve_by ? { due: head.resolve_by } : {}),
+        });
+      }
+      return { events, result: events };
+    });
+    return result;
   }
 
   async get(ctx: RequestContext, id: string): Promise<{ item: WorkItem; edges: Edge[] }> {

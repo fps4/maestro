@@ -70,6 +70,23 @@ const schema = z.object({
   PAYLOAD_BUCKET: z.string().optional(),
   PAYLOAD_PREFIX: z.string().default('payloads'),
 
+  /**
+   * The sweep (maestro ADR-0019 §6): what the passing of time does to open items. `in_process` runs
+   * it on an interval beside the API — the laptop's; `off` leaves it to the scheduled Lambda.
+   * `SWEEP_PRINCIPAL` is the workload it acts as — identity-service's id for this service; locally a
+   * stand-in is used.
+   */
+  SWEEP_MODE: z.enum(['in_process', 'off']).default('in_process'),
+  SWEEP_INTERVAL_MS: z.coerce.number().int().positive().default(60_000),
+  SWEEP_PRINCIPAL: z
+    .string()
+    .regex(/^prn-w-[a-z0-9][a-z0-9._-]{0,62}$/, 'must be a workload principal id (prn-w-…)')
+    .optional(),
+
+  /** How a chase-ladder step reaches a person: a log line, or a Slack incoming webhook. */
+  NOTIFIER: z.enum(['log', 'slack']).default('log'),
+  SLACK_WEBHOOK_URL: z.string().url().optional(),
+
   CORS_ORIGINS: z.string().default(''),
 });
 
@@ -104,6 +121,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     for (const key of ['ARCHIVE_BUCKET', 'EVENTS_TOPIC_ARN'] as const) {
       if (!value[key]) throw new Error(`RECORD_SINK=s3 requires ${key}`);
     }
+  }
+  if (value.NOTIFIER === 'slack' && !value.SLACK_WEBHOOK_URL) {
+    throw new Error('NOTIFIER=slack requires SLACK_WEBHOOK_URL');
   }
   const payloadStore = value.PAYLOAD_STORE ?? (value.RECORD_SINK === 'local' ? 'local' : 's3');
   const payloadBucket = value.PAYLOAD_BUCKET ?? value.S3_BUCKET;

@@ -7,6 +7,7 @@ locals {
   tags       = merge({ "maestro:component" = "work-service" }, var.tags)
   api_name   = "${var.name}-api"
   relay_name = "${var.name}-relay"
+  sweep_name = "${var.name}-sweep"
   table_name = coalesce(var.table_name, var.name)
 
   # Each secret's current value, by the environment variable name it is set as.
@@ -42,6 +43,7 @@ locals {
     PORT                         = "8080"
     HOST                         = "0.0.0.0"
     RECORD_SINK                  = "off"
+    SWEEP_MODE                   = "off" # the sweep function is the one sweep
   })
 
   # What each function may do to the table: the item operations the service sends, on the table
@@ -472,14 +474,14 @@ resource "aws_iam_role" "scheduler" {
 }
 
 resource "aws_iam_role_policy" "scheduler" {
-  name = "invoke-relay"
+  name = "invoke-relay-and-sweep"
   role = aws_iam_role.scheduler.id
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [{
       Effect   = "Allow"
       Action   = ["lambda:InvokeFunction"]
-      Resource = aws_lambda_function.relay.arn
+      Resource = [aws_lambda_function.relay.arn, aws_lambda_function.sweep.arn]
     }]
   })
 }
@@ -553,6 +555,145 @@ resource "aws_cloudwatch_metric_alarm" "relay_refused" {
   threshold           = 1
   comparison_operator = "GreaterThanOrEqualToThreshold"
   treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+  tags                = local.tags
+}
+
+# --- the sweep -------------------------------------------------------------------------------------
+# What the passing of time does to open items (maestro ADR-0019 §6): leases expire, ladder steps are
+# delivered through the notifier and recorded, breaches are recorded, items past review close
+# `expired`. It reads each workspace's open set up to now and writes each item on its revision, so it
+# needs the table and nothing else — the notifier is an outbound HTTPS call, not a grant.
+
+resource "aws_cloudwatch_log_group" "sweep" {
+  name              = "/aws/lambda/${local.sweep_name}"
+  retention_in_days = var.log_retention_days
+  tags              = local.tags
+}
+
+resource "aws_iam_role" "sweep" {
+  name = local.sweep_name
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+  tags = local.tags
+}
+
+# Its own log, the table, and the payload store: an item past review closes `expired` with a reason,
+# and a reason is a payload.
+resource "aws_iam_role_policy" "sweep" {
+  name = "sweep"
+  role = aws_iam_role.sweep.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "${aws_cloudwatch_log_group.sweep.arn}:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = local.table_actions
+        Resource = local.table_resources
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject"]
+        Resource = "${aws_s3_bucket.store.arn}/*"
+      },
+    ]
+  })
+}
+
+# One at a time, like the relay: two sweeps would race harmlessly on each item's revision, but the
+# second would only re-decide what the first did.
+resource "aws_lambda_function" "sweep" {
+  function_name                  = local.sweep_name
+  role                           = aws_iam_role.sweep.arn
+  runtime                        = "nodejs22.x"
+  architectures                  = ["arm64"]
+  handler                        = "index.handler"
+  filename                       = var.sweep_package
+  source_code_hash               = filebase64sha256(var.sweep_package)
+  timeout                        = var.sweep_timeout_seconds
+  memory_size                    = var.sweep_memory_mb
+  reserved_concurrent_executions = 1
+  tags                           = local.tags
+
+  environment {
+    variables = merge(local.environment_defaults, var.environment, local.secret_env, local.table_environment, local.store_environment, {
+      RECORD_SINK     = "off"
+      SWEEP_MODE      = "off"
+      SWEEP_PRINCIPAL = var.sweep_principal
+    })
+  }
+
+  logging_config {
+    log_format = "JSON"
+    log_group  = aws_cloudwatch_log_group.sweep.name
+  }
+
+  depends_on = [aws_iam_role_policy.sweep]
+}
+
+resource "aws_scheduler_schedule" "sweep" {
+  name                         = local.sweep_name
+  schedule_expression          = var.sweep_schedule
+  schedule_expression_timezone = "UTC"
+
+  flexible_time_window {
+    mode = "OFF"
+  }
+
+  target {
+    arn      = aws_lambda_function.sweep.arn
+    role_arn = aws_iam_role.scheduler.arn
+    retry_policy {
+      # A missed minute is caught by the next: the sweep fires every step that is due, in order.
+      maximum_retry_attempts       = 0
+      maximum_event_age_in_seconds = 60
+    }
+  }
+}
+
+# The sweep failed — for the whole run, or for an item it will retry next minute.
+resource "aws_cloudwatch_metric_alarm" "sweep_errors" {
+  alarm_name          = "${local.sweep_name}-errors"
+  alarm_description   = "work-service's sweep errored; due items stay due and are retried next minute."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions          = { FunctionName = aws_lambda_function.sweep.function_name }
+  statistic           = "Sum"
+  period              = 900
+  evaluation_periods  = 1
+  threshold           = 3
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+  tags                = local.tags
+}
+
+# The sweep did not run: no clock would chase, breach or expire anything.
+resource "aws_cloudwatch_metric_alarm" "sweep_silent" {
+  alarm_name          = "${local.sweep_name}-silent"
+  alarm_description   = "work-service's sweep has not run in fifteen minutes; no clock is being kept."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Invocations"
+  dimensions          = { FunctionName = aws_lambda_function.sweep.function_name }
+  statistic           = "Sum"
+  period              = 900
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "breaching"
   alarm_actions       = var.alarm_actions
   ok_actions          = var.alarm_actions
   tags                = local.tags

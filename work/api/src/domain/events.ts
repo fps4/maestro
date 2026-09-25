@@ -8,7 +8,9 @@
  */
 
 import type {
+  ChaseStep,
   ClaimCheck,
+  Clock,
   EvidenceKind,
   ItemClass,
   OnboardingLevel,
@@ -58,6 +60,9 @@ export type Raised = Base<
     review_by: string;
     definition_version: number;
     consequence_class: string;
+    /** The ladder that chases it and its steps before the breach, copied on at raise. */
+    chase_ladder?: string;
+    chase_steps?: Exclude<ChaseStep, 'breach'>[];
   },
   { title: string }
 >;
@@ -74,9 +79,25 @@ export type ClaimRefused = Base<
 export type Released = Base<'WorkItemReleased', { released: string; reason: 'released' | 'lease_expired' }>;
 export type StateChanged = Base<'WorkItemStateChanged', { from: State; to: State }>;
 export type Escalated = Base<'WorkItemEscalated', { to: string }>;
+/**
+ * A ladder step, delivered through the notifier — the delivery is part of the fact: `delivered`,
+ * `failed`, or `no_recipient` when the step names nobody this workspace can reach.
+ */
+export type Chased = Base<
+  'WorkItemChased',
+  {
+    step: Exclude<ChaseStep, 'breach'>;
+    index: number;
+    to?: string;
+    delivery: 'delivered' | 'failed' | 'no_recipient';
+  }
+>;
+/** A clock passed with its commitment unmet. Recorded, never a closure. */
+export type Breached = Base<'WorkItemBreached', { clock: Clock; due: string }>;
 export type Closed = Base<'WorkItemClosed', { outcome: Outcome }, { reason: string }>;
 
-export type ItemEvent = Raised | Assigned | ClaimRefused | Released | StateChanged | Escalated | Closed;
+export type ItemEvent =
+  Raised | Assigned | ClaimRefused | Released | StateChanged | Escalated | Chased | Breached | Closed;
 export type ItemEventType = ItemEvent['type'];
 
 export class EvolveError extends Error {
@@ -123,6 +144,9 @@ export function evolve(head: WorkItem | null, event: ItemEvent): WorkItem {
       ...(b.respond_by ? { respond_by: b.respond_by } : {}),
       ...(b.resolve_by ? { resolve_by: b.resolve_by } : {}),
       review_by: b.review_by,
+      ...(b.chase_ladder && b.chase_steps
+        ? { chase: { ladder: b.chase_ladder, steps: b.chase_steps, next: 0 } }
+        : {}),
       state: 'open',
       revision: 1,
     };
@@ -134,11 +158,16 @@ export function evolve(head: WorkItem | null, event: ItemEvent): WorkItem {
 
   switch (event.type) {
     case 'WorkItemAssigned':
+      // The holder assigned again is a heartbeat: the lease moves, the claim and the state stand.
+      if (head.assigned_to === event.body.assigned_to && head.state !== 'open') {
+        return { ...next, lease_expires_at: event.body.lease_expires_at };
+      }
       return {
         ...next,
         assigned_to: event.body.assigned_to,
         lease_expires_at: event.body.lease_expires_at,
         claimed_at: event.at,
+        responded_at: head.responded_at ?? event.at,
         state: 'assigned',
       };
     case 'WorkItemReleased': {
@@ -156,6 +185,16 @@ export function evolve(head: WorkItem | null, event: ItemEvent): WorkItem {
       return { ...next, state: event.body.to };
     case 'WorkItemEscalated':
       return { ...next, state: 'escalated' };
+    case 'WorkItemChased': {
+      if (!head.chase || head.chase.next !== event.body.index) {
+        throw new EvolveError(
+          `${event.item} is chased at step ${event.body.index}, out of its ladder's order.`,
+        );
+      }
+      return { ...next, chase: { ...head.chase, next: head.chase.next + 1 } };
+    }
+    case 'WorkItemBreached':
+      return { ...next, breached: [...(head.breached ?? []), event.body.clock] };
     case 'WorkItemClosed': {
       if (head.outcome) throw new EvolveError(`${event.item} already has an outcome.`);
       const { lease_expires_at: _l, ...rest } = next;
@@ -177,8 +216,8 @@ export function evolveAll(head: WorkItem | null, events: readonly ItemEvent[]): 
 }
 
 /**
- * The tallies an event moves (ADR-0019 §2, §3 #11): closures by outcome and refusals by check and
- * class, per application per month — the rate the M2 gate asks for in one read. Items about no
+ * The tallies an event moves (ADR-0019 §2, §3 #11): closures by outcome, refusals by check and
+ * class, and breaches by clock, per application per month — the rate the M2 gate asks for in one read. Items about no
  * application are not tallied. The tally is derived; the events are how it is re-derived.
  */
 export function talliesOf(head: WorkItem, event: ItemEvent): string[] {
@@ -186,6 +225,7 @@ export function talliesOf(head: WorkItem, event: ItemEvent): string[] {
   if (!app) return [];
   const month = event.at.slice(0, 7);
   if (event.type === 'WorkItemClosed') return [`${app}#closed_${event.body.outcome}#${month}`];
+  if (event.type === 'WorkItemBreached') return [`${app}#breached_${event.body.clock}#${month}`];
   if (event.type === 'WorkItemClaimRefused') {
     return [`${app}#refused_${event.body.check}_${event.body.remediation_class ?? 'none'}#${month}`];
   }

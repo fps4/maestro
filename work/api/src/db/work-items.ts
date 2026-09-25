@@ -78,6 +78,15 @@ export class WorkItemRepository {
     return rows.map((r) => strip<WorkItem>(r));
   }
 
+  /** #6 — open items whose `next_at` has come: the sweep's read. */
+  async due(now: string): Promise<WorkItem[]> {
+    const rows = await this.b.items.query(this.b.keys.open, {
+      index: 'gsi1',
+      sk: { between: ['0', `${now}#~`] },
+    });
+    return rows.map((r) => strip<WorkItem>(r));
+  }
+
   /** #4 — what closed in a month, from `since` on. */
   async closedSince(since: string): Promise<WorkItem[]> {
     const rows = await this.b.items.query(this.b.keys.closed(since.slice(0, 7)), {

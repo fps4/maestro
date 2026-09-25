@@ -65,6 +65,8 @@ variables {
   bucket_name           = "aannemer-x-maestro-work"
   api_package           = "./tests/fixtures/app.zip"
   relay_package         = "./tests/fixtures/app.zip"
+  sweep_package         = "./tests/fixtures/app.zip"
+  sweep_principal       = "prn-w-work-demo"
   web_adapter_layer_arn = "arn:aws:lambda:eu-west-1:aws:layer:LambdaAdapterLayerArm64:30"
   environment = {
     AUTH_MODE     = "jwks"
@@ -348,4 +350,49 @@ run "archive_prefix_override" {
     condition     = aws_lambda_function.relay.environment[0].variables["ARCHIVE_PREFIX"] == "work/" && aws_lambda_function.relay.environment[0].variables["ARCHIVE_BUCKET"] == "aannemer-x-maestro-archive"
     error_message = "archive_prefix moves the relay's prefix and keeps the spine's bucket"
   }
+}
+
+run "sweep" {
+  command = plan
+
+  assert {
+    condition     = aws_lambda_function.sweep.handler == "index.handler" && aws_lambda_function.sweep.reserved_concurrent_executions == 1
+    error_message = "one sweep at a time, the bundle's handler"
+  }
+  assert {
+    condition     = aws_lambda_function.sweep.environment[0].variables["SWEEP_PRINCIPAL"] == "prn-w-work-demo" && aws_lambda_function.sweep.environment[0].variables["SWEEP_MODE"] == "off" && aws_lambda_function.sweep.environment[0].variables["RECORD_SINK"] == "off" && aws_lambda_function.sweep.environment[0].variables["TABLE_NAME"] == "maestro-work"
+    error_message = "the sweep acts as the named workload, on the table, relaying nothing"
+  }
+  assert {
+    condition     = aws_lambda_function.sweep.environment[0].variables["SLACK_WEBHOOK_URL"] == "mocked-secret-value"
+    error_message = "the sweep delivers ladder steps, so it carries the notifier's secret"
+  }
+  assert {
+    condition     = aws_lambda_function.api.environment[0].variables["SWEEP_MODE"] == "off"
+    error_message = "the API runs no sweep of its own: every container would keep the clocks"
+  }
+  assert {
+    condition     = strcontains(aws_iam_role_policy.sweep.policy, "dynamodb:TransactWriteItems") && !strcontains(aws_iam_role_policy.sweep.policy, "dynamodb:Scan") && !strcontains(aws_iam_role_policy.sweep.policy, "s3:DeleteObject")
+    error_message = "the sweep is granted the table's item operations and payload writes, never Scan or delete"
+  }
+  assert {
+    condition     = aws_scheduler_schedule.sweep.schedule_expression == "rate(1 minute)" && aws_scheduler_schedule.sweep.flexible_time_window[0].mode == "OFF"
+    error_message = "the sweep runs every minute, on the minute: a clock is late by at most that"
+  }
+  assert {
+    condition     = strcontains(aws_iam_role_policy.scheduler.policy, "lambda:InvokeFunction")
+    error_message = "the schedule may invoke the relay and the sweep"
+  }
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.sweep_silent.treat_missing_data == "breaching" && aws_cloudwatch_metric_alarm.sweep_silent.period == 900
+    error_message = "a sweep that has not run in fifteen minutes is an alarm: nothing is keeping the clocks"
+  }
+}
+
+run "sweep_principal_is_a_workload" {
+  command = plan
+  variables {
+    sweep_principal = "prn-h-someone"
+  }
+  expect_failures = [var.sweep_principal]
 }

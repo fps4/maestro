@@ -36,8 +36,11 @@ export class WorkspaceRegistry {
       applied_at: now,
       applied_by: appliedBy,
     });
-    for (const app of definition.applications) {
-      await this.store.control.principals.seen(app.accountable, 'human', now);
+    for (const human of new Set([
+      ...definition.applications.map((a) => a.accountable),
+      ...(definition.steward ? [definition.steward] : []),
+    ])) {
+      await this.store.control.principals.seen(human, 'human', now);
     }
     await this.store.control.workspaces.upsert(
       {

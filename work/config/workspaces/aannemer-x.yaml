@@ -15,6 +15,9 @@ seats:
   operations: { oversight_level: O2 }
   owner: { oversight_level: O0 }
 
+# Who answers for the workspace's commitments as a whole: the ladder's `escalate_steward` reaches them.
+steward: prn-h-demo-steward
+
 applications:
   # Governed: maestro holds change control, so a patch is within reach — an agent's too.
   - id: app1
@@ -57,6 +60,9 @@ policy:
     high: { class: remediation, resolve_within: P7D }
     medium: { fold_into: weekly_dependency_hygiene }
     low: { fold_into: weekly_dependency_hygiene }
+  # The steps before `breach` fire evenly across the window from opened_at to resolve_by; the breach
+  # is resolve_by itself. Every step is delivered through the notifier, and the delivery recorded.
   chase_ladders:
     standard: [reminder, chase, escalate_accountable, escalate_steward, breach]
+  chase_ladder: standard
   alerts: { slack_on_raise_at_or_above: sev2 }

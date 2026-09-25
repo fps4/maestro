@@ -1,5 +1,5 @@
 variable "name" {
-  description = "Prefix for every named resource: <name>-api, <name>-relay, their roles, schedule and alarms."
+  description = "Prefix for every named resource: <name>-api, <name>-relay, <name>-sweep, their roles, schedules and alarms."
   type        = string
   default     = "maestro-work"
 }
@@ -12,6 +12,36 @@ variable "api_package" {
 variable "relay_package" {
   description = "Path to the relay's zip, produced by `npm run bundle` in api/ (bundle/relay.zip)."
   type        = string
+}
+
+variable "sweep_package" {
+  description = "Path to the sweep's zip, produced by `npm run bundle` in api/ (bundle/sweep.zip)."
+  type        = string
+}
+
+variable "sweep_principal" {
+  description = "The workload principal the sweep acts as — identity-service's id for this service (prn-w-…). Every act the sweep records names it as `acting`; the item's accountable human stays `accountable`. The registry records it on the sweep's first run."
+  type        = string
+  validation {
+    condition     = can(regex("^prn-w-[a-z0-9][a-z0-9._-]{0,62}$", var.sweep_principal))
+    error_message = "sweep_principal is a workload principal id: prn-w-…"
+  }
+}
+
+variable "sweep_schedule" {
+  description = "EventBridge Scheduler expression for the sweep. A clock is late by at most this much (maestro ADR-0019 §6)."
+  type        = string
+  default     = "rate(1 minute)"
+}
+
+variable "sweep_memory_mb" {
+  type    = number
+  default = 512
+}
+
+variable "sweep_timeout_seconds" {
+  type    = number
+  default = 120
 }
 
 variable "web_adapter_layer_arn" {

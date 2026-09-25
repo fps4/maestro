@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import {
   claim,
+  heartbeat,
+  tick,
   raise,
   Refusal,
   release,
@@ -266,5 +268,109 @@ describe('the holder’s moves and closure', () => {
     expect(() => resolve(env(ALICE), closed, 'superseded', 'again')).toThrow(/written once/);
     const again = resolve(env(ALICE), item, 'superseded', 'x');
     expect(() => evolve(closed, again[0]!)).toThrow(EvolveError);
+  });
+});
+
+describe('tick — what the passing of time does', () => {
+  const SWEEP: Actor = { principal: 'prn-w-sweep', kind: 'workload', roles: [] };
+  // sev1 on tier2: respond 08:30, resolve 16:00; steps at 09:36, 11:12, 12:48, 14:24.
+  const deadline = () =>
+    raised({ class: 'remediation', title: 'x', application: 'app1', severity_hint: 'P1' });
+
+  it('puts the ladder on every item with a resolve_by, and orders the open set by what is next', () => {
+    const item = deadline();
+    expect(item.chase?.steps).toEqual(['reminder', 'chase', 'escalate_accountable', 'escalate_steward']);
+    expect(nextAt(item)).toBe('2026-09-25T08:30:00Z');
+    expect(raised({ class: 'support', title: 'no clocks' }).chase).toBeUndefined();
+  });
+
+  it('decides nothing before anything is due', () => {
+    expect(tick(env(SWEEP, '2026-09-25T08:29:59Z'), deadline())).toEqual([]);
+  });
+
+  it('breaches respond_by once, and not after someone responded', () => {
+    const late = tick(env(SWEEP, '2026-09-25T08:31:00Z'), deadline());
+    expect(late.map((e) => e.body)).toEqual([{ clock: 'respond_by', due: '2026-09-25T08:30:00Z' }]);
+    const after = apply(deadline(), late);
+    expect(nextAt(after)).toBe('2026-09-25T09:36:00Z');
+    expect(tick(env(SWEEP, '2026-09-25T08:40:00Z'), after)).toEqual([]);
+
+    const item = deadline();
+    const held = apply(item, claim(env(ALICE, '2026-09-25T08:10:00Z'), item).events);
+    expect(held.responded_at).toBe('2026-09-25T08:10:00Z');
+    expect(tick(env(SWEEP, '2026-09-25T08:31:00Z'), held).map((e) => e.type)).not.toContain(
+      'WorkItemBreached',
+    );
+  });
+
+  it('fires every step it missed, in order, then the breach — and closes nothing', () => {
+    const events = tick(env(SWEEP, '2026-09-25T16:00:00Z'), deadline());
+    const labels = events.map((e) => {
+      const body = e.body as { step?: string; clock?: string };
+      return [e.type, body.step ?? body.clock];
+    });
+    expect(labels).toEqual([
+      ['WorkItemBreached', 'respond_by'],
+      ['WorkItemChased', 'reminder'],
+      ['WorkItemChased', 'chase'],
+      ['WorkItemChased', 'escalate_accountable'],
+      ['WorkItemChased', 'escalate_steward'],
+      ['WorkItemBreached', 'resolve_by'],
+    ]);
+    const after = apply(deadline(), events);
+    expect(after.state).toBe('open');
+    expect(nextAt(after)).toBe(after.review_by);
+  });
+
+  it('reaches a human holder, never an agent, with a reminder', () => {
+    const item = deadline();
+    const byAgent = apply(item, claim(env(AGENT), item).events);
+    const [first] = tick(env(SWEEP, '2026-09-25T08:25:00Z'), byAgent);
+    expect(first).toBeUndefined();
+    const renewed = apply(byAgent, heartbeat(env(AGENT, '2026-09-25T09:30:00Z'), byAgent));
+    const chased = tick(env(SWEEP, '2026-09-25T09:36:00Z'), renewed).find((e) => e.type === 'WorkItemChased');
+    expect(chased?.body).toMatchObject({ step: 'reminder', to: 'prn-h-demo-owner' });
+    const byAlice = apply(item, claim(env(ALICE), item).events);
+    const toAlice = apply(byAlice, heartbeat(env(ALICE, '2026-09-25T09:30:00Z'), byAlice));
+    expect(
+      tick(env(SWEEP, '2026-09-25T09:36:00Z'), toAlice).find((e) => e.type === 'WorkItemChased')?.body,
+    ).toMatchObject({ to: 'prn-h-alice' });
+  });
+
+  it('stops chasing a resolved item', () => {
+    const item = raised({
+      class: 'remediation',
+      title: 'x',
+      application: 'app1',
+      severity_hint: 'P1',
+      evidence_plan: ['deploy_event'],
+    });
+    const held = apply(item, claim(env(ALICE), item).events);
+    const done = apply(held, resolve(env(ALICE), held, 'done'));
+    expect(done.state).toBe('resolved');
+    expect(tick(env(SWEEP, '2026-09-25T15:00:00Z'), done)).toEqual([]);
+  });
+
+  it('expires a lease, and a heartbeat moves it', () => {
+    const item = deadline();
+    const held = apply(item, claim(env(AGENT), item).events);
+    const renewed = apply(held, heartbeat(env(AGENT, '2026-09-25T08:20:00Z'), held));
+    expect(renewed).toMatchObject({
+      state: 'assigned',
+      lease_expires_at: '2026-09-25T08:50:00Z',
+      claimed_at: NOW,
+    });
+    expect(tick(env(SWEEP, '2026-09-25T08:45:00Z'), renewed)).toEqual([]);
+    const [released] = tick(env(SWEEP, '2026-09-25T08:51:00Z'), renewed);
+    expect(released).toMatchObject({
+      type: 'WorkItemReleased',
+      body: { released: 'prn-a-remed', reason: 'lease_expired' },
+    });
+    expect(() => heartbeat(env(ALICE), held)).toThrow(/Only the principal holding/);
+  });
+
+  it('closes an item past its review date expired', () => {
+    const [closed] = tick(env(SWEEP, '2026-10-25T08:00:00Z'), deadline());
+    expect(closed).toMatchObject({ type: 'WorkItemClosed', body: { outcome: 'expired' } });
   });
 });

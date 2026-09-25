@@ -8,7 +8,9 @@ import { typeKey, type TypeSchemas } from '@fps4/maestro-spine';
 import { z } from 'zod';
 import type { ItemEventType } from './events.js';
 import {
+  CHASE_STEPS,
   CLAIM_CHECKS,
+  CLOCKS,
   EVIDENCE_KINDS,
   ITEM_CLASSES,
   ONBOARDING_LEVELS,
@@ -46,6 +48,8 @@ const bodies: Record<ItemEventType, z.ZodTypeAny> = {
       review_by: instant,
       definition_version: z.number().int().positive(),
       consequence_class: z.string().regex(/^c[0-9]$/),
+      chase_ladder: id.optional(),
+      chase_steps: z.array(z.enum(CHASE_STEPS).exclude(['breach'])).optional(),
     })
     .strict(),
   WorkItemAssigned: z.object({ assigned_to: prn, lease_expires_at: instant }).strict(),
@@ -60,6 +64,15 @@ const bodies: Record<ItemEventType, z.ZodTypeAny> = {
   WorkItemReleased: z.object({ released: prn, reason: z.enum(['released', 'lease_expired']) }).strict(),
   WorkItemStateChanged: z.object({ from: z.enum(STATES), to: z.enum(STATES) }).strict(),
   WorkItemEscalated: z.object({ to: prn }).strict(),
+  WorkItemChased: z
+    .object({
+      step: z.enum(CHASE_STEPS).exclude(['breach']),
+      index: z.number().int().nonnegative(),
+      to: prn.optional(),
+      delivery: z.enum(['delivered', 'failed', 'no_recipient']),
+    })
+    .strict(),
+  WorkItemBreached: z.object({ clock: z.enum(CLOCKS), due: instant }).strict(),
   WorkItemClosed: z.object({ outcome: z.enum(OUTCOMES) }).strict(),
 };
 

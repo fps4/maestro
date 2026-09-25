@@ -49,6 +49,8 @@ module "work" {
   bucket_name           = "aannemer-x-maestro-work"
   api_package           = "${path.module}/../../../api/bundle/api.zip"
   relay_package         = "${path.module}/../../../api/bundle/relay.zip"
+  sweep_package         = "${path.module}/../../../api/bundle/sweep.zip"
+  sweep_principal       = "prn-w-work-demo"
   web_adapter_layer_arn = var.web_adapter_layer_arn
 
   environment = {

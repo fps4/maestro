@@ -68,6 +68,27 @@ export const BELOW_CORRECTNESS: readonly OnboardingLevel[] = ['n0', 'n1'];
 export const CLAIM_CHECKS = ['onboarding', 'seat', 'oversight', 'ceiling'] as const;
 export type ClaimCheck = (typeof CLAIM_CHECKS)[number];
 
+/** The steps a chase ladder may name (component page, "Time"). `breach` marks where the ladder ends. */
+export const CHASE_STEPS = [
+  'reminder',
+  'chase',
+  'escalate_accountable',
+  'escalate_steward',
+  'breach',
+] as const;
+export type ChaseStep = (typeof CHASE_STEPS)[number];
+
+/** The clocks that breach. A breach is recorded, never a closure. */
+export const CLOCKS = ['respond_by', 'resolve_by'] as const;
+export type Clock = (typeof CLOCKS)[number];
+
+/** Where an item stands on its chase ladder: the steps before the breach, and the next to fire. */
+export interface Chase {
+  ladder: string;
+  steps: Exclude<ChaseStep, 'breach'>[];
+  next: number;
+}
+
 export interface EvidenceEntry {
   kind: EvidenceKind;
   satisfied_at?: string;
@@ -113,6 +134,10 @@ export interface WorkItem {
   review_by: string;
   lease_expires_at?: string;
   claimed_at?: string;
+  /** The first claim: `respond_by` is met, and never breaches after. */
+  responded_at?: string;
+  chase?: Chase;
+  breached?: Clock[];
 
   state: State;
   outcome?: Outcome;
@@ -129,18 +154,39 @@ export const isHeld = (item: WorkItem): boolean =>
   ['assigned', 'in_progress', 'blocked'].includes(item.state);
 
 /**
- * When the item next needs attention: the earliest of its lease's expiry, `respond_by` while nobody
- * holds it, `resolve_by`, and `review_by`. The open set is sorted by it (ADR-0019 §6).
+ * When the ladder's next step fires. The steps before the breach are spread evenly across the window
+ * from `opened_at` to `resolve_by` — step i of k at (i + 1) / (k + 1) of it — and the breach is at
+ * `resolve_by` itself. None once the item is resolved: the act is done and evidence is owed.
+ */
+export function chaseAt(item: WorkItem): string | undefined {
+  const c = item.chase;
+  if (!c || !item.resolve_by || c.next >= c.steps.length || item.state === 'resolved') return undefined;
+  const opened = Date.parse(item.opened_at);
+  const window = Date.parse(item.resolve_by) - opened;
+  return iso(opened + Math.floor((window * (c.next + 1)) / (c.steps.length + 1)));
+}
+
+export const breached = (item: WorkItem, clock: Clock): boolean => item.breached?.includes(clock) ?? false;
+
+/**
+ * When the item next needs attention: the earliest of its lease's expiry, `respond_by` until someone
+ * has responded, the ladder's next step, `resolve_by` until it breaches, and `review_by`. The open
+ * set is sorted by it, and the sweep reads what is due (ADR-0019 §6).
  */
 export function nextAt(item: WorkItem): string {
   const candidates = [
-    item.lease_expires_at,
-    isHeld(item) ? undefined : item.respond_by,
-    item.state === 'resolved' ? undefined : item.resolve_by,
+    isHeld(item) ? item.lease_expires_at : undefined,
+    breached(item, 'respond_by') || (item.responded_at && item.responded_at <= (item.respond_by ?? ''))
+      ? undefined
+      : item.respond_by,
+    chaseAt(item),
+    item.state === 'resolved' || breached(item, 'resolve_by') ? undefined : item.resolve_by,
     item.review_by,
   ].filter((t): t is string => typeof t === 'string');
   return candidates.sort()[0]!;
 }
+
+export const iso = (ms: number): string => new Date(ms).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
 export const evidenceSatisfied = (item: WorkItem): boolean =>
   item.evidence_plan.every((e) => e.satisfied_at !== undefined);

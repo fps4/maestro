@@ -14,6 +14,7 @@ import type { Membership } from '../../src/db/handle.js';
 import { createTable, deleteTable } from '../../src/db/table.js';
 import { parseWorkspaceDefinition, type WorkspaceDefinition } from '../../src/domain/definition.js';
 import { kindOf } from '../../src/domain/ids.js';
+import type { Notice, Notifier } from '../../src/notify/notifier.js';
 import { WorkspaceRegistry } from '../../src/services/workspaces.js';
 
 export const DYNAMODB_ENDPOINT = process.env.DYNAMODB_ENDPOINT ?? 'http://127.0.0.1:8040';
@@ -27,7 +28,11 @@ export interface Harness {
   close(): Promise<void>;
 }
 
-export async function harness(name: string, now = '2026-09-25T08:00:00Z'): Promise<Harness> {
+export async function harness(
+  name: string,
+  now = '2026-09-25T08:00:00Z',
+  options: { notifier?: Notifier } = {},
+): Promise<Harness> {
   const dir = await mkdtemp(join(tmpdir(), `work-${name}-`));
   const table = `work-test-${name}-${Math.random().toString(36).slice(2, 8)}`;
   const config = loadConfig({
@@ -40,11 +45,15 @@ export async function harness(name: string, now = '2026-09-25T08:00:00Z'): Promi
     RECORD_ARCHIVE_DIR: join(dir, 'archive'),
     RECORD_PAYLOAD_DIR: join(dir, 'payloads'),
     RECORD_SINK_INTERVAL_MS: '3600000',
+    SWEEP_MODE: 'off',
   });
   const client = dynamoClientFor(config);
   await createTable(client, table);
   let clock = now;
-  const app = await buildApp(config, { now: () => clock });
+  const app = await buildApp(config, {
+    now: () => clock,
+    ...(options.notifier ? { notifier: options.notifier } : {}),
+  });
   return {
     app,
     config,
@@ -97,4 +106,15 @@ export async function demoWorkspace(
   await registerWorkspace(app, definition.workspace, members);
   await new WorkspaceRegistry(app.store).apply(definition, 'prn-h-operator', '2026-09-25T07:00:00Z');
   return definition;
+}
+
+/** A notifier that keeps what it was asked to deliver, and fails for the principals told to. */
+export class RecordingNotifier implements Notifier {
+  readonly notices: Notice[] = [];
+  readonly unreachable = new Set<string>();
+
+  async deliver(notice: Notice): Promise<'delivered' | 'failed'> {
+    this.notices.push(notice);
+    return this.unreachable.has(notice.to) ? 'failed' : 'delivered';
+  }
 }

@@ -20,10 +20,12 @@ import {
   seatFor,
   type WorkspaceDefinition,
 } from './definition.js';
-import type { Attribution, ItemEvent } from './events.js';
+import { evolve, type Attribution, type Chased, type ItemEvent } from './events.js';
 import type { PrincipalKind } from './ids.js';
 import {
   BELOW_CORRECTNESS,
+  breached,
+  chaseAt,
   CORRECTNESS_CLASSES,
   evidenceSatisfied,
   isHeld,
@@ -162,6 +164,14 @@ export function raise(env: Env, id: string, input: RaiseInput): ItemEvent[] {
         review_by: addDuration(now, policy.review_within),
         definition_version: definition.definition_version,
         consequence_class: definition.consequence_class,
+        ...(clocks && policy.chase_ladder
+          ? {
+              chase_ladder: policy.chase_ladder,
+              chase_steps: policy.chase_ladders[policy.chase_ladder]!.filter(
+                (step): step is Exclude<typeof step, 'breach'> => step !== 'breach',
+              ),
+            }
+          : {}),
       },
       payload: { title: input.title },
     },
@@ -382,5 +392,130 @@ export function resolve(env: Env, item: WorkItem, outcome: ResolveOutcome, reaso
     body: { outcome },
     payload: { reason },
   });
+  return events;
+}
+
+/** The holder renews its lease. Recorded, so a rebuilt head expires when the live one would. */
+export function heartbeat(env: Env, item: WorkItem): ItemEvent[] {
+  assertHolder(env, item, 'renew the lease on');
+  return [
+    {
+      type: 'WorkItemAssigned',
+      item: item.item_id,
+      at: env.now,
+      ...attribution(env, item),
+      body: {
+        assigned_to: item.assigned_to!,
+        lease_expires_at: addDuration(env.now, env.definition.policy.lease),
+      },
+    },
+  ];
+}
+
+/** Who a ladder step reaches: a human holder, else the accountable human; the steward by name. */
+function recipient(
+  definition: WorkspaceDefinition,
+  item: WorkItem,
+  step: Chased['body']['step'],
+): string | undefined {
+  switch (step) {
+    case 'reminder':
+    case 'chase':
+      return isHeld(item) && item.assigned_to?.startsWith('prn-h-') ? item.assigned_to : item.accountable;
+    case 'escalate_accountable':
+      return item.accountable;
+    case 'escalate_steward':
+      return definition.steward;
+  }
+}
+
+/**
+ * What the passing of time does to an item (ADR-0019 §6), decided at `env.now` by the sweep: an item
+ * past `review_by` closes `expired`; a lease past its expiry returns the item to `open` with the
+ * reason; an unmet `respond_by` or `resolve_by` is recorded as a breach — never a closure; each
+ * ladder step now due is a `WorkItemChased`. Steps missed while the sweep was down all fire, in order.
+ *
+ * A chase's `delivery` is `no_recipient` when the step names nobody, and `failed` until the caller
+ * delivers it through the notifier and records what happened.
+ */
+export function tick(env: Env, item: WorkItem): ItemEvent[] {
+  const { now, definition } = env;
+  if (item.state === 'closed') return [];
+  const by = attribution(env, item);
+
+  if (item.review_by <= now) {
+    return [
+      {
+        type: 'WorkItemClosed',
+        item: item.item_id,
+        at: now,
+        ...by,
+        body: { outcome: 'expired' },
+        payload: {
+          reason: `Open past its review date, ${item.review_by}; expiry is recorded, never a disappearance.`,
+        },
+      },
+    ];
+  }
+
+  const events: ItemEvent[] = [];
+  let head = item;
+  const push = (event: ItemEvent) => {
+    events.push(event);
+    head = evolve(head, event);
+  };
+
+  if (isHeld(head) && head.lease_expires_at && head.lease_expires_at <= now) {
+    push({
+      type: 'WorkItemReleased',
+      item: item.item_id,
+      at: now,
+      ...by,
+      body: { released: head.assigned_to!, reason: 'lease_expired' },
+    });
+  }
+  // Met only by a response in time: a first claim after `respond_by` is a late response, and the
+  // breach is recorded even if no sweep ran between the deadline and the claim.
+  const respondBy = head.respond_by;
+  if (
+    respondBy &&
+    respondBy <= now &&
+    !breached(head, 'respond_by') &&
+    (!head.responded_at || head.responded_at > respondBy)
+  ) {
+    push({
+      type: 'WorkItemBreached',
+      item: item.item_id,
+      at: now,
+      ...by,
+      body: { clock: 'respond_by', due: respondBy },
+    });
+  }
+  for (let due = chaseAt(head); due !== undefined && due <= now; due = chaseAt(head)) {
+    const index = head.chase!.next;
+    const step = head.chase!.steps[index]!;
+    const to = recipient(definition, head, step);
+    push({
+      type: 'WorkItemChased',
+      item: item.item_id,
+      at: now,
+      ...by,
+      body: { step, index, ...(to ? { to } : {}), delivery: to ? 'failed' : 'no_recipient' },
+    });
+  }
+  if (
+    head.resolve_by &&
+    head.state !== 'resolved' &&
+    !breached(head, 'resolve_by') &&
+    head.resolve_by <= now
+  ) {
+    push({
+      type: 'WorkItemBreached',
+      item: item.item_id,
+      at: now,
+      ...by,
+      body: { clock: 'resolve_by', due: head.resolve_by },
+    });
+  }
   return events;
 }

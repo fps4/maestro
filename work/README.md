@@ -82,7 +82,8 @@ that boots.
 | the payload store (`bucket_name`) | an item's title, a note, a reason; versioned, encrypted, never public, never Object-Locked |
 | `<name>-api` | the Fastify server behind the Lambda Web Adapter and an HTTP API Gateway; `RECORD_SINK=off` |
 | `<name>-relay` | the spine's relay handler over the outbox, every minute, one at a time |
-| four alarms | API 5xx; relay errors, silent, refused |
+| `<name>-sweep` | the clocks: leases, chase-ladder steps through the notifier, breaches, expiry — every minute, one at a time, acting as `sweep_principal` |
+| six alarms | API 5xx; relay errors, silent, refused; sweep errors, silent |
 
 Inputs are specs-service's module's (`name`, `table_name`, `bucket_name`, `api_package`,
 `relay_package`, `web_adapter_layer_arn`, `environment`, `secrets`, `archive`, …) plus
@@ -91,14 +92,15 @@ writer, so two components relaying the same workspace slug into the same prefix 
 second one's `seq 1` is refused. Give this component its own prefix, and a sealer that seals it.
 
 ```bash
-cd api && npm ci && npm run bundle && npm run sbom   # bundle/api.zip, bundle/relay.zip, SBOMs beside them
+cd api && npm ci && npm run bundle && npm run sbom   # bundle/{api,relay,sweep}.zip, SBOMs beside them
 ```
 
 ## Status
 
 M2 in progress: the work item — raise, claim with authority checked, release, resolve, the
-frontier, the rates, the rebuild — is in. Clocks and the sweep, evidence and intake, and the MCP
-tracker contract follow. See maestro's [roadmap](https://github.com/fps4/maestro/blob/main/docs/roadmap.md).
+frontier, the rates, the rebuild — and its clocks — leases and heartbeats, the chase ladder through
+the notifier (a log line locally, a Slack webhook on AWS), breaches, expiry, the sweep — are in.
+Evidence and intake, and the MCP tracker contract, follow. See maestro's [roadmap](https://github.com/fps4/maestro/blob/main/docs/roadmap.md).
 
 ## Licence
 

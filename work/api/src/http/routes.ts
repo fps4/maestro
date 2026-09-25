@@ -149,6 +149,13 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
       : { result: 'refused', check: result.check, sentence: result.sentence, item };
   });
 
+  /** The holder renews its lease. */
+  app.post<ItemParams>('/v1/workspaces/:ws/items/:id/heartbeat', async (request) => {
+    const ctx = await contextFor(deps, request);
+    const item = await items.heartbeat(ctx, request.params.id);
+    return { item, lease_expires_at: item.lease_expires_at };
+  });
+
   app.post<ItemParams>('/v1/workspaces/:ws/items/:id/release', async (request) => {
     const ctx = await contextFor(deps, request);
     return { item: await items.release(ctx, request.params.id) };

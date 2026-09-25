@@ -33,3 +33,7 @@ output "api_function_name" {
 output "relay_function_name" {
   value = aws_lambda_function.relay.function_name
 }
+
+output "sweep_function_name" {
+  value = aws_lambda_function.sweep.function_name
+}

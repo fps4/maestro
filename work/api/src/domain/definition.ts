@@ -13,6 +13,7 @@ import { OVERSIGHT_LEVELS } from '@fps4/maestro-spine';
 import { z } from 'zod';
 import { PRINCIPAL_ID } from './ids.js';
 import {
+  CHASE_STEPS,
   ITEM_CLASSES,
   ONBOARDING_LEVELS,
   REMEDIATION_CLASSES,
@@ -107,7 +108,14 @@ const policy = z
     // Read by later slices (intake, the notifier). Declared now so a tenant's policy file validates
     // whole; a registry can take the fields over later.
     advisories: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),
-    chase_ladders: z.record(identifier, z.array(identifier)).default({}),
+    /**
+     * Named ladders of steps (reminder, chase, escalate_accountable, escalate_steward, breach). The
+     * steps before `breach` fire evenly across an item's window from `opened_at` to `resolve_by`; the
+     * breach is `resolve_by` itself, and is recorded whether a ladder names it or not.
+     */
+    chase_ladders: z.record(identifier, z.array(z.enum(CHASE_STEPS)).min(1)).default({}),
+    /** The ladder every item with a `resolve_by` is chased on. None, and nothing is chased. */
+    chase_ladder: identifier.optional(),
     alerts: z.record(z.string(), z.unknown()).default({}),
   })
   .strict();
@@ -122,6 +130,8 @@ const definitionSchema = z
     /** How much a thing matters if wrong; carried on every event. */
     consequence_class: z.string().regex(/^c[0-9]$/),
     seats: z.record(identifier, seat),
+    /** The human `escalate_steward` reaches: who answers for the workspace's commitments as a whole. */
+    steward: human.optional(),
     applications: z.array(application).default([]),
     policy: policy.default({}),
   })

@@ -15,6 +15,16 @@ variable "archive_prefix" {
   default     = ""
 }
 
+variable "sealed_prefixes" {
+  description = "Further writer streams the sealer seals, each a prefix inside archive_prefix — e.g. [\"work/\"] for a component whose workspaces share their ids with another's (the sequence is per workspace and per writer). Give that component's module the same prefix as its archive_prefix. Empty: the sealer seals the root alone."
+  type        = list(string)
+  default     = []
+  validation {
+    condition     = alltrue([for p in var.sealed_prefixes : can(regex("^[a-z0-9][a-z0-9-]*/?$", p)) && !startswith(p, "ws-")])
+    error_message = "Each sealed prefix is one lower-case path segment (\"work/\"), and never starts with ws- — that would read as a workspace."
+  }
+}
+
 variable "object_lock_mode" {
   description = "Object Lock default retention mode. GOVERNANCE keeps an account administrator able to clean up a mistake; COMPLIANCE makes every written object immovable for the retention period, by anyone."
   type        = string

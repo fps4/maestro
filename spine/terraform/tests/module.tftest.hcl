@@ -173,3 +173,22 @@ run "rejects_an_unknown_lock_mode" {
 
   expect_failures = [var.object_lock_mode]
 }
+
+run "sealed_prefixes" {
+  command = plan
+  variables {
+    sealed_prefixes = ["work/"]
+  }
+  assert {
+    condition     = aws_lambda_function.sealer.environment[0].variables["SEALED_PREFIXES"] == "work/"
+    error_message = "the sealer is told which further streams to seal"
+  }
+}
+
+run "sealed_prefix_is_not_a_workspace" {
+  command = plan
+  variables {
+    sealed_prefixes = ["ws-work/"]
+  }
+  expect_failures = [var.sealed_prefixes]
+}

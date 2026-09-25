@@ -74,6 +74,8 @@ s3://<tenant-archive>/<workspace>/<yyyy-mm-dd>/segment.json               the ma
 s3://<tenant-archive>/<workspace>/head.json                               the relay's pointer; not part of the record
 ```
 
+`seq` is per workspace **and per writer**. Two components that write the same workspace — specs-service and work-service both write `ws-<tenant>-ops` — cannot share a prefix, or the second one's `seq 1` is refused as a duplicate. The first writer of a workspace keeps the root; each further writer relays under its own **stream** prefix (`work/ws-<tenant>-ops/…`), which the spine module's `sealed_prefixes` names so the sealer seals it exactly as it seals the root, and names it on its digests. A verifier is pointed at the stream's folder as its root. The workspace id stays the same across streams: it is one workspace, recorded by two writers.
+
 The day is the archive's day — the UTC date the relay wrote the batch — not the date the events occurred; each event carries its own `occurred_at` and `recorded_at`. The day is a physical partition, and `seq` running contiguously across segments is what guarantees nothing fell between two of them. A day with no events has no segment. The sealer runs after midnight over every day before the current one and produces the **segment manifest**:
 
 ```yaml

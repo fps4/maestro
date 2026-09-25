@@ -187,6 +187,7 @@ resource "aws_lambda_function" "sealer" {
       ARCHIVE_BUCKET   = aws_s3_bucket.archive.bucket
       ARCHIVE_PREFIX   = var.archive_prefix
       DIGEST_TOPIC_ARN = aws_sns_topic.digests.arn
+      SEALED_PREFIXES  = join(",", var.sealed_prefixes)
     }
   }
 

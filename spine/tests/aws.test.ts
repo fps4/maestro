@@ -4,7 +4,7 @@ import { S3Archive } from '../src/archive/s3.js';
 import { append, readDay, sealDay, verifyRange } from '../src/archive/writer.js';
 import { SnsFifoDelivery } from '../src/delivery/sns.js';
 import { eventLine, parseEventLine } from '../src/domain/segment.js';
-import { digestNotice, runSealer } from '../src/lambda/sealer.js';
+import { digestNotice, runSealer, streamsFrom } from '../src/lambda/sealer.js';
 import { relayHandler } from '../src/lambda/relay.js';
 import { MemoryOutbox } from '../src/relay/memory.js';
 import { relayOnce, relayUntilDrained } from '../src/relay/relay.js';
@@ -193,5 +193,46 @@ describe('the sealer', () => {
     expect(n.text.split('\n')[0]).toBe(`maestro sealed ${WS} ${DAY1}`);
     expect(n.text).toContain('previous  (first segment)');
     expect(n.subject.length).toBeLessThanOrEqual(100);
+  });
+
+  it('seals a further stream under its own prefix, where the same workspace counts its own seq', async () => {
+    const root = new MemoryArchive();
+    const work = new MemoryArchive();
+    await append(root, [event(1), event(2)], DAY1);
+    await append(work, [event(1)], DAY1); // the same workspace, another writer: seq 1 again
+    const sns = new FakeSns();
+    const report = await runSealer({
+      archive: root,
+      streams: [{ prefix: 'work/', archive: work }],
+      digests: { client: sns, topicArn: 'arn:aws:sns:eu-west-1::d' },
+      today: () => DAY2,
+      log: () => {},
+    });
+    expect(report.sealed.map((s) => [s.stream ?? '', s.workspace_id, s.last_seq])).toEqual([
+      ['', WS, 2],
+      ['work/', WS, 1],
+    ]);
+    expect((await verifyRange(work, WS)).ok).toBe(true);
+    expect(sns.published.map((p) => p.Subject!.split(' ').slice(0, 3).join(' '))).toEqual([
+      `maestro sealed ${WS}`,
+      `maestro sealed work/${WS}`,
+    ]);
+    expect(sns.published[1]!.MessageAttributes?.stream?.StringValue).toBe('work/');
+  });
+
+  it('reads its streams from the environment, inside the archive prefix, never as a workspace', () => {
+    const streams = streamsFrom({
+      ARCHIVE_BUCKET: 'b',
+      ARCHIVE_PREFIX: 'tenant/',
+      SEALED_PREFIXES: 'work/, runtime',
+    });
+    expect(streams.map((s) => [s.prefix, s.archive.prefix])).toEqual([
+      ['work/', 'tenant/work/'],
+      ['runtime/', 'tenant/runtime/'],
+    ]);
+    expect(streamsFrom({ ARCHIVE_BUCKET: 'b' })).toEqual([]);
+    expect(() => streamsFrom({ ARCHIVE_BUCKET: 'b', SEALED_PREFIXES: 'ws-x' })).toThrow(
+      /reads as a workspace/,
+    );
   });
 });

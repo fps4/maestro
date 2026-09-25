@@ -36,9 +36,12 @@ One meaning per word, across every component and document. If a component needs 
 | **Severity** | SEV1–4, resolved from policy (signal kind × application tier), never typed in. |
 | **Policy** | The tenant's rules: severity × tier → clocks; agent ceilings by class; chase ladders; SEV↔P mapping. Configuration in work-service. |
 | **Claim** | A principal taking a work item. Authority is checked at claim and refused, never warned. |
+| **Lease** | How long a claim holds without a heartbeat. An expired lease returns the item to `open` with the reason recorded; `accountable` does not move. |
 | **Evidence plan** | The facts that must exist for an item to close `done` — a merged change, a deploy event, an alarm back to OK. Satisfied by events, not by typing "done". |
 | **Outcome** | Write-once at closure: done, superseded, escalated_out, refused, expired. |
 | **Milestone** | A dated objective several items roll up to; the board groups by it. |
+| **Fold** | A policy row that gathers low-weight findings — medium and low advisories — into one recurring `obligation` per period instead of an item each. |
+| **Tracker contract** | The six operations an agent works a board through — publish, fetch, claim, resolve, frontier, blocking — as work-service's MCP server implements them. A skill written against it works unchanged. |
 
 ## What runs
 

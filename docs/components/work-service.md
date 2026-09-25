@@ -1,6 +1,6 @@
 # work-service
 
-**Repository:** `fps4/maestro-work` · **Status:** next (M2) · **Decisions:** [ADR-0009](../decisions/0009-one-severity-scale.md), [ADR-0012](../decisions/0012-the-application-owns-detection-maestro-owns-response.md)
+**Repository:** [`fps4/maestro-work`](https://github.com/fps4/maestro-work) · **Status:** building (M2) · **Decisions:** [ADR-0009](../decisions/0009-one-severity-scale.md), [ADR-0012](../decisions/0012-the-application-owns-detection-maestro-owns-response.md), [ADR-0019](../decisions/0019-work-services-table.md) (the table, proposed)
 
 Who owes what, by when, under whose authority — and whether it happened. The component that turns signals into commitments, checks authority when work is claimed, derives every clock from policy, and records every outcome. Its MCP server is the board agents work from.
 
@@ -54,6 +54,8 @@ work_item:
 ```
 
 Envelope rules: `accountable` is a human and never moves; the authority fields are resolved by the service from runtime-service and policy, never accepted from the caller; `oversight_level` is copied on; `outcome` is write-once and mandatory at closure.
+
+Every person and agent on an item — `accountable`, `assigned_to`, the `acting` of each event — is an identity-service principal id, the `prn` claim its tokens carry (`prn-h-…` a human, `prn-a-…` an agent, `prn-w-…` a workload). work-service mints no ids for principals; it keeps a registry of the ones it has seen so the relay can check `accountable` is a human.
 
 ## Six classes
 
@@ -126,6 +128,15 @@ Fields exist from the first build so a registry can take them over later.
 
 Work is offered to a seat and claimed by a principal. A claim is held under a lease with a heartbeat; expiry returns the item to `open` with a recorded reason. The agent principal, the accountable human and the service account are three separately resolvable principals on every item. An agent-raised item inherits the raising seat's ceiling.
 
+A claim runs the [three checks](../governance-model.md#authority-at-claim), and a refusal is a result, recorded and counted, never an error the caller can retry past:
+
+| Check that failed | What happens to the item | Counted as |
+|---|---|---|
+| the remediation class is above what the application's onboarding level permits — a patch on N1 | escalated to the accountable human and closed `escalated_out`: maestro's commitment ends, the owner takes the act in their own process | `escalated_out` for the application, and a refusal by check and class |
+| the principal's seat may not act at this oversight level, or the class is above the agent's ceiling | stays `open` for a principal who may | a refusal against the seat |
+
+The rate the M2 gate asks for — `escalated_out` per application — is one read of the workspace's tallies ([ADR-0019](../decisions/0019-work-services-table.md#3-access-patterns)).
+
 ## Evidence
 
 Each `evidence_plan` entry names a fact and the event that satisfies it: `merged_change` (GitHub), `deploy_event` (runtime-service), `signal_ok` / `rescan_clear` (signals intake), `decision_accepted` (specs-service). An item closes `done` when all are satisfied; a person may close `refused` with a reason (the VEX case) or `escalated_out`.
@@ -140,11 +151,22 @@ The frontier (what is owed now, by whom, with the next human touchpoint) and a k
 |---|---|
 | `raise`, `claim`, `release`, `transition(state, outcome?)`, `annotate` | console, API, MCP |
 | `signals` | API (adapters) |
-| `get`, `list`, `query`, `frontier`, `board`, `blocking` | console, API, MCP |
+| `get`, `list`, `query`, `frontier`, `board`, `blocking`, `rates` | console, API, MCP |
 | `export(workspace)` | API |
 | *accept anything*, *set an authority field* | **not exposed** |
 
-MCP implements the tracker contract — publish / fetch / claim / resolve / frontier / blocking — as the acceptance test; a skill written against that contract works unchanged.
+MCP implements the **tracker contract** — publish / fetch / claim / resolve / frontier / blocking — as the acceptance test; a skill written against that contract works unchanged. The contract, per workspace:
+
+| Operation | Input | Returns | Refuses |
+|---|---|---|---|
+| `publish` | `class`, `title`; what it is about (an application and environment, or a subject); optionally `parent`, `milestone`, `blocked_by`, `remediation_class`, `severity_hint`, an `evidence_plan` from the fixed vocabulary; a caller's `key` that makes a retry return the same item | the item as raised — id, severity, clocks, accountable, evidence plan | an authority field in the input (`severity`, a clock, `onboarding_level`, `accountable`, `oversight_level`) — those are resolved, never accepted; a correctness-shaped commitment on an N1 application |
+| `fetch` | `item` | the item, each evidence entry with the fact that satisfied it, its clocks, its edges, the next human touchpoint | — |
+| `claim` | `item` | `claimed`: the item and the lease's expiry — or `refused`: the check, the sentence, and the item as the refusal left it | nothing: a refusal is an answer |
+| `resolve` | `item`, `outcome` — `done`, or `refused` · `escalated_out` · `superseded` with a `reason` | the item. `done` marks the act performed: the item is `resolved`, and closes `done` when its evidence plan is satisfied — at once if it already is | `done` from anyone but the holder; any outcome on a closed item |
+| `frontier` | optionally `for` (`me`, or a principal), `application`, `milestone`, `limit` | rows soonest-due first: id, class, about, accountable, acting, state, severity, due, next human touchpoint | — |
+| `blocking` | `item` | `blocked_by` — the open items it waits on — and `blocks` — the items waiting on it | — |
+
+Outside the contract, for the principal holding an item: `heartbeat` (renew the lease), `release`, `link` (a pull request or a specs-service artifact — what arms `merged_change` and `decision_accepted`), `block`. Against the M2 gate: the advisory lane runs through intake and evidence with no agent, and so needs none of these; the refused claim is `claim`'s `refused`; the rate is the tallies. A run that opens a pull request (M3) needs `link`, which is the one addition the contract is likely to want.
 
 ## Ports
 

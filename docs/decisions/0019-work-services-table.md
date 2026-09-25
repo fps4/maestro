@@ -1,6 +1,6 @@
 # ADR-0019 · work-service's table: a partition per item, the open set as an index, clocks by a sweep
 
-**Status:** proposed · 2026-09-25 · applies [ADR-0018](0018-dynamodb-is-the-mvp-database.md) to [work-service](../components/work-service.md); follows [ADR-0009](0009-one-severity-scale.md) and [ADR-0012](0012-the-application-owns-detection-maestro-owns-response.md)
+**Status:** accepted · 2026-09-25 · applies [ADR-0018](0018-dynamodb-is-the-mvp-database.md) to [work-service](../components/work-service.md); follows [ADR-0009](0009-one-severity-scale.md) and [ADR-0012](0012-the-application-owns-detection-maestro-owns-response.md)
 
 ## Context
 
@@ -140,15 +140,15 @@ The API, the relay and the sweep are granted the item operations the code sends 
 - Clocks are late by up to a minute, and the sweep is one more scheduled function and alarm in the module.
 - An evidence fact that arrives before its entry is armed is dropped, by design; the order of the plan is the order of the world.
 
-## Open
+## Decided at acceptance
 
-Decided here only as far as the table needs; each is the architect's to confirm or change:
+The five points left open when this was proposed, each taken as recommended:
 
-1. **Clocks by sweep** rather than a schedule per item (§6) — recommended.
-2. **Frontier, board and Today filtered in memory** over the open set until it outgrows a page (§3) — recommended; the alternative is per-person and per-milestone indexes now.
-3. **Evidence in plan order**, deploy matched by application × environment × time until M4 (§5) — recommended.
-4. **Item ids from a counter** (`wrk-<n>`) rather than random (§2) — recommended; the cost is a counter item in the raising transaction.
-5. **The fold's period is the ISO week in UTC** (§7) — recommended until a tenant asks for its own timezone.
+1. **Clocks by sweep**, not a schedule per item (§6).
+2. **Frontier, board and Today filtered in memory** over the open set until it outgrows a page (§3); no per-person or per-milestone index yet.
+3. **Evidence in plan order**; `deploy_event` matched by application × environment × time until runtime-service's ledger (M4) (§5).
+4. **Item ids from the workspace's counter** (`wrk-<n>`) (§2).
+5. **The fold's period is the ISO week in UTC** (§7), until a tenant asks for its own timezone.
 
 ## What would reopen it
 

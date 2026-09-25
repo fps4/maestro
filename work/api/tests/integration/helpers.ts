@@ -12,7 +12,9 @@ import { loadConfig, type Config } from '../../src/config.js';
 import { dynamoClientFor } from '../../src/db/client.js';
 import type { Membership } from '../../src/db/handle.js';
 import { createTable, deleteTable } from '../../src/db/table.js';
+import { parseWorkspaceDefinition, type WorkspaceDefinition } from '../../src/domain/definition.js';
 import { kindOf } from '../../src/domain/ids.js';
+import { WorkspaceRegistry } from '../../src/services/workspaces.js';
 
 export const DYNAMODB_ENDPOINT = process.env.DYNAMODB_ENDPOINT ?? 'http://127.0.0.1:8040';
 
@@ -77,3 +79,22 @@ export async function registerWorkspace(
 export const bearer = (principal: string, roles: string[] = []) => ({
   authorization: `Bearer dev:${principal}${roles.length ? `:${roles.join(',')}` : ''}`,
 });
+
+/** The demo tenant's definition, from the repository's own `config/`. */
+export async function demoDefinition(): Promise<WorkspaceDefinition> {
+  const { readFile } = await import('node:fs/promises');
+  const { parse } = await import('yaml');
+  const path = join(__dirname, '../../../config/workspaces/aannemer-x.yaml');
+  return parseWorkspaceDefinition(parse(await readFile(path, 'utf8')));
+}
+
+/** Register the demo workspace, apply its definition, and admit its members. */
+export async function demoWorkspace(
+  app: App,
+  members: Array<Pick<Membership, 'principal' | 'roles' | 'accountable'>>,
+): Promise<WorkspaceDefinition> {
+  const definition = await demoDefinition();
+  await registerWorkspace(app, definition.workspace, members);
+  await new WorkspaceRegistry(app.store).apply(definition, 'prn-h-operator', '2026-09-25T07:00:00Z');
+  return definition;
+}

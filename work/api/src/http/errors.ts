@@ -8,6 +8,8 @@ import { Forbidden } from '../auth/context.js';
 import { Unauthenticated } from '../auth/verify.js';
 import { ProjectionBehind, UnknownWorkspace } from '../db/client.js';
 import { Conflict, IsolationViolation } from '../db/items.js';
+import { DefinitionError } from '../domain/definition.js';
+import { Refusal } from '../domain/decide.js';
 
 /** Something the caller named does not exist in this workspace. */
 export class NotFound extends Error {
@@ -31,7 +33,7 @@ export function statusOf(error: unknown): number {
   if (error instanceof Forbidden || error instanceof IsolationViolation) return 403;
   if (error instanceof NotFound || error instanceof UnknownWorkspace) return 404;
   if (error instanceof Conflict) return 409;
-  if (error instanceof Refused) return 422;
+  if (error instanceof Refused || error instanceof Refusal || error instanceof DefinitionError) return 422;
   if (error instanceof ProjectionBehind) return 503;
   const status = (error as FastifyError).statusCode;
   return typeof status === 'number' && status >= 400 && status < 500 ? status : 500;

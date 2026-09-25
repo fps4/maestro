@@ -2,7 +2,7 @@
   "name": "@fps4/maestro-work-api",
   "version": "0.1.0",
   "private": true,
-  "description": "work-service — who owes what, by when, under whose authority, and whether it happened.",
+  "description": "work-service \u2014 who owes what, by when, under whose authority, and whether it happened.",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -19,7 +19,10 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
-    "table:create": "tsx src/cli/create-table.ts"
+    "table:create": "tsx src/cli/create-table.ts",
+    "workspace:apply": "tsx src/cli/apply-workspace.ts",
+    "workspace:member": "tsx src/cli/member.ts",
+    "workspace:rebuild": "tsx src/cli/rebuild.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.716.0",

@@ -13,6 +13,7 @@ import type { SpineEvent } from '@fps4/maestro-spine';
 import { Conflict, Items, strip, type Item, type Transaction } from './items.js';
 import { KINDS, workspaceKeys, type WorkspaceKeys } from './keys.js';
 import { PK } from './table.js';
+import { RequestRepository, TallyRepository, WorkItemRepository } from './work-items.js';
 
 export { Conflict, IsolationViolation, Transaction } from './items.js';
 
@@ -107,6 +108,11 @@ export class OutboxRepository {
     tx.insert(outboxToItem(this.b.keys, row), `Outbox seq ${row.seq} is already taken.`);
   }
 
+  /** A rebuild's: rows restored from the archive, already delivered. */
+  async insertMany(rows: OutboxRow[]): Promise<void> {
+    await this.b.items.batchWrite(rows.map((row) => outboxToItem(this.b.keys, row)));
+  }
+
   /** Delivered: leave the pending index, count the attempt. Idempotent. */
   async ack(seq: number, at: string): Promise<void> {
     await this.b.items.update(this.b.keys.outboxItem(seq), {
@@ -140,6 +146,13 @@ export class CounterRepository {
       retry: true,
     });
   }
+
+  /** A rebuild's: the counters the emitting transactions would have left. */
+  async putMany(counters: Array<{ name: string; value: number }>): Promise<void> {
+    await this.b.items.batchWrite(
+      counters.map((c) => ({ ...this.b.keys.counter(c.name), kind: KINDS.counter, value: c.value })),
+    );
+  }
 }
 
 export class MetaRepository {
@@ -148,6 +161,10 @@ export class MetaRepository {
   async get(): Promise<ProjectionMeta | null> {
     const item = await this.b.items.get(this.b.keys.meta());
     return item ? strip<ProjectionMeta>(item) : null;
+  }
+
+  async put(meta: ProjectionMeta): Promise<void> {
+    await this.b.items.put({ ...this.b.keys.meta(), kind: KINDS.meta, ...meta });
   }
 
   /** Stamp a workspace nothing has stamped; leave an existing stamp alone. */
@@ -167,6 +184,9 @@ export interface WorkspaceHandle {
   readonly outbox: OutboxRepository;
   readonly counters: CounterRepository;
   readonly meta: MetaRepository;
+  readonly items: WorkItemRepository;
+  readonly tallies: TallyRepository;
+  readonly requests: RequestRepository;
   /**
    * One transaction over this workspace's items: `work` reads what it needs and stages its writes
    * on `tx`, each with the condition that makes its reads still true; the commit is all or nothing.
@@ -193,6 +213,9 @@ export function workspaceHandle(
     outbox: new OutboxRepository(b),
     counters: new CounterRepository(b),
     meta: new MetaRepository(b),
+    items: new WorkItemRepository(b),
+    tallies: new TallyRepository(b),
+    requests: new RequestRepository(b),
     async transaction<T>(work: (tx: Transaction) => Promise<T>): Promise<T> {
       for (let attempt = 1; ; attempt += 1) {
         const tx = b.items.transaction();

@@ -43,6 +43,15 @@ make test       # each test file makes and drops its own table
 make up         # DynamoDB Local and the api on :8041, the record sink a local directory
 ```
 
+Then, against the table the service reads:
+
+```bash
+cd api
+npm run workspace:apply -- ../config/workspaces/aannemer-x.yaml      # seats, applications, policy
+npm run workspace:member -- aannemer-x --prn prn-h-alice --roles operations
+npm run workspace:rebuild -- --workspace aannemer-x --force         # from the archive alone
+```
+
 Configuration is environment only; `api/src/config.ts` is the schema. `TABLE_NAME` is required;
 `DYNAMODB_ENDPOINT` names DynamoDB Local; `AUTH_MODE=dev` takes `Bearer dev:<prn>[:role,role]` and
 is refused in production; `AUTH_MODE=jwks` with `AUTH_JWKS_URL`, `AUTH_ISSUER`, `AUTH_AUDIENCE`
@@ -87,7 +96,9 @@ cd api && npm ci && npm run bundle && npm run sbom   # bundle/api.zip, bundle/re
 
 ## Status
 
-M2, first slice, in progress. See maestro's [roadmap](https://github.com/fps4/maestro/blob/main/docs/roadmap.md).
+M2 in progress: the work item — raise, claim with authority checked, release, resolve, the
+frontier, the rates, the rebuild — is in. Clocks and the sweep, evidence and intake, and the MCP
+tracker contract follow. See maestro's [roadmap](https://github.com/fps4/maestro/blob/main/docs/roadmap.md).
 
 ## Licence
 

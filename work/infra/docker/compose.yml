@@ -1,0 +1,88 @@
+# The mstr-work stack — the local development loop. Not a deployment target: the service deploys
+# to AWS from the Terraform module in terraform/ (maestro ADR-0002, ADR-0016).
+#
+#   make up
+#
+# The record sink is `local`: the outbox relays to ./archive in the container, readable by
+# `spine-verify`. Payloads go to a directory beside it; MinIO is not needed for the loop.
+
+name: mstr-work
+
+services:
+  # DynamoDB Local in place of the table the module makes on AWS (maestro ADR-0018). A unique
+  # network alias, because Docker's DNS answers across every attached network and another stack's
+  # `dynamodb` must never be the one this api reaches.
+  dynamodb:
+    image: amazon/dynamodb-local:latest
+    restart: unless-stopped
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/home/dynamodblocal/data"]
+    user: root
+    networks:
+      default:
+        aliases:
+          - mstr-work-dynamodb
+    ports:
+      # 8040: collides with neither identity-service's DynamoDB Local (8000) nor specs-service's (8030).
+      - "${DYNAMODB_BIND:-127.0.0.1}:${DYNAMODB_PORT:-8040}:8000"
+    volumes:
+      - work-dynamodata:/home/dynamodblocal/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8000/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  # One-shot: the table from table.ts on an empty store; a no-op on an existing one.
+  dynamodb-init:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    image: mstr-work-api:${IMAGE_TAG:-dev}
+    restart: "no"
+    depends_on:
+      dynamodb:
+        condition: service_healthy
+    environment:
+      TABLE_NAME: ${TABLE_NAME:-work}
+      DYNAMODB_ENDPOINT: http://mstr-work-dynamodb:8000
+      AWS_REGION: ${AWS_REGION:-local}
+    command: ["node", "dist/cli/create-table.js"]
+
+  api:
+    image: mstr-work-api:${IMAGE_TAG:-dev}
+    container_name: mstr-work-api
+    restart: unless-stopped
+    depends_on:
+      dynamodb-init:
+        condition: service_completed_successfully
+    environment:
+      WORK_ENV: ${WORK_ENV:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TABLE_NAME: ${TABLE_NAME:-work}
+      DYNAMODB_ENDPOINT: http://mstr-work-dynamodb:8000
+      AWS_REGION: ${AWS_REGION:-local}
+      # `dev` believes the bearer (`dev:<prn>`); refused when WORK_ENV/NODE_ENV say production.
+      AUTH_MODE: ${AUTH_MODE:-dev}
+      AUTH_JWKS_URL: ${AUTH_JWKS_URL:-}
+      AUTH_ISSUER: ${AUTH_ISSUER:-}
+      AUTH_AUDIENCE: ${AUTH_AUDIENCE:-}
+      MCP_RESOURCE_URL: ${MCP_RESOURCE_URL:-}
+      RECORD_SINK: local
+      RECORD_ARCHIVE_DIR: /api/data/archive
+      RECORD_PAYLOAD_DIR: /api/data/payloads
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    volumes:
+      - work-data:/api/data
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8041}:8000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 25s
+
+volumes:
+  work-dynamodata:
+  work-data:

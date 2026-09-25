@@ -1,0 +1,93 @@
+name: dod
+
+# The Definition-of-Done gate. Every job is blocking.
+#
+# GitHub-hosted runners only (maestro ADR-0017: a self-hosted runner on a public repository runs
+# strangers' code). Every job builds an image and runs in it, so the gate is what a laptop can run
+# with Docker and nothing else. Nothing deploys from here; a tenant's pipeline does.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dod-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secret-scan:
+    # No credentials committed. The gitleaks binary rather than the Action, which needs a paid
+    # organisation licence.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: gitleaks
+        run: |
+          TAG=mw-gitleaks:${{ github.run_id }}-${{ github.run_attempt }}
+          docker build -t "$TAG" -f infra/docker/gitleaks.Dockerfile .
+          docker run --rm "$TAG" detect --no-git --source=/repo --config=/repo/.gitleaks.toml --redact --no-banner
+
+  api-build:
+    # Building the api image runs typecheck, lint and the compile (see api.Dockerfile): nothing that
+    # did not pass can be shipped.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t mw-api:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/api.Dockerfile .
+
+  test:
+    # The full suite against DynamoDB Local (maestro ADR-0018). Unit tests pin the domain rules —
+    # the state machine, policy, authority, evidence — and integration tests drive the service over
+    # HTTP and MCP, including the adversarial cross-workspace read. Each test file makes its own
+    # table from api/src/db/table.ts, the schema the module also declares, and drops it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the CI image
+        run: docker build -t mw-ci:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/ci.Dockerfile .
+      - name: Test against a sibling DynamoDB Local on a per-run network
+        run: |
+          set -e
+          SUFFIX=${{ github.run_id }}-${{ github.run_attempt }}
+          NET=mw-net-$SUFFIX
+          DYNAMO=mw-dynamodb-$SUFFIX
+          docker network create "$NET"
+          # No credentials: DynamoDB Local accepts any key pair, the container is on a throwaway
+          # network with no published port, and what is under test is the store's shape.
+          docker run -d --name "$DYNAMO" --network "$NET" --network-alias dynamodb \
+            --health-cmd "curl -s -o /dev/null http://localhost:8000/ || exit 1" \
+            --health-interval 3s --health-timeout 3s --health-retries 30 \
+            amazon/dynamodb-local:latest -jar DynamoDBLocal.jar -sharedDb -inMemory
+          for i in $(seq 1 40); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' "$DYNAMO" 2>/dev/null)" = healthy ] && break
+            sleep 2
+          done
+          [ "$(docker inspect -f '{{.State.Health.Status}}' "$DYNAMO")" = healthy ] || {
+            echo "::error::DynamoDB Local never became healthy"; docker logs --tail 40 "$DYNAMO"; exit 1; }
+          docker run --rm --network "$NET" -e DYNAMODB_ENDPOINT="http://dynamodb:8000" \
+            mw-ci:$SUFFIX bash -lc "cd api && npm run lint && npm run typecheck && npm test"
+      - name: Cleanup
+        if: always()
+        run: |
+          SUFFIX=${{ github.run_id }}-${{ github.run_attempt }}
+          docker rm -f -v "mw-dynamodb-$SUFFIX" 2>/dev/null || true
+          docker network rm "mw-net-$SUFFIX" 2>/dev/null || true
+
+  dependency-scan:
+    # Known vulnerabilities in what ships. High and above fails; the report is printed either way.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: npm audit
+        working-directory: api
+        run: |
+          npm audit --omit=dev || true
+          npm audit --omit=dev --audit-level=high

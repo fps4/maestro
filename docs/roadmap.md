@@ -43,6 +43,8 @@ What the gate found and fixed on the way: two IAM grants DynamoDB Local could no
 
 **Builds:** agent-service, record half; the run-event contract; the GitHub Actions runner with Claude Code under an agent principal; transcript custody in S3; the run page; the sampling queue.
 
+**Decides first:** the model the runner drives and its effort level per run — one default model (Opus 5.5 is the candidate) with effort set by seat and consequence class (e.g. `rca` high, `bump` low); an ADR before the runner is built.
+
 **Gate:** a bump goes red in CI; a `bump` run claims the item, makes the test pass, and every step, the plan and the next human touchpoint are visible while it runs. A green patch-level bump on an N2 application merges under the agent's ceiling. One run in N lands in a person's review queue.
 
 ## M4 · Use case 1 on app1 (~3 weeks)

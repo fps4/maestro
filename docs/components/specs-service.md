@@ -52,6 +52,6 @@ Configuration comes from `fps4/maestro-config-<tenant>/workspaces/*.yaml`, and t
 | The payload store and the rebuild (ADR-0020): free text as payloads, `EvaluationRecorded`, a rebuilder that replays a verified archive — the M1 rebuild gate in code | M1 | done — `maestro-specs` PR #21 |
 | Today reads work-service and agent-service alongside its own decisions and questions | M2–M3 | small, in the console |
 | Move the DoD gate to GitHub-hosted runners | M1 | done — `maestro-specs` PR #16 |
-| Read the `prn` claim identity-service now mints instead of minting a principal id on first sight | M2 | small |
+| Read the `prn` claim identity-service now mints instead of minting a principal id on first sight; `principal:adopt` for an identity first seen under a self-minted id — moves the grants and records the supersession forward, no record rewritten | M2 | done — `maestro-specs` PR #26 (its ADR-0022) |
 
 Nothing else. The OpenSpec block shape and the external reader role are [post-MVP](../beyond-mvp.md).

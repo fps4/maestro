@@ -56,7 +56,7 @@ Each component declares its own types and no more. First wave:
 | Component | Types |
 |---|---|
 | specs-service | `VersionProposed` · `VersionWithdrawn` · `VersionSuperseded` · `DecisionRecorded` · `DecisionRefused` · `LinkPinned` · `QuestionRaised` · `QuestionAnswered` · `QuestionResolved` · `PayloadErased` (declared, not yet emitted) — as `maestro-specs` ADR-0019 declares them |
-| work-service | `WorkItemRaised` · `WorkItemAssigned` · `WorkItemStateChanged` · `WorkItemEscalated` · `WorkItemBreached` · `WorkItemClosed` |
+| work-service | `WorkItemRaised` · `WorkItemAssigned` · `WorkItemReleased` · `WorkItemClaimRefused` · `WorkItemStateChanged` · `WorkItemLinked` · `WorkItemEvidenceSatisfied` · `WorkItemSignalAttached` · `WorkItemChased` · `WorkItemEscalated` · `WorkItemBreached` · `WorkItemClosed` — [ADR-0019](../decisions/0019-work-services-table.md#8-the-record) |
 | runtime-service | `ArtifactRecorded` · `ArtifactDeployed` · `InstanceStateChanged` · `DigestMismatchDetected` |
 | agent-service | `RunStarted` · `ActionRefused` · `RunEscalated` · `RunClosed` |
 | identity-service (via the registry) | `PrincipalRegistered` · `PrincipalSuspended` · `SeatOccupancyChanged` |

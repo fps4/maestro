@@ -27,9 +27,9 @@ Each scenario is run on the first tenant (fps4's own deployment, [first-deployme
 | R4 | An event with an agent in `accountable`, or an identity-provider subject anywhere, is rejected at append. | [spine](components/spine.md#acceptance) | in code |
 | **Commitments** | | | |
 | W1 | An item is raised, assigned, closed with an outcome, and read back identically after a rebuild from the archive. | [work-service](components/work-service.md#acceptance) | in code |
-| W2 | A patch-class claim on an N1 application is refused at claim, closes `escalated_out`, and the rate is one call. | [work-service](components/work-service.md#acceptance) | in code |
-| W3 | A deadline-bearing item chases, escalates and breaches on schedule; every step's delivery is recorded. | [work-service](components/work-service.md#acceptance) | in code |
-| W4 | An agent's lease expires and the item returns to `open` with a reason; `accountable` never changes. | [work-service](components/work-service.md#acceptance) | in code |
+| W2 | A patch-class claim on an N1 application is refused at claim, closes `escalated_out`, and the rate is one call. | [work-service](components/work-service.md#acceptance) | **passed live 2026-09-26**: the test agent's patch claim on the fixture (`wrk-3`) refused by `onboarding`, closed `escalated_out`, counted in `/rates` |
+| W3 | A deadline-bearing item chases, escalates and breaches on schedule; every step's delivery is recorded. | [work-service](components/work-service.md#acceptance) | in code; live run started 2026-09-26 (`wrk-4`, P1 on identity-service: `respond_by` breached on time, the ladder under way, `resolve_by` 19:58Z) |
+| W4 | An agent's lease expires and the item returns to `open` with a reason; `accountable` never changes. | [work-service](components/work-service.md#acceptance) | **passed live 2026-09-26**: the test agent's lease on `wrk-5` expired at 16:28Z; the sweep released it (`lease_expired`) and the item returned to `open`, `accountable` the same on every event |
 | W5 | **The advisory lane with no agent:** advisory → item → Dependabot's PR → a person's merge → deploy event → re-scan → closed `done` on evidence. Medium and low findings fold into one weekly obligation. | [use-cases.md](use-cases.md#uc1b--the-advisory-lane) | **passed live 2026-09-26** on the fixture: `semver` high → `wrk-2`, Dependabot's #23 linked; merged 12:58:51Z, re-scan clear 12:58:55Z, deploy 12:59:39Z → closed `done`, never claimed. `ms` medium and `debug` low → the week's obligation `wrk-1`, closed `done` when both re-scanned clear |
 | W6 | A skill written against the tracker contract runs its acceptance suite green against the MCP server. | [work-service](components/work-service.md#acceptance) | in code |
 | **Deploys and instances** | | | |
@@ -70,9 +70,9 @@ What the first live run found and fixed: two IAM grants DynamoDB Local could not
 | Evidence plans; signals intake (dedup, the weekly fold); the GitHub, SNS and EventBridge adapters | built; intake on for the first tenant since 2026-09-26 |
 | The frontier, the board, Today (API); `blocking`; MCP with the tracker contract | built (v0.5.0); the MCP endpoint is live, and its contract suite has run only locally |
 | Alerts: each chase step, escalation and breach marked on the person's Today ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)) | the steps are recorded; Today's marks to build |
-| Intake switched on for the first tenant: its workload principal, the webhook secret, a GitHub webhook per observed repository, Dependabot security updates on | built for the fixture's repository; maestro's own repositories are not observed yet |
+| Intake switched on for the first tenant: its workload principal, the webhook secret, a GitHub webhook per observed repository, Dependabot security updates on | built: the fixture's repository, `fps4/maestro` (specs-service and work-service by directory) and `fps4/identity-service`; alerts that predate a webhook are sent by the tenant's backfill script |
 | A fixture application the first tenant owns and observes, in its tenant repository: pinned dependencies with published advisories, and its own deploy workflow | built |
-| Deploy events from each application's own pipeline: a role the tenant grants per repository (`events:PutEvents`, source `maestro.deploy`) | built; the fixture's pipeline is the first |
+| Deploy events from each application's own pipeline: a role the tenant grants per repository (`events:PutEvents`, source `maestro.deploy`) | built: the fixture's own pipeline, and the tenant pipeline for maestro's own services (`scripts/deploy.sh`) |
 | [work-service.md](components/work-service.md) brought level with what was built: the policy's shape, `steward`, ladder timing, streams, and the interpretations confirmed at merge (evidence arming, `blocked_by`, Today's split) | to build |
 
 ### Deploys and instances (runtime-service): to build
@@ -81,7 +81,7 @@ The artifact ledger and the instance register, fed by deploy events ([ADR-0011](
 
 ### The console: to build
 
-One console per deployment, `console/web` (grown from specs-service's, moved 2026-09-26), with every surface in [ux.md](ux.md) ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)). To build: Today (decide, answer, owed, agents at work, with the alert marks), Owed (the frontier), the work item and the board; then the run page and the estate. Its OpenNext bundle, deployed through `console/terraform`, is the foundation item above.
+One console per deployment, `console/web` (grown from specs-service's, moved 2026-09-26, #45), with every surface in [ux.md](ux.md) ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)). To build: Today (decide, answer, owed, agents at work, with the alert marks), Owed (the frontier), the work item and the board; then the run page and the estate. Its OpenNext bundle, deployed through `console/terraform`, is the foundation item above.
 
 ### Agent runs (agent-service and the runner): to build
 

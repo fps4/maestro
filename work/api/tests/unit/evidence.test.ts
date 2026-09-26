@@ -127,7 +127,7 @@ describe('what a signal becomes', () => {
     );
     expect(high).toMatchObject({ action: 'raise', origin: { resolve_by: '2026-10-05T08:00:00Z' } });
     const low = route(definition, s({ kind: 'finding', state: undefined, detail: { severity: 'low' } }), NOW);
-    expect(low).toMatchObject({ action: 'fold', fold: 'weekly_dependency_hygiene#2026-W40' });
+    expect(low).toMatchObject({ action: 'fold', fold: 'weekly_dependency_hygiene#app1#prod#2026-W40' });
     expect(() => route(definition, s({ kind: 'advisory', state: undefined }), NOW)).toThrow(
       /detail.severity/,
     );

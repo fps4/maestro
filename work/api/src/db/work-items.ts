@@ -263,7 +263,7 @@ export class FingerprintRepository {
   }
 }
 
-/** The week's obligation a fold raised (ADR-0019 §7): `<fold>#<period>` → its item. */
+/** The week's obligation a fold raised (ADR-0019 §7, ADR-0025): `<fold>#<application>#<environment>#<period>` → its item. */
 export interface FoldRecord {
   fold: string;
   item_id: string;

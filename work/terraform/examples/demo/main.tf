@@ -1,4 +1,4 @@
-# The demo tenant's work-service, as a root would call it: the spine's module at a tag, and this
+# The demo tenant's work-service, as a root would call it: the spine's module from this repository, and this
 # one composed with its outputs. Placeholder values only (maestro ADR-0017): nothing here is deployed
 # by the public repositories. A real tenant's root lives in fps4/maestro-config-<tenant>, with the
 # values below in its terraform.tfvars. No database credential exists: the module makes the table
@@ -30,7 +30,7 @@ variable "web_adapter_layer_arn" {
 }
 
 module "spine" {
-  source = "github.com/fps4/maestro//spine/terraform?ref=spine-v0.2.0"
+  source = "../../../../spine/terraform"
 
   name                = "aannemer-x"
   archive_bucket_name = "aannemer-x-maestro-archive"

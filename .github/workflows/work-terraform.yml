@@ -1,31 +1,33 @@
-name: terraform
+name: work-terraform
 
-# The module and the bundles it deploys (maestro ADR-0016, ADR-0017, build-standards §4). Runs on
-# GitHub-hosted runners and ends at the gate: fmt, validate, the mocked-provider tests, the example
+# work-service's module and the bundles it deploys (ADR-0016, ADR-0017, build-standards §4). Runs
+# on GitHub-hosted runners and ends at the gate: fmt, validate, the mocked-provider tests, the example
 # root, and a bundle that boots. Nothing here deploys to an account; a tenant's pipeline does.
 
 on:
   pull_request:
     paths:
-      - 'terraform/**'
-      - 'api/scripts/**'
-      - 'api/package.json'
-      - 'api/package-lock.json'
-      - '.github/workflows/terraform.yml'
+      - 'work/terraform/**'
+      - 'work/api/scripts/**'
+      - 'work/api/package.json'
+      - 'work/api/package-lock.json'
+      - 'spine/terraform/**'
+      - '.github/workflows/work-terraform.yml'
   push:
     branches: [main]
     paths:
-      - 'terraform/**'
-      - 'api/scripts/**'
-      - 'api/package.json'
-      - 'api/package-lock.json'
-      - '.github/workflows/terraform.yml'
+      - 'work/terraform/**'
+      - 'work/api/scripts/**'
+      - 'work/api/package.json'
+      - 'work/api/package-lock.json'
+      - 'spine/terraform/**'
+      - '.github/workflows/work-terraform.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: terraform-${{ github.ref }}
+  group: work-terraform-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -33,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: terraform
+        working-directory: work/terraform
     steps:
       - uses: actions/checkout@v4
       - uses: hashicorp/setup-terraform@v3
@@ -44,8 +46,8 @@ jobs:
       - run: terraform validate
       - name: Module tests (mocked provider)
         run: terraform test
-      - name: Example root validates (fetches the spine's module at its tag)
-        working-directory: terraform/examples/demo
+      - name: Example root validates (the spine's module from spine/terraform, at this commit)
+        working-directory: work/terraform/examples/demo
         run: terraform init -backend=false -input=false && terraform validate
 
   bundle:
@@ -54,14 +56,14 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: api
+        working-directory: work/api
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: api/package-lock.json
+          cache-dependency-path: work/api/package-lock.json
       - run: npm ci
       - name: Lambda bundles
         run: npm run bundle
@@ -73,6 +75,8 @@ jobs:
         # `s3` and ask for a bucket before reaching the database).
         run: |
           node -e "import('./bundle/relay/index.mjs').then(m => { if (typeof m.handler !== 'function') { console.error('relay: no handler'); process.exit(1) } console.log('relay: handler ok') })"
+          node -e "import('./bundle/sweep/index.mjs').then(m => { if (typeof m.handler !== 'function') { console.error('sweep: no handler'); process.exit(1) } console.log('sweep: handler ok') })"
+          node -e "import('./bundle/intake/index.mjs').then(m => { if (typeof m.handler !== 'function') { console.error('intake: no handler'); process.exit(1) } console.log('intake: handler ok') })"
           set +e
           (cd bundle/api && PORT=18080 TABLE_NAME=smoke DYNAMODB_ENDPOINT='http://127.0.0.1:1' AWS_REGION=eu-west-1 RECORD_SINK=off PAYLOAD_STORE=local \
             bash run.sh > ../api-boot.log 2>&1)
@@ -86,10 +90,10 @@ jobs:
         run: npm run sbom
       - uses: actions/upload-artifact@v4
         with:
-          name: specs-lambda-bundles
+          name: work-lambda-bundles
           path: |
-            api/bundle/api.zip
-            api/bundle/relay.zip
-            api/bundle/api.cdx.json
-            api/bundle/relay.cdx.json
+            work/api/bundle/api.zip
+            work/api/bundle/relay.zip
+            work/api/bundle/api.cdx.json
+            work/api/bundle/relay.cdx.json
           if-no-files-found: error

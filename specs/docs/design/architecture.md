@@ -22,7 +22,7 @@ related:
 **Scope:** The whole product. Model, authoring, rendering, configuration, ports, isolation,
 interfaces, storage, build order.
 **Shape:** A full end-to-end service with its own domain, its own console, and SSO through
-`identity-service` — usable on its own, and one of maestro's components (`../maestro/docs/components/specs-service.md`).
+`identity-service` — usable on its own, and one of maestro's components (`docs/components/specs-service.md` at the repository root).
 
 ---
 
@@ -389,7 +389,7 @@ proposed, decision recorded, link pinned, body redacted — is emitted as an att
 transactionally with the change via an outbox. Run with the default and this table is the record.
 Point it at a durable spine and **the spine becomes authoritative and this table becomes a
 projection.** One configuration value. In maestro that spine is an S3 archive fed by a relay from
-this outbox (`../maestro/docs/components/spine.md`); nothing in this service names it, which is
+this outbox (`docs/components/spine.md` at the repository root); nothing in this service names it, which is
 what keeps the default and the spine the same code path.
 
 ---
@@ -465,7 +465,7 @@ issuer's subject is minted per deployment; move the identity deployment and ever
 against decisions retained for years. The id is the one identity-service mints and carries in every
 token as `prn`, registered here on first sight; this service mints none for a real identity, and an
 id it minted before it read `prn` is superseded by the operator's `principal:adopt`, the record left
-as it is ([ADR-0022](decisions/0022-the-principal-id-is-identity-services.md)).
+as it is ([ADR-0022](../decisions/0022-the-principal-id-is-identity-services.md)).
 
 **Agents are principals of kind `agent`**, distinct from the credential they authenticate with and
 from the human accountable for their work — which is what makes §2.8's rule enforceable.
@@ -603,30 +603,30 @@ version is admitted on that test. Comments on drafts, page trees and freeform sp
 
 | # | Decision | Where |
 |---|---|---|
-| D1 | Artifact types, links, gates, lifecycles and attribution profiles are configuration | [ADR-0001](decisions/0001-artifact-types-are-configuration.md) |
-| D2 | `identity-service` is the only required dependency; everything else is a port | [ADR-0002](decisions/0002-identity-service-is-the-only-dependency.md) |
-| D3 | Drafts are mutable, versions are immutable; propose snapshots one into the other | [ADR-0003](decisions/0003-immutable-versions-mutable-drafts.md) |
-| D4 | Facets are evaluated; bodies are authored, rendered and diffed but never evaluated | [ADR-0004](decisions/0004-facets-are-evaluated-bodies-are-read.md) |
-| D5 | Agents author and propose; only a named human decides; no decision surface on MCP | [ADR-0005](decisions/0005-agents-may-author-never-decide.md) |
-| D6 | Workspace isolation is one key prefix per workspace, bound once per request | [ADR-0006](decisions/0006-workspace-isolation-by-database.md), amended by [ADR-0021](decisions/0021-the-store-is-dynamodb.md) |
-| D7 | Bodies inline; attachments content-addressed in object storage | [ADR-0007](decisions/0007-mongodb-with-inline-bodies.md), superseded by [ADR-0021](decisions/0021-the-store-is-dynamodb.md) |
+| D1 | Artifact types, links, gates, lifecycles and attribution profiles are configuration | [ADR-0001](../decisions/0001-artifact-types-are-configuration.md) |
+| D2 | `identity-service` is the only required dependency; everything else is a port | [ADR-0002](../decisions/0002-identity-service-is-the-only-dependency.md) |
+| D3 | Drafts are mutable, versions are immutable; propose snapshots one into the other | [ADR-0003](../decisions/0003-immutable-versions-mutable-drafts.md) |
+| D4 | Facets are evaluated; bodies are authored, rendered and diffed but never evaluated | [ADR-0004](../decisions/0004-facets-are-evaluated-bodies-are-read.md) |
+| D5 | Agents author and propose; only a named human decides; no decision surface on MCP | [ADR-0005](../decisions/0005-agents-may-author-never-decide.md) |
+| D6 | Workspace isolation is one key prefix per workspace, bound once per request | [ADR-0006](../decisions/0006-workspace-isolation-by-database.md), amended by [ADR-0021](../decisions/0021-the-store-is-dynamodb.md) |
+| D7 | Bodies inline; attachments content-addressed in object storage | [ADR-0007](../decisions/0007-mongodb-with-inline-bodies.md), superseded by [ADR-0021](../decisions/0021-the-store-is-dynamodb.md) |
 | D8 | Principal ids are maestro's (identity-service's `prn` since ADR-0022); an issuer's `sub` is never stored on a record | §7.2 |
 | D9 | At most one link per type is pinned, resolved to a version at acceptance and frozen | §2.6 |
 | D10 | Redaction is the single permitted mutation, recorded, and detectable by digest mismatch | §8.3 |
-| D11 | The catalogue is a workspace, reached read-only; a tenant carries a reference, never a link | [ADR-0008](decisions/0008-the-catalogue-is-a-workspace.md) |
-| D12 | External and platform standards are distinct types; licence disposition is a required facet | [ADR-0009](decisions/0009-external-and-platform-standards-are-distinct-types.md) |
-| D13 | Versions may be effective-dated; only a *material* change lapses an acceptance | [ADR-0010](decisions/0010-effective-dating-and-acceptance-lapse.md) |
-| D14 | Every identifier a workspace declares has a label, and no surface shows the identifier | [ADR-0012](decisions/0012-labels-not-identifiers.md) |
-| D15 | The decision page is the product; the decider's packet is one call shared by console and MCP; the accepting outcome is declared | [ADR-0013](decisions/0013-the-decision-page-is-the-product.md) |
-| D16 | A question on a version is a fact about it: asked by anyone, answered by anyone, closed by a human, never a mutation; a gate may declare `questions_resolved` | [ADR-0014](decisions/0014-questions-on-a-version.md) |
-| D17 | The evaluator port has a floor (`builtin: facet_schema`) and an outbound call; both run at propose; a draft can ask its readiness | [ADR-0015](decisions/0015-the-evaluator-port-has-a-floor.md) |
-| D18 | A specification may be a file next to the code; `specs propose` and a GitHub Action propose, nothing in CI decides; a version must carry its declared pin | [ADR-0016](decisions/0016-the-git-native-path.md) |
-| D19 | One document is the artifact; facets are derived from it at save; `body_blocks` declare which table is which facet | [ADR-0017](decisions/0017-one-document.md) |
-| D20 | specs-service stays the record for every maestro repository; OpenSpec is interoperated with — its requirement/scenario layout as a block shape, EARS statements with GIVEN/WHEN/THEN scenarios — and not adopted as a system | [ADR-0018](decisions/0018-openspec-interoperate-not-adopt.md) — *accepted* |
-| D21 | The outbox holds the spine's envelope, built and validated in the transaction; an agent acts under a seat occupancy naming the answerable human; free text leaves the body; principal ids carry the kind | [ADR-0019](decisions/0019-the-outbox-holds-spine-envelopes.md) — *accepted* |
-| D22 | What the record cannot say goes to an erasable payload store, named on the event by locator and digest; evaluations are events; a workspace is rebuilt from a verified archive and its payloads alone, and a stale projection refuses to serve; memberships are grants, drafts are not record | [ADR-0020](decisions/0020-the-payload-store-and-the-rebuild.md) — *accepted* |
-| D23 | The store is one DynamoDB table (maestro ADR-0018): a prefix per workspace under the same handle, every query a key or an index, the outbox one transaction conditioned on the workspace's counter, the relay on a sparse index, search a filtered read, expiry the table's TTL, the rebuild a deleted prefix; no database credential | [ADR-0021](decisions/0021-the-store-is-dynamodb.md) — *accepted* |
-| D24 | The principal id is the token's `prn`, identity-service's; none is minted here for a real identity; an id minted before is superseded by an operator's `principal:adopt` that moves grants and rewrites no record, and separation of duties reads the supersession | [ADR-0022](decisions/0022-the-principal-id-is-identity-services.md) — *accepted* |
+| D11 | The catalogue is a workspace, reached read-only; a tenant carries a reference, never a link | [ADR-0008](../decisions/0008-the-catalogue-is-a-workspace.md) |
+| D12 | External and platform standards are distinct types; licence disposition is a required facet | [ADR-0009](../decisions/0009-external-and-platform-standards-are-distinct-types.md) |
+| D13 | Versions may be effective-dated; only a *material* change lapses an acceptance | [ADR-0010](../decisions/0010-effective-dating-and-acceptance-lapse.md) |
+| D14 | Every identifier a workspace declares has a label, and no surface shows the identifier | [ADR-0012](../decisions/0012-labels-not-identifiers.md) |
+| D15 | The decision page is the product; the decider's packet is one call shared by console and MCP; the accepting outcome is declared | [ADR-0013](../decisions/0013-the-decision-page-is-the-product.md) |
+| D16 | A question on a version is a fact about it: asked by anyone, answered by anyone, closed by a human, never a mutation; a gate may declare `questions_resolved` | [ADR-0014](../decisions/0014-questions-on-a-version.md) |
+| D17 | The evaluator port has a floor (`builtin: facet_schema`) and an outbound call; both run at propose; a draft can ask its readiness | [ADR-0015](../decisions/0015-the-evaluator-port-has-a-floor.md) |
+| D18 | A specification may be a file next to the code; `specs propose` and a GitHub Action propose, nothing in CI decides; a version must carry its declared pin | [ADR-0016](../decisions/0016-the-git-native-path.md) |
+| D19 | One document is the artifact; facets are derived from it at save; `body_blocks` declare which table is which facet | [ADR-0017](../decisions/0017-one-document.md) |
+| D20 | specs-service stays the record for every maestro repository; OpenSpec is interoperated with — its requirement/scenario layout as a block shape, EARS statements with GIVEN/WHEN/THEN scenarios — and not adopted as a system | [ADR-0018](../decisions/0018-openspec-interoperate-not-adopt.md) — *accepted* |
+| D21 | The outbox holds the spine's envelope, built and validated in the transaction; an agent acts under a seat occupancy naming the answerable human; free text leaves the body; principal ids carry the kind | [ADR-0019](../decisions/0019-the-outbox-holds-spine-envelopes.md) — *accepted* |
+| D22 | What the record cannot say goes to an erasable payload store, named on the event by locator and digest; evaluations are events; a workspace is rebuilt from a verified archive and its payloads alone, and a stale projection refuses to serve; memberships are grants, drafts are not record | [ADR-0020](../decisions/0020-the-payload-store-and-the-rebuild.md) — *accepted* |
+| D23 | The store is one DynamoDB table (maestro ADR-0018): a prefix per workspace under the same handle, every query a key or an index, the outbox one transaction conditioned on the workspace's counter, the relay on a sparse index, search a filtered read, expiry the table's TTL, the rebuild a deleted prefix; no database credential | [ADR-0021](../decisions/0021-the-store-is-dynamodb.md) — *accepted* |
+| D24 | The principal id is the token's `prn`, identity-service's; none is minted here for a real identity; an id minted before is superseded by an operator's `principal:adopt` that moves grants and rewrites no record, and separation of duties reads the supersession | [ADR-0022](../decisions/0022-the-principal-id-is-identity-services.md) — *accepted* |
 
 ---
 

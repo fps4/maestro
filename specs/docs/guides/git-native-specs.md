@@ -4,8 +4,8 @@ status: draft
 last_updated: 2026-09-18
 owners: [architect]
 related:
-  - ../design/decisions/0016-the-git-native-path.md
-  - ../design/decisions/0005-agents-may-author-never-decide.md
+  - ../decisions/0016-the-git-native-path.md
+  - ../decisions/0005-agents-may-author-never-decide.md
 ---
 
 # Specifications next to the code
@@ -45,7 +45,7 @@ through. Every other top-level key, and everything under `facets:`, is a facet.
 
 **The acceptance criteria are a table, not front-matter.** The `specification` type declares that
 the table under the heading *Acceptance criteria* is the facet `acceptance_criteria`
-([ADR-0017](../design/decisions/0017-one-document.md)): header cells become keys, rows become the
+([ADR-0017](../decisions/0017-one-document.md)): header cells become keys, rows become the
 objects the gate reads. Write them once, as prose a reviewer can read; there is no second form.
 
 ## The command
@@ -54,8 +54,8 @@ objects the gate reads. Write them once, as prose a reviewer can read; there is 
 export SPECS_URL=https://specs.example.com
 export SPECS_TOKEN=…                        # your token, or an agent's
 
-cd maestro-specs/api
-npm run specs -- propose ../../my-service/docs/spec.md --workspace aannemer-x
+cd maestro/specs/api
+npm run specs -- propose ../../../my-service/docs/spec.md --workspace aannemer-x
 ```
 
 ```
@@ -105,7 +105,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - id: propose
-        uses: fps4/maestro-specs/.github/actions/specs@main
+        uses: fps4/maestro/.github/actions/specs@main
         with:
           command: propose
           url: ${{ vars.SPECS_URL }}
@@ -113,7 +113,7 @@ jobs:
           workspace: aannemer-x
           file: docs/spec.md
       - id: packet
-        uses: fps4/maestro-specs/.github/actions/specs@main
+        uses: fps4/maestro/.github/actions/specs@main
         with:
           command: packet
           url: ${{ vars.SPECS_URL }}

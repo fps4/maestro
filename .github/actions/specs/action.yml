@@ -1,7 +1,7 @@
 name: specs
 description: >-
   Propose a markdown specification (with YAML front-matter) to a specs-service workspace, or read the
-  decider's packet for a proposed version. Runs the `specs` CLI from this repository against the
+  decider's packet for a proposed version. Runs the `specs` CLI from fps4/maestro (specs/api) against the
   service you name. It never decides: a decision is a named human's act, taken on the decision page
   or with `specs decide` under that person's own token.
 
@@ -31,7 +31,7 @@ inputs:
     description: "`packet`: the gate to read the packet for"
     required: false
   specs-ref:
-    description: The fps4/maestro-specs ref to run the CLI from
+    description: The fps4/maestro ref to run the CLI from
     required: false
     default: main
 
@@ -55,13 +55,13 @@ runs:
     - name: Check out the specs CLI
       uses: actions/checkout@v4
       with:
-        repository: fps4/maestro-specs
+        repository: fps4/maestro
         ref: ${{ inputs.specs-ref }}
         path: .specs-cli
 
     - name: Install the CLI's dependencies
       shell: bash
-      run: cd .specs-cli/api && npm ci --ignore-scripts --no-audit --no-fund
+      run: cd .specs-cli/specs/api && npm ci --ignore-scripts --no-audit --no-fund
 
     - name: Run
       id: run
@@ -71,7 +71,7 @@ runs:
         SPECS_TOKEN: ${{ inputs.token }}
       run: |
         set -euo pipefail
-        cd .specs-cli/api
+        cd .specs-cli/specs/api
         case "${{ inputs.command }}" in
           propose)
             args=(propose "${GITHUB_WORKSPACE}/${{ inputs.file }}" --workspace "${{ inputs.workspace }}")

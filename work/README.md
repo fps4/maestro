@@ -6,9 +6,9 @@ work-service turns signals, people, gates and recurrences into **commitments**: 
 the human answerable for it, derives its clocks from the tenant's policy, checks authority when
 the work is claimed and refuses rather than warns, and closes on **evidence** — a merged change, a
 deploy, an alarm back to OK — rather than on someone typing "done". It is a component of
-[maestro](https://github.com/fps4/maestro), an ops engine for running applications; its design
-is [`docs/components/work-service.md`](https://github.com/fps4/maestro/blob/main/docs/components/work-service.md)
-there, and its table is maestro's [ADR-0019](https://github.com/fps4/maestro/blob/main/docs/decisions/0019-work-services-table.md).
+[maestro](../README.md), an ops engine for running applications; its design
+is [`docs/components/work-service.md`](../docs/components/work-service.md)
+at this repository's root, and its table is maestro's [ADR-0019](../docs/decisions/0019-work-services-table.md).
 
 Its only required dependency is [identity-service](https://github.com/fps4/identity-service): a
 token's `prn` claim is the principal, and this service mints no ids for people or agents.
@@ -25,7 +25,7 @@ Everything else is a port with a local default.
 ## Layout
 
 ```
-maestro-work/
+work/
  ├── api/                 REST API and MCP server. domain/ is pure; a lint rule keeps it so
  │    ├── src/domain/     the state machine, policy, authority, evidence — decide and evolve
  │    ├── src/db/         the table (table.ts), the key layout (keys.ts), handles, the outbox
@@ -104,10 +104,10 @@ the notifier (a log line locally, a Slack webhook on AWS), breaches, expiry, the
 Signals intake (the envelope; dedup by delivery and fingerprint; the weekly fold) and evidence (link,
 facts, closure on evidence) are in. So are the source adapters: GitHub (Dependabot alerts, its pull requests, merges), CloudWatch alarms
 through the applications' `ops-signals` topics, and deploy events through EventBridge. The MCP tracker
-contract follows. See maestro's [roadmap](https://github.com/fps4/maestro/blob/main/docs/roadmap.md).
+contract follows. See maestro's [roadmap](../docs/roadmap.md).
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). The tree holds code, the design and one fictional tenant; a real
+MIT — see [LICENSE](../LICENSE). The tree holds code, the design and one fictional tenant; a real
 tenant's configuration lives in its own private repository, and CI fails on anything that
-identifies one (`scripts/check-public.sh`).
+identifies one ([`scripts/check-public.sh`](../scripts/check-public.sh) at the root).

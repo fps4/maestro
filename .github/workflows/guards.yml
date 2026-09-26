@@ -1,0 +1,40 @@
+name: guards
+
+# What holds for the whole tree, on every change: the links resolve, nothing identifies a tenant
+# (scripts/check-public.sh, with the FORBIDDEN_PATTERNS secret), no credential is committed, and the
+# services import from each other only through published contracts (ADR-0020). Once, here — not a
+# copy per component.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Link integrity
+        run: scripts/check-links.sh
+      - name: Public-repository guards
+        env:
+          FORBIDDEN_PATTERNS_FILE: ${{ runner.temp }}/forbidden.txt
+        run: |
+          printf '%s\n' "${{ secrets.FORBIDDEN_PATTERNS }}" > "$FORBIDDEN_PATTERNS_FILE"
+          scripts/check-public.sh
+      - name: Service boundaries
+        run: scripts/check-boundaries.sh
+
+  secret-scan:
+    # The gitleaks binary rather than the Action, which needs a paid organisation licence.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: gitleaks
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks:v8.24.0 \
+            detect --no-git --source=/repo --config=/repo/.gitleaks.toml --redact --no-banner

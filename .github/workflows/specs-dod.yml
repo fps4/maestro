@@ -1,6 +1,8 @@
-name: dod
+name: specs-dod
 
-# The Definition-of-Done gate. Every item here is blocking; see CONTRIBUTING.md.
+# specs-service's Definition-of-Done gate. Every item here is blocking. The secret scan and the
+# public guards run once for the whole tree (guards.yml); this is the service's own gate, run when
+# something under specs/ changes. Every image is built with specs/ as its context, as compose does.
 #
 # Runs on GitHub-hosted runners (fps4/maestro ADR-0017: a self-hosted runner on a public repository
 # runs strangers' code). The shape — every job via `docker build` plus sibling containers on a
@@ -11,32 +13,19 @@ name: dod
 on:
   push:
     branches: [main]
+    paths: ['specs/**', '.github/workflows/specs-dod.yml']
   pull_request:
+    paths: ['specs/**', '.github/workflows/specs-dod.yml']
   workflow_dispatch: {}
 
 permissions:
   contents: read
 
 concurrency:
-  group: dod-${{ github.ref }}
+  group: specs-dod-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  secret-scan:
-    # The floor: no credentials committed. The gitleaks binary rather than the Action, which needs
-    # a paid organisation licence; the repository is baked into the image so the scan works here.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: gitleaks
-        run: |
-          TAG=ms-gitleaks:${{ github.run_id }}-${{ github.run_attempt }}
-          docker build -t "$TAG" -f infra/docker/gitleaks.Dockerfile .
-          docker run --rm "$TAG" detect --no-git --source=/repo --config=/repo/.gitleaks.toml --redact --no-banner
-      - name: Cleanup
-        if: always()
-        run: docker rmi "ms-gitleaks:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true
-
   api-build:
     # Building the api image runs typecheck, lint and the compile (see api.Dockerfile). Any failure
     # fails the gate, and nothing that did not pass can be shipped.
@@ -47,7 +36,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t ms-api:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/api.Dockerfile .
+      - run: docker build -t ms-api:${{ github.run_id }}-${{ github.run_attempt }} -f specs/infra/docker/api.Dockerfile specs
       - name: Cleanup
         if: always()
         run: docker rmi "ms-api:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true
@@ -57,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t ms-web:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/web.Dockerfile .
+      - run: docker build -t ms-web:${{ github.run_id }}-${{ github.run_attempt }} -f specs/infra/docker/web.Dockerfile specs
       - name: Cleanup
         if: always()
         run: docker rmi "ms-web:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true
@@ -75,7 +64,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build the CI image
-        run: docker build -t ms-ci:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/ci.Dockerfile .
+        run: docker build -t ms-ci:${{ github.run_id }}-${{ github.run_attempt }} -f specs/infra/docker/ci.Dockerfile specs
       - name: Test against a sibling DynamoDB Local on a per-run network
         run: |
           set -e
@@ -93,7 +82,7 @@ jobs:
             --health-interval 3s --health-timeout 3s --health-retries 30 \
             amazon/dynamodb-local:latest -jar DynamoDBLocal.jar -sharedDb -inMemory
 
-          for i in $(seq 1 40); do
+          for _ in $(seq 1 40); do
             [ "$(docker inspect -f '{{.State.Health.Status}}' "$DYNAMO" 2>/dev/null)" = healthy ] && break
             sleep 2
           done
@@ -120,7 +109,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build the CI image
-        run: docker build -t ms-ci-def:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/ci.Dockerfile .
+        run: docker build -t ms-ci-def:${{ github.run_id }}-${{ github.run_attempt }} -f specs/infra/docker/ci.Dockerfile specs
       - name: Validate every committed definition
         run: |
           docker run --rm ms-ci-def:${{ github.run_id }}-${{ github.run_attempt }} \
@@ -136,7 +125,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build the CI image
-        run: docker build -t ms-ci-audit:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/ci.Dockerfile .
+        run: docker build -t ms-ci-audit:${{ github.run_id }}-${{ github.run_attempt }} -f specs/infra/docker/ci.Dockerfile specs
       - name: npm audit
         run: |
           docker run --rm ms-ci-audit:${{ github.run_id }}-${{ github.run_attempt }} bash -lc '

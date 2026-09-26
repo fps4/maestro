@@ -39,7 +39,7 @@ secrets.md                the *names* of secrets in Secrets Manager / SSM — ne
 
 ### The caller
 
-`.github/workflows/deploy.yml` is a dozen lines. The shape it calls is [`tenant-deploy.yml`](../.github/workflows/tenant-deploy.yml) in `fps4/maestro`; the scripts it runs come from the `maestro` component at the tag named in `components`, so `uses:` and `components.maestro` carry the same tag. `runner` is JSON: an array of labels for the tenant's own runners, a double-quoted string for a hosted one.
+`.github/workflows/deploy.yml` is a dozen lines. The shape it calls is [`tenant-deploy.yml`](../.github/workflows/tenant-deploy.yml) in `fps4/maestro`; the scripts it runs come from the `maestro` component at the tag named in `components`, so `uses:` and `components.maestro` carry the same tag. That one tag names the spine, specs-service and work-service as built and tested together ([ADR-0020](decisions/0020-maestros-own-services-live-in-one-repository.md)): a release is tagged `v<version>`, and `spine-v<version>` only publishes the spine's npm package. A component with a repository of its own — identity-service — is a key of its own. `runner` is JSON: an array of labels for the tenant's own runners, a double-quoted string for a hosted one.
 
 ```yaml
 name: deploy
@@ -52,21 +52,21 @@ permissions:
   id-token: write
 jobs:
   aws:
-    uses: fps4/maestro/.github/workflows/tenant-deploy.yml@spine-v0.1.2
+    uses: fps4/maestro/.github/workflows/tenant-deploy.yml@v0.4.0
     with:
       runner: '["self-hosted","ds1"]'   # or '"ubuntu-latest"'
       tenant: aannemer-x
-      components: '{"maestro":"spine-v0.1.2","maestro-specs":"v0.3.0"}'
+      components: '{"maestro":"v0.4.0","identity-service":"<tag>"}'
     secrets:
       aws_role_arn: ${{ secrets.AWS_ROLE_ARN }}
       state_recipient: ${{ secrets.STATE_RECIPIENT }}
   local:
-    uses: fps4/maestro/.github/workflows/tenant-deploy.yml@spine-v0.1.2
+    uses: fps4/maestro/.github/workflows/tenant-deploy.yml@v0.4.0
     with:
       runner: '["self-hosted","ds1"]'
       target: local
       tenant: aannemer-x
-      components: '{"maestro":"spine-v0.1.2","maestro-specs":"v0.3.0"}'
+      components: '{"maestro":"v0.4.0","identity-service":"<tag>"}'
 ```
 
 What the tenant repository holds besides: the `production` environment with a required reviewer — the apply job runs in it, so the gate is a person; the deploy role's trust policy admitting `repo:fps4/maestro-config-aannemer-x:environment:production` (the apply) and `repo:fps4/maestro-config-aannemer-x:pull_request` (the plan); `AWS_ROLE_ARN` and `STATE_RECIPIENT` — the age public key; its private half is held by the person `README.md` names and is never in GitHub. On a hosted runner the mirror is a workflow artefact kept seven days; on the tenant's own runner it is written under `/srv/maestro/state/<tenant>/`.

@@ -29,9 +29,9 @@ variable "region" {
 }
 
 variable "open_next_dir" {
-  description = "The console's `.open-next/`, as `npx @opennextjs/aws build` left it. In a tenant repository the pipeline's checkout-components.sh builds it under components/<component>/ (ADR-0017); here the default is a placeholder beside this checkout."
+  description = "The console's `.open-next/`, as `npx @opennextjs/aws build` left it. In a tenant repository the pipeline's checkout-components.sh builds it under components/<component>/ (ADR-0017); here the default is specs-service's console in this repository, once built."
   type        = string
-  default     = "../../../../maestro-specs/web/.open-next"
+  default     = "../../../../specs/web/.open-next"
 }
 
 module "specs_console" {

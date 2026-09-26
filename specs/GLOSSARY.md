@@ -1,7 +1,7 @@
 # Glossary
 
 The service ships no domain vocabulary (ADR-0001). These are the generic terms and what each maps to
-in the two consumers that shaped the model. *maestro* is the ops engine designed in `../maestro`, of
+in the two consumers that shaped the model. *maestro* is the ops engine designed in this repository's `docs/`, of
 which this service is a component; *maestro v1* is its retired first iteration, an agentic delivery
 platform, kept as the second consumer. (Until 2026-09-15 these columns read *adel* and *maestro*;
 until 2026-09-18 the maestro column read in the vocabulary of a governed application platform.)

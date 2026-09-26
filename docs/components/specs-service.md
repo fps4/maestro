@@ -1,8 +1,8 @@
 # specs-service
 
-**Repository:** [`fps4/maestro-specs`](https://github.com/fps4/maestro-specs) · **Status:** built · **Design:** `docs/design/architecture.md` and ADR-0001–0018 in that repository
+**Repository:** `fps4/maestro`, [`specs/`](../../specs/) (until 2026-09-26 `fps4/maestro-specs`, now archived) · **Status:** built · **Design:** [`specs/docs/design/architecture.md`](../../specs/docs/design/architecture.md) and its own decision log, [`specs/docs/decisions/`](../../specs/docs/decisions/) — ADR-0001–0022, closed ([ADR-0020](../decisions/0020-maestros-own-services-live-in-one-repository.md)); cited as "specs-service ADR-00NN"
 
-What was agreed: artifacts drafted by anyone, versioned immutably, decided at gates by a named human, with questions, pinned links and a packet the decider can read in one sitting. Types, gates and lifecycles are configuration. This page says what the MVP uses and how it deploys; the design is in its own repository.
+What was agreed: artifacts drafted by anyone, versioned immutably, decided at gates by a named human, with questions, pinned links and a packet the decider can read in one sitting. Types, gates and lifecycles are configuration. This page says what the MVP uses and how it deploys; the design is beside the code, under `specs/docs/`.
 
 ## What the MVP uses it for
 
@@ -32,11 +32,11 @@ All four are workspace configuration — a type with facets and body blocks, a g
 
 | Piece | |
 |---|---|
-| API | Fastify → Lambda Web Adapter (layer, handler `run.sh`) → HTTP API Gateway v2, `$default` route — `maestro-specs` `terraform/` |
+| API | Fastify → Lambda Web Adapter (layer, handler `run.sh`) → HTTP API Gateway v2, `$default` route — [`specs/terraform/`](../../specs/terraform/) |
 | Console | Next.js → OpenNext → Lambda + CloudFront, through [`console/terraform`](../../console/README.md) — built per tenant, `NEXT_PUBLIC_*` at build |
 | Database | DynamoDB, one table, one key prefix per workspace ([ADR-0018](../decisions/0018-dynamodb-is-the-mvp-database.md)) |
-| Object storage | S3 — one bucket for attachments and payloads (`maestro-specs` ADR-0020), versioned, never Object-Locked; the payload store is what a rebuild reads |
-| Record sink | outbox holding the spine's envelope, built at the act (`maestro-specs` ADR-0019) → the spine's relay handler as `<name>-relay`, EventBridge Scheduler every minute, one at a time, under the spine module's `relay_policy_json` → the archive and the FIFO topic |
+| Object storage | S3 — one bucket for attachments and payloads (specs-service [ADR-0020](../../specs/docs/decisions/0020-the-payload-store-and-the-rebuild.md)), versioned, never Object-Locked; the payload store is what a rebuild reads |
+| Record sink | outbox holding the spine's envelope, built at the act (specs-service [ADR-0019](../../specs/docs/decisions/0019-the-outbox-holds-spine-envelopes.md)) → the spine's relay handler as `<name>-relay`, EventBridge Scheduler every minute, one at a time, under the spine module's `relay_policy_json` → the archive and the FIFO topic |
 | Evaluator | HTTP adapter; `${VAR}` resolved from the environment |
 | Notifier | SES; Slack webhook |
 | MCP | stateless HTTP per request — Lambda-shaped already |
@@ -47,11 +47,11 @@ Configuration comes from `fps4/maestro-config-<tenant>/workspaces/*.yaml`, and t
 
 | Change | Milestone | Size |
 |---|---|---|
-| Terraform module; the relay as a scheduled Lambda | M1 | done — `maestro-specs` PR #20 |
-| The outbox holds the spine's envelope; seats and the answerable human (ADR-0019) | M1 | done — `maestro-specs` PR #18 |
-| The payload store and the rebuild (ADR-0020): free text as payloads, `EvaluationRecorded`, a rebuilder that replays a verified archive — the M1 rebuild gate in code | M1 | done — `maestro-specs` PR #21 |
+| Terraform module; the relay as a scheduled Lambda | M1 | done — fps4/maestro-specs#20 |
+| The outbox holds the spine's envelope; seats and the answerable human (ADR-0019) | M1 | done — fps4/maestro-specs#18 |
+| The payload store and the rebuild (ADR-0020): free text as payloads, `EvaluationRecorded`, a rebuilder that replays a verified archive — the M1 rebuild gate in code | M1 | done — fps4/maestro-specs#21 |
 | Today reads work-service and agent-service alongside its own decisions and questions | M2–M3 | small, in the console |
-| Move the DoD gate to GitHub-hosted runners | M1 | done — `maestro-specs` PR #16 |
-| Read the `prn` claim identity-service now mints instead of minting a principal id on first sight; `principal:adopt` for an identity first seen under a self-minted id — moves the grants and records the supersession forward, no record rewritten | M2 | done — `maestro-specs` PR #26 (its ADR-0022) |
+| Move the DoD gate to GitHub-hosted runners | M1 | done — fps4/maestro-specs#16 |
+| Read the `prn` claim identity-service now mints instead of minting a principal id on first sight; `principal:adopt` for an identity first seen under a self-minted id — moves the grants and records the supersession forward, no record rewritten | M2 | done — fps4/maestro-specs#26 (specs-service [ADR-0022](../../specs/docs/decisions/0022-the-principal-id-is-identity-services.md)) |
 
 Nothing else. The OpenSpec block shape and the external reader role are [post-MVP](../beyond-mvp.md).

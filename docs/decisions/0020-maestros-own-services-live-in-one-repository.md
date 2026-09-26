@@ -1,6 +1,6 @@
 # ADR-0020 · maestro's own services live in `fps4/maestro`; a repository is earned by a consumer outside maestro
 
-**Status:** proposed · 2026-09-26 · amends [ADR-0015](0015-repositories-and-licence.md) (its first rule; licence and visibility stand)
+**Status:** accepted · 2026-09-26 · amends [ADR-0015](0015-repositories-and-licence.md) (its first rule; licence and visibility stand)
 
 ## Context
 

@@ -161,4 +161,4 @@ anywhere else; CI drops the bucket and its lock configuration from state before
 M1. The tenant pipeline's shape is in place — [`tenant-deploy.yml`](../.github/workflows/tenant-deploy.yml)
 and [`scripts/deploy.sh`](../scripts/deploy.sh); how a tenant calls it is in
 [tenancy-and-config.md](../docs/tenancy-and-config.md). Next: specs-service's outbox exposed as an
-`OutboxSource` and its relay deployed from `maestro-specs`' own module against this one.
+`OutboxSource` and its relay deployed from specs-service's own module ([`specs/terraform/`](../specs/terraform/)) against this one.

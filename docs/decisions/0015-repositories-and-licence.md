@@ -1,6 +1,6 @@
 # ADR-0015 · Repositories: one per component with a consumer; maestro-only services live in `fps4/maestro`; public under MIT
 
-**Status:** accepted · 2026-09-18
+**Status:** accepted · 2026-09-18 · the first rule is amended by [ADR-0020](0020-maestros-own-services-live-in-one-repository.md): a repository is earned by a consumer *outside* maestro
 
 ## Context
 

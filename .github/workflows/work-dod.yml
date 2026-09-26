@@ -1,6 +1,8 @@
-name: dod
+name: work-dod
 
-# The Definition-of-Done gate. Every job is blocking.
+# work-service's Definition-of-Done gate. Every job is blocking. The secret scan and the public
+# guards run once for the whole tree (guards.yml); this is the service's own gate, run when
+# something under work/ changes. Every image is built with work/ as its context, as compose does.
 #
 # GitHub-hosted runners only (maestro ADR-0017: a self-hosted runner on a public repository runs
 # strangers' code). Every job builds an image and runs in it, so the gate is what a laptop can run
@@ -9,36 +11,26 @@ name: dod
 on:
   push:
     branches: [main]
+    paths: ['work/**', '.github/workflows/work-dod.yml']
   pull_request:
+    paths: ['work/**', '.github/workflows/work-dod.yml']
   workflow_dispatch: {}
 
 permissions:
   contents: read
 
 concurrency:
-  group: dod-${{ github.ref }}
+  group: work-dod-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  secret-scan:
-    # No credentials committed. The gitleaks binary rather than the Action, which needs a paid
-    # organisation licence.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: gitleaks
-        run: |
-          TAG=mw-gitleaks:${{ github.run_id }}-${{ github.run_attempt }}
-          docker build -t "$TAG" -f infra/docker/gitleaks.Dockerfile .
-          docker run --rm "$TAG" detect --no-git --source=/repo --config=/repo/.gitleaks.toml --redact --no-banner
-
   api-build:
     # Building the api image runs typecheck, lint and the compile (see api.Dockerfile): nothing that
     # did not pass can be shipped.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t mw-api:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/api.Dockerfile .
+      - run: docker build -t mw-api:${{ github.run_id }}-${{ github.run_attempt }} -f work/infra/docker/api.Dockerfile work
 
   test:
     # The full suite against DynamoDB Local (maestro ADR-0018). Unit tests pin the domain rules —
@@ -49,7 +41,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build the CI image
-        run: docker build -t mw-ci:${{ github.run_id }}-${{ github.run_attempt }} -f infra/docker/ci.Dockerfile .
+        run: docker build -t mw-ci:${{ github.run_id }}-${{ github.run_attempt }} -f work/infra/docker/ci.Dockerfile work
       - name: Test against a sibling DynamoDB Local on a per-run network
         run: |
           set -e
@@ -63,7 +55,7 @@ jobs:
             --health-cmd "curl -s -o /dev/null http://localhost:8000/ || exit 1" \
             --health-interval 3s --health-timeout 3s --health-retries 30 \
             amazon/dynamodb-local:latest -jar DynamoDBLocal.jar -sharedDb -inMemory
-          for i in $(seq 1 40); do
+          for _ in $(seq 1 40); do
             [ "$(docker inspect -f '{{.State.Health.Status}}' "$DYNAMO" 2>/dev/null)" = healthy ] && break
             sleep 2
           done
@@ -87,7 +79,7 @@ jobs:
         with:
           node-version: 22
       - name: npm audit
-        working-directory: api
+        working-directory: work/api
         run: |
           npm audit --omit=dev || true
           npm audit --omit=dev --audit-level=high

@@ -122,7 +122,7 @@ module "specs_console" {
   providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }
 
   name               = "maestro-specs-console"
-  open_next_dir      = "${path.module}/../../maestro-specs/web/.open-next"
+  open_next_dir      = "${path.module}/../../components/maestro/specs/web/.open-next"
   assets_bucket_name = var.specs_console_assets_bucket
   environment        = { API_PROXY_TARGET = module.specs.api_url }
   domain             = "specs.${var.domain}"

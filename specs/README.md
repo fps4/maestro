@@ -2,8 +2,8 @@
 
 A **governed specification service** — write specifications, version them, and put them through gates
 a named human has to pass. It has its own domain, its own console, and single sign-on through
-[`identity-service`](../identity-service), so it is a product on its own; it is also the component
-of [maestro](../maestro) that holds what was agreed.
+[`identity-service`](https://github.com/fps4/identity-service), so it is a product on its own; it is also the component
+of [maestro](../README.md) that holds what was agreed.
 
 Humans and agents author in it. What it guarantees is that **an approval attaches to bytes that
 cannot subsequently change**, that the approver is a named human and never an agent, and that the
@@ -11,7 +11,7 @@ whole chain exports into something meaningful with the service switched off.
 
 Its only required dependency is `identity-service`. Everything else — a durable record spine, an
 evaluator, a notifier — is an **outbound port with a working local default**
-([ADR-0002](docs/design/decisions/0002-identity-service-is-the-only-dependency.md)).
+([ADR-0002](docs/decisions/0002-identity-service-is-the-only-dependency.md)).
 
 ## What it is for
 
@@ -23,7 +23,7 @@ Two consumers shaped the model, and the generic core is their overlap:
 | **maestro v1** (agentic delivery platform, retired) | Charter → Functional spec → Technical design + tasks | Functional, technical design, technical merge |
 
 **Naming.** *maestro* is an ops engine for running applications; its design lives in
-[`../maestro`](../maestro), and [`docs/components/specs-service.md`](../maestro/docs/components/specs-service.md)
+[`docs/`](../docs/) at this repository's root, and [`docs/components/specs-service.md`](../docs/components/specs-service.md)
 there is the page about this service. *maestro v1* is the first iteration of that project — an
 agentic delivery platform, retired — and it stays here because it is the second consumer that shaped
 the model. Earlier revisions of this repository called the first *adel* and the second *maestro*;
@@ -31,7 +31,7 @@ that vocabulary is gone. (Until 2026-09-18 maestro was designed as a governed ap
 with a different chain; the chain changed and no code did — see the demo definition.)
 
 Neither vocabulary is in the code. **Artifact types, links, gates and lifecycles are configuration**
-([ADR-0001](docs/design/decisions/0001-artifact-types-are-configuration.md)) — a workspace declares
+([ADR-0001](docs/decisions/0001-artifact-types-are-configuration.md)) — a workspace declares
 its own and the service enforces what those declarations imply.
 
 ## The one idea
@@ -50,21 +50,21 @@ Accepted ──▶ pinned links freeze to it; the record is portable
 
 Editing is continuous and messy; a record is neither. Keeping them as separate entities is what lets
 a real editor and a trustworthy approval live in one service
-([ADR-0003](docs/design/decisions/0003-immutable-versions-mutable-drafts.md)).
+([ADR-0003](docs/decisions/0003-immutable-versions-mutable-drafts.md)).
 
 And a draft is **one document**: markdown with front-matter, where a table under a declared heading
 *is* a facet. The gate reads structure; the author writes prose; the same bytes are both
-([ADR-0017](docs/design/decisions/0017-one-document.md)).
+([ADR-0017](docs/decisions/0017-one-document.md)).
 
 ## What it is not
 
 - **Not a wiki.** Artifacts have typed links, not a page tree. The editor exists to produce a version
   a gate will decide on; authoring features that do not serve a gated artifact are out of scope. The
   one thing attached to a version besides a decision is a **question** — a fact about it, never a
-  change to it ([ADR-0014](docs/design/decisions/0014-questions-on-a-version.md)).
+  change to it ([ADR-0014](docs/decisions/0014-questions-on-a-version.md)).
 - **Not a policy engine.** It calls an evaluator and records the verdict. Gates read structured
   facets and **never** the body
-  ([ADR-0004](docs/design/decisions/0004-facets-are-evaluated-bodies-are-read.md)).
+  ([ADR-0004](docs/decisions/0004-facets-are-evaluated-bodies-are-read.md)).
 - **Not a workflow engine.** It holds lifecycle state and decisions. Orchestration is yours.
 - **Not an audit substrate — unless you want it to be.** Every state change is emitted to a record
   sink. Point that at a durable spine and the spine is authoritative, and this table becomes a
@@ -73,7 +73,7 @@ And a draft is **one document**: markdown with front-matter, where a table under
 ## Project Layout
 
 ```
-maestro-specs/
+specs/
  ├── api/              # REST API + MCP server. domain/ is pure; a lint rule keeps it that way
  ├── web/              # The console (Next.js) — author, review, decide, read the standards
  ├── config/workspaces/  # THE domain model, as data: the demo tenant (aannemer-x) and the catalogue
@@ -99,8 +99,8 @@ Gate → Decision            immutable, attributed to a named human. The service
 ## Quick Start
 
 The record store is **one DynamoDB table** (maestro's
-[ADR-0018](../maestro/docs/decisions/0018-dynamodb-is-the-mvp-database.md);
-[ADR-0021](docs/design/decisions/0021-the-store-is-dynamodb.md) here). Locally that is DynamoDB
+[ADR-0018](../docs/decisions/0018-dynamodb-is-the-mvp-database.md);
+[ADR-0021](docs/decisions/0021-the-store-is-dynamodb.md) here). Locally that is DynamoDB
 Local in the compose stack, with the table made from the same schema the Terraform module declares
 (`api/src/db/table.ts`); there is no database credential anywhere.
 
@@ -119,15 +119,15 @@ every value but the table's name has a local default:
   SDK's endpoint for `AWS_REGION` with the runtime's own credentials (on AWS, the function's role)
 - `S3_BUCKET` — set it and object storage is on (attachments, and the payload store's `s3` adapter); `S3_ENDPOINT` names MinIO locally, and unset it is the SDK's default endpoint for `S3_REGION` (AWS); `S3_ACCESS_KEY`/`S3_SECRET_KEY` when the runtime's own credentials are not the ones to use
 - `RECORD_SINK` — `local` (default): the outbox relays to a filesystem archive at `RECORD_ARCHIVE_DIR` (`./archive`) — the laptop's spine, readable by `spine-verify` with everything off; `s3`: maestro's spine, with `ARCHIVE_BUCKET`, `ARCHIVE_PREFIX` and `EVENTS_TOPIC_ARN` as the spine's Terraform module outputs them; `off`: write the outbox, relay nothing (the scheduled relay Lambda drains it)
-- `PAYLOAD_STORE` — where the payloads go ([ADR-0020](docs/design/decisions/0020-the-payload-store-and-the-rebuild.md)): a version's text, a decision's reasoning, a question, an answer, an evaluator's findings — written before the event that names them by locator and digest. `local`: a directory at `RECORD_PAYLOAD_DIR` (`./payloads`); `s3`: this service's own bucket, `PAYLOAD_BUCKET` (default `S3_BUCKET`) under `PAYLOAD_PREFIX` (`payloads`), with the `S3_*` endpoint and credentials — versioned, never Object-Locked, so erasure stays possible. Unset, it follows the sink: `local` under `RECORD_SINK=local`, `s3` otherwise
+- `PAYLOAD_STORE` — where the payloads go ([ADR-0020](docs/decisions/0020-the-payload-store-and-the-rebuild.md)): a version's text, a decision's reasoning, a question, an answer, an evaluator's findings — written before the event that names them by locator and digest. `local`: a directory at `RECORD_PAYLOAD_DIR` (`./payloads`); `s3`: this service's own bucket, `PAYLOAD_BUCKET` (default `S3_BUCKET`) under `PAYLOAD_PREFIX` (`payloads`), with the `S3_*` endpoint and credentials — versioned, never Object-Locked, so erasure stays possible. Unset, it follows the sink: `local` under `RECORD_SINK=local`, `s3` otherwise
 - `EVALUATOR_BASE` — optional; without it, evaluations are recorded but never requested
 
 **Admitting a principal.** A token names who someone is — its issuer and subject, and the `prn`
 claim: the maestro principal id identity-service mints, which is the id this service writes on every
-record and the only one ([ADR-0022](docs/design/decisions/0022-the-principal-id-is-identity-services.md));
+record and the only one ([ADR-0022](docs/decisions/0022-the-principal-id-is-identity-services.md));
 a verified token without it is refused. The membership names what a workspace lets them do, and
 membership is granted in the workspace, never by the token
-([ADR-0019](docs/design/decisions/0019-the-outbox-holds-spine-envelopes.md)). The operator's grant is
+([ADR-0019](docs/decisions/0019-the-outbox-holds-spine-envelopes.md)). The operator's grant is
 `npm run workspace:member -- <workspace> --issuer <iss> --subject <sub> --prn <prn-…> --roles a,b [--kind human|agent|service] [--gates g1,g2] [--accountable <prn-h-…>] [--display-name <name>]`:
 the principal is resolved as the first request would resolve it — registered under its `prn` on
 first sight of the identity, found on every sight after — and the membership written is the one that
@@ -166,12 +166,12 @@ Health at `GET /health`.
 ## Deployment
 
 Serverless AWS, as a Terraform module in [`terraform/`](terraform/) (maestro's
-[ADR-0002](../maestro/docs/decisions/0002-serverless-aws-is-the-substrate.md),
-[ADR-0016](../maestro/docs/decisions/0016-terraform-is-the-infrastructure-language.md)). A tenant's
+[ADR-0002](../docs/decisions/0002-serverless-aws-is-the-substrate.md),
+[ADR-0016](../docs/decisions/0016-terraform-is-the-infrastructure-language.md)). A tenant's
 private configuration repository (`fps4/maestro-config-<tenant>` —
-[`../maestro/docs/tenancy-and-config.md`](../maestro/docs/tenancy-and-config.md)) holds the root module
+[`../docs/tenancy-and-config.md`](../docs/tenancy-and-config.md)) holds the root module
 that composes it with the spine's, and the tenant's own pipeline applies it
-([ADR-0017](../maestro/docs/decisions/0017-the-tenant-repository-runs-the-pipeline.md)). Nothing in
+([ADR-0017](../docs/decisions/0017-the-tenant-repository-runs-the-pipeline.md)). Nothing in
 this repository deploys anywhere: its CI runs on GitHub-hosted runners and ends at the gate — `fmt`,
 `validate`, the module's tests against a mocked provider, the example root, and a bundle that boots.
 
@@ -183,7 +183,7 @@ this repository deploys anywhere: its CI runs on GitHub-hosted runners and ends 
 | the store (`bucket_name`) | attachments and payloads (ADR-0020); versioned, encrypted, never public, **never Object-Locked** — a payload must be erasable; `prevent_destroy`; plaintext transport denied |
 | `<name>-api` | the Fastify server, unchanged, as a zip on `nodejs22.x`/arm64 behind the [Lambda Web Adapter](https://github.com/awslabs/aws-lambda-web-adapter) layer; handler `run.sh`; `RECORD_SINK=off` — it writes the outbox and relays nothing; role: its log, the item operations on its table and its indexes, its bucket, nothing else |
 | an HTTP API Gateway | one `$default` route, Lambda proxy in payload format 2.0, auto-deployed, access-logged; CORS is the application's (`CORS_ORIGINS`), not the gateway's |
-| `<name>-relay` | the spine's relay handler over this service's outbox ([ADR-0019](docs/design/decisions/0019-the-outbox-holds-spine-envelopes.md)); EventBridge Scheduler every minute, one invocation at a time; role: its log and the table, plus the spine's `relay_policy_json`, attached unchanged |
+| `<name>-relay` | the spine's relay handler over this service's outbox ([ADR-0019](docs/decisions/0019-the-outbox-holds-spine-envelopes.md)); EventBridge Scheduler every minute, one invocation at a time; role: its log and the table, plus the spine's `relay_policy_json`, attached unchanged |
 | four alarms | `<name>-api-5xx` (five server errors in five minutes), `<name>-relay-errors`, `<name>-relay-silent` (no run in fifteen minutes), `<name>-relay-refused` (the spine refused an event; that workspace's relay is stopped until a person looks) → `alarm_actions` |
 
 ### Inputs
@@ -212,7 +212,7 @@ Outputs: `api_url`, `api_id`, `table_name`, `table_arn`, `bucket_name`, `bucket_
 
 ```hcl
 module "spine" {
-  source              = "github.com/fps4/maestro//spine/terraform?ref=spine-v0.2.0"
+  source              = "github.com/fps4/maestro//spine/terraform?ref=<tag>"
   name                = "aannemer-x"
   archive_bucket_name = "aannemer-x-maestro-archive"
   archive_prefix      = "specs/"
@@ -221,7 +221,7 @@ module "spine" {
 }
 
 module "specs" {
-  source                = "github.com/fps4/maestro-specs//terraform?ref=<tag>"
+  source                = "github.com/fps4/maestro//specs/terraform?ref=<tag>" # the same tag as the spine: one ref names the set
   name                  = "aannemer-x-specs"
   table_name            = "aannemer-x-maestro-specs"
   bucket_name           = "aannemer-x-maestro-specs"
@@ -237,8 +237,8 @@ module "specs" {
 ```
 
 [`terraform/examples/demo/`](terraform/examples/demo/main.tf) is this root for the demo tenant, with
-placeholder values; `terraform init -backend=false && terraform validate` there fetches the spine's
-module at its tag.
+placeholder values; `terraform init -backend=false && terraform validate` there takes the spine's
+module from [`spine/terraform/`](../spine/terraform/) at the same commit.
 
 **The Web Adapter layer.** AWS publishes the adapter as a public layer per region under its own
 account, so the ARN carries an account id and cannot be a default in a public repository. Take it
@@ -270,13 +270,13 @@ cd api && npm ci && npm run bundle && npm run sbom
 
 `bundle/api.zip` (the server as one ESM file plus `run.sh`) and `bundle/relay.zip`, built
 reproducibly so Terraform's `source_code_hash` moves only when the code does, each with a CycloneDX
-SBOM beside it (maestro's [build-standards §4](../maestro/docs/build-standards.md)). The module takes
+SBOM beside it (maestro's [build-standards §4](../docs/build-standards.md)). The module takes
 the zips as inputs; bundling is the package's job, not the module's.
 
 ## API Summary
 
 Every write produces a draft or a **proposed** version. Only a gate decision accepts
-([ADR-0005](docs/design/decisions/0005-agents-may-author-never-decide.md)).
+([ADR-0005](docs/decisions/0005-agents-may-author-never-decide.md)).
 
 | | |
 |---|---|
@@ -305,11 +305,11 @@ the human accountable for it — and **no decision surface at all**, and no way 
 ## From a file next to the code
 
 ```bash
-cd api && SPECS_URL=… SPECS_TOKEN=… npm run specs -- propose ../../my-service/docs/spec.md --workspace aannemer-x
+cd api && SPECS_URL=… SPECS_TOKEN=… npm run specs -- propose ../../../my-service/docs/spec.md --workspace aannemer-x
 ```
 
 A markdown file with YAML front-matter is a complete authoring surface, and
-[`.github/actions/specs`](.github/actions/specs/action.yml) proposes it from a pull request and
+[`.github/actions/specs`](../.github/actions/specs/action.yml) at the root proposes it from a pull request and
 comments the decider's packet. Nothing in CI decides — see
 [`docs/guides/git-native-specs.md`](docs/guides/git-native-specs.md).
 
@@ -341,7 +341,7 @@ through HTTP and through the CLI, the adversarial cross-workspace read, and the 
 no way to decide.
 
 **The store is DynamoDB (2026-09-20).** maestro's ADR-0018 replaced Atlas with one table per
-component; [ADR-0021](docs/design/decisions/0021-the-store-is-dynamodb.md) records how this service
+component; [ADR-0021](docs/decisions/0021-the-store-is-dynamodb.md) records how this service
 took it: a prefix per workspace under the same handle, every query a key or an index, the outbox
 one transaction, the relay on a sparse index, search a filtered read, the rebuild a deleted prefix.
 The suite runs against DynamoDB Local; the rebuild gate passes on it.
@@ -352,4 +352,4 @@ worse than an empty shelf.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). The tree holds code, the design and one fictional tenant; a real tenant's configuration lives in its own private repository, and CI fails on anything that identifies one (`scripts/check-public.sh`).
+MIT — see [LICENSE](../LICENSE). The tree holds code, the design and one fictional tenant; a real tenant's configuration lives in its own private repository, and CI fails on anything that identifies one ([`scripts/check-public.sh`](../scripts/check-public.sh) at the root).

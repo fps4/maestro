@@ -49,6 +49,8 @@ export type Raised = Base<
     subject_ref?: string;
     parent?: string;
     milestone?: string;
+    /** The items it waits on, named at raise: each holds a `blocks` edge to it. */
+    blocked_by?: string[];
     severity: Severity;
     tier?: string;
     onboarding_level?: OnboardingLevel;
@@ -156,6 +158,7 @@ export function evolve(head: WorkItem | null, event: ItemEvent): WorkItem {
       about,
       ...(b.parent ? { parent: b.parent } : {}),
       ...(b.milestone ? { milestone: b.milestone } : {}),
+      ...(b.blocked_by ? { blocked_by: b.blocked_by } : {}),
       raised_by: b.raised_by,
       ...(b.raised_cause ? { raised_cause: b.raised_cause } : {}),
       raised_by_principal: event.acting,

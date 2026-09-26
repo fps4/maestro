@@ -117,6 +117,9 @@ export class RebuildService {
         if (item.type === 'WorkItemRaised') {
           if (item.body.parent) edges.push({ from: item.body.parent, rel: 'child', to: item.item });
           if (item.body.milestone) edges.push({ from: item.body.milestone, rel: 'member', to: item.item });
+          for (const blocker of item.body.blocked_by ?? []) {
+            edges.push({ from: blocker, rel: 'blocks', to: item.item });
+          }
           highest = Math.max(highest, Number(item.item.slice('wrk-'.length)));
           const { fingerprint, fingerprint_until, fold } = item.body;
           if (fingerprint && fingerprint_until) {

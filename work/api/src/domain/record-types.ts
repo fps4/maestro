@@ -37,6 +37,7 @@ const bodies: Record<ItemEventType, z.ZodTypeAny> = {
       subject_ref: id.optional(),
       parent: id.optional(),
       milestone: id.optional(),
+      blocked_by: z.array(id).min(1).optional(),
       severity: z.enum(SEVERITIES),
       tier: id.optional(),
       onboarding_level: z.enum(ONBOARDING_LEVELS).optional(),

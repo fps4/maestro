@@ -23,7 +23,7 @@ import type { WorkspaceHandle } from '../db/handle.js';
 import type { Notifier } from '../notify/notifier.js';
 import { evolve, talliesOf, type ItemEvent } from '../domain/events.js';
 import { itemId, type PrincipalKind } from '../domain/ids.js';
-import { isHeld, nextAt, type State, type WorkItem } from '../domain/item.js';
+import { isClosed, isHeld, nextAt, type State, type WorkItem } from '../domain/item.js';
 import { armed } from '../domain/evidence.js';
 import { NotFound } from '../http/errors.js';
 import { itemPayloadKey, writePayload, type PayloadStore } from '../record/payload-store.js';
@@ -63,6 +63,42 @@ export interface FrontierRow {
   next_human_touchpoint: string;
 }
 
+/** An item another one waits on, or one waiting on it: enough to say who moves it and by when. */
+export interface EdgeRow {
+  item_id: string;
+  class: WorkItem['class'];
+  title: string;
+  state: State;
+  accountable: string;
+  due: string;
+}
+
+export interface Blocking {
+  item_id: string;
+  /** The open items it waits on. A blocker that closed no longer blocks, whatever its outcome. */
+  blocked_by: EdgeRow[];
+  /** The open items waiting on it. */
+  blocks: EdgeRow[];
+}
+
+/** The board's columns: the state machine, left to right, and what closed today. */
+export const BOARD_COLUMNS = ['open', 'assigned', 'in_progress', 'blocked', 'resolved', 'escalated'] as const;
+
+export interface Board {
+  columns: Record<(typeof BOARD_COLUMNS)[number], FrontierRow[]>;
+  /** Closed since midnight UTC, newest first, with the outcome each closed with. */
+  closed_today: Array<FrontierRow & { outcome: string; closed_at: string }>;
+}
+
+/** A person's slice of the frontier. specs-service's half — decisions and questions — is its own read. */
+export interface Today {
+  principal: string;
+  /** Items the person holds, or answers for with no one holding them: theirs to move. */
+  owes: FrontierRow[];
+  /** Items the person answers for while an agent acts on them: the runs they are accountable for. */
+  oversees: FrontierRow[];
+}
+
 export interface Rates {
   application: string;
   closed: Record<string, number>;
@@ -93,6 +129,30 @@ export const scopeOf = (ctx: RequestContext): Scope => ({
 export function nextHumanTouchpoint(item: WorkItem): string {
   return item.assigned_to?.startsWith('prn-h-') && isHeld(item) ? item.assigned_to : item.accountable;
 }
+
+export function frontierRow(i: WorkItem): FrontierRow {
+  return {
+    item_id: i.item_id,
+    class: i.class,
+    title: i.title,
+    about: i.about,
+    accountable: i.accountable,
+    ...(isHeld(i) && i.assigned_to ? { acting: i.assigned_to } : {}),
+    state: i.state,
+    severity: i.severity,
+    due: isClosed(i) ? i.closed_at! : nextAt(i),
+    next_human_touchpoint: nextHumanTouchpoint(i),
+  };
+}
+
+const edgeRow = (i: WorkItem): EdgeRow => ({
+  item_id: i.item_id,
+  class: i.class,
+  title: i.title,
+  state: i.state,
+  accountable: i.accountable,
+  due: nextAt(i),
+});
 
 export class WorkItemService {
   constructor(private readonly deps: WorkItemDeps) {}
@@ -189,6 +249,14 @@ export class WorkItemService {
           if (!id) continue;
           if (!(await handle.items.get(id))) throw new NotFound(`No item \`${id}\` in this workspace.`);
           edges.push({ from: id, rel, to: '' });
+        }
+        for (const blocker of new Set(input.blocked_by ?? [])) {
+          const head = await handle.items.get(blocker);
+          if (!head) throw new NotFound(`No item \`${blocker}\` in this workspace.`);
+          if (isClosed(head)) {
+            throw new decide.Refusal(`\`${blocker}\` is closed (\`${head.outcome}\`): it blocks nothing.`);
+          }
+          edges.push({ from: blocker, rel: 'blocks', to: '' });
         }
         const item = await this.raiseIn(tx, ctx, env, correlation, input, {}, edges);
         if (key) {
@@ -332,10 +400,31 @@ export class WorkItemService {
     return result;
   }
 
-  async get(ctx: RequestContext, id: string): Promise<{ item: WorkItem; edges: Edge[] }> {
-    const item = await ctx.handle.items.get(id);
-    if (!item) throw new NotFound(`No item \`${id}\` in this workspace.`);
-    return { item, edges: await ctx.handle.items.edges(id) };
+  /** fetch: the item with its evidence and clocks, its edges, and who a person reaches next about it. */
+  async get(
+    ctx: RequestContext,
+    id: string,
+  ): Promise<{ item: WorkItem; edges: Edge[]; next_human_touchpoint: string }> {
+    const item = await this.head(ctx, id);
+    return {
+      item,
+      edges: await ctx.handle.items.edges(id),
+      next_human_touchpoint: nextHumanTouchpoint(item),
+    };
+  }
+
+  /** blocking: what the item waits on, and what waits on it — open items only, both ways. */
+  async blocking(ctx: RequestContext, id: string): Promise<Blocking> {
+    const item = await this.head(ctx, id);
+    const waiting = (await ctx.handle.items.edges(id)).filter((e) => e.rel === 'blocks').map((e) => e.to);
+    const heads = await ctx.handle.items.getMany([...(item.blocked_by ?? []), ...waiting]);
+    const byId = new Map(heads.map((h) => [h.item_id, h]));
+    const rows = (ids: string[]) =>
+      ids
+        .map((i) => byId.get(i))
+        .filter((h): h is WorkItem => !!h && !isClosed(h))
+        .map(edgeRow);
+    return { item_id: id, blocked_by: rows(item.blocked_by ?? []), blocks: rows(waiting) };
   }
 
   /** The frontier: the open set, soonest first, filtered in memory (ADR-0019 §3). */
@@ -350,19 +439,46 @@ export class WorkItemService {
           (isHeld(i) && i.assigned_to === me) ||
           (i.accountable === me && (!isHeld(i) || !i.assigned_to?.startsWith('prn-h-'))),
       )
-      .map((i): FrontierRow => ({
-        item_id: i.item_id,
-        class: i.class,
-        title: i.title,
-        about: i.about,
-        accountable: i.accountable,
-        ...(isHeld(i) && i.assigned_to ? { acting: i.assigned_to } : {}),
-        state: i.state,
-        severity: i.severity,
-        due: nextAt(i),
-        next_human_touchpoint: nextHumanTouchpoint(i),
-      }));
+      .map(frontierRow);
     return q.limit ? rows.slice(0, q.limit) : rows;
+  }
+
+  /**
+   * The board: the frontier's set by state, and what closed today (ADR-0019 §3, #4). Filters by
+   * milestone and application apply to both.
+   */
+  async board(ctx: RequestContext, q: Omit<FrontierQuery, 'for' | 'limit'>): Promise<Board> {
+    const columns = Object.fromEntries(
+      BOARD_COLUMNS.map((c) => [c, [] as FrontierRow[]]),
+    ) as Board['columns'];
+    for (const row of await this.frontier(ctx, q)) {
+      if (row.state !== 'closed') columns[row.state].push(row);
+    }
+    const today = this.deps.now().slice(0, 10);
+    const closed_today = (await ctx.handle.items.closedSince(today))
+      .filter((i) => !q.application || i.about.application === q.application)
+      .filter((i) => !q.milestone || i.milestone === q.milestone)
+      .sort((a, b) => (b.closed_at ?? '').localeCompare(a.closed_at ?? ''))
+      .map((i) => ({ ...frontierRow(i), outcome: i.outcome!, closed_at: i.closed_at! }));
+    return { columns, closed_today };
+  }
+
+  /** Today for the caller: what they owe, and the agents' work they answer for. */
+  async today(ctx: RequestContext): Promise<Today> {
+    const principal = ctx.caller.principal;
+    const rows = await this.frontier(ctx, { for: principal });
+    const byAgent = (r: FrontierRow) => !!r.acting && !r.acting.startsWith('prn-h-');
+    return {
+      principal,
+      owes: rows.filter((r) => !byAgent(r)),
+      oversees: rows.filter(byAgent),
+    };
+  }
+
+  private async head(ctx: RequestContext, id: string): Promise<WorkItem> {
+    const item = await ctx.handle.items.get(id);
+    if (!item) throw new NotFound(`No item \`${id}\` in this workspace.`);
+    return item;
   }
 
   /** Closures by outcome and refusals by check and class for one application: one query. */

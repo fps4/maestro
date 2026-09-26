@@ -13,7 +13,15 @@ import type { SpineEvent } from '@fps4/maestro-spine';
 import { Conflict, Items, strip, type Item, type Transaction } from './items.js';
 import { KINDS, workspaceKeys, type WorkspaceKeys } from './keys.js';
 import { PK } from './table.js';
-import { RequestRepository, TallyRepository, WorkItemRepository } from './work-items.js';
+import {
+  DeliveryRepository,
+  ExpectationRepository,
+  FingerprintRepository,
+  FoldRepository,
+  RequestRepository,
+  TallyRepository,
+  WorkItemRepository,
+} from './work-items.js';
 
 export { Conflict, IsolationViolation, Transaction } from './items.js';
 
@@ -187,6 +195,10 @@ export interface WorkspaceHandle {
   readonly items: WorkItemRepository;
   readonly tallies: TallyRepository;
   readonly requests: RequestRepository;
+  readonly expectations: ExpectationRepository;
+  readonly fingerprints: FingerprintRepository;
+  readonly folds: FoldRepository;
+  readonly deliveries: DeliveryRepository;
   /**
    * One transaction over this workspace's items: `work` reads what it needs and stages its writes
    * on `tx`, each with the condition that makes its reads still true; the commit is all or nothing.
@@ -216,6 +228,10 @@ export function workspaceHandle(
     items: new WorkItemRepository(b),
     tallies: new TallyRepository(b),
     requests: new RequestRepository(b),
+    expectations: new ExpectationRepository(b),
+    fingerprints: new FingerprintRepository(b),
+    folds: new FoldRepository(b),
+    deliveries: new DeliveryRepository(b),
     async transaction<T>(work: (tx: Transaction) => Promise<T>): Promise<T> {
       for (let attempt = 1; ; attempt += 1) {
         const tx = b.items.transaction();

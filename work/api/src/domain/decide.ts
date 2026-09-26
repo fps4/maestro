@@ -20,7 +20,8 @@ import {
   seatFor,
   type WorkspaceDefinition,
 } from './definition.js';
-import { evolve, type Attribution, type Chased, type ItemEvent } from './events.js';
+import { satisfiedBy, type Fact } from './evidence.js';
+import { evolve, evolveAll, type Attribution, type Chased, type ItemEvent } from './events.js';
 import type { PrincipalKind } from './ids.js';
 import {
   BELOW_CORRECTNESS,
@@ -101,7 +102,18 @@ function assertMayAct(actor: Actor): void {
   }
 }
 
-export function raise(env: Env, id: string, input: RaiseInput): ItemEvent[] {
+/** What a signal adds to a raise: its fingerprint and window, a fold, a deadline policy sets outright. */
+export interface Origin {
+  fingerprint?: string;
+  fingerprint_until?: string;
+  fold?: string;
+  /** Overrides the clocks' resolve_by: an advisory's `resolve_within`, a fold's week. */
+  resolve_by?: string;
+  /** For an item about nothing the definition declares: the workspace's steward answers for it. */
+  accountable?: string;
+}
+
+export function raise(env: Env, id: string, input: RaiseInput, origin: Origin = {}): ItemEvent[] {
   const { definition, actor, now } = env;
   assertMayAct(actor);
   const policy = definition.policy;
@@ -128,7 +140,8 @@ export function raise(env: Env, id: string, input: RaiseInput): ItemEvent[] {
     );
   }
 
-  const accountable = app?.accountable ?? (actor.kind === 'human' ? actor.principal : actor.accountable!);
+  const accountable =
+    app?.accountable ?? origin.accountable ?? (actor.kind === 'human' ? actor.principal : actor.accountable!);
   const seat = seatFor(definition, input.class);
   const seatDecl = definition.seats[seat]!;
   const severity = resolveSeverity(policy, input.severity_hint);
@@ -158,13 +171,19 @@ export function raise(env: Env, id: string, input: RaiseInput): ItemEvent[] {
         ...(input.remediation_class ? { remediation_class: input.remediation_class } : {}),
         ...(input.reversible !== undefined ? { reversible: input.reversible } : {}),
         evidence_plan: plan,
-        ...(clocks
-          ? { respond_by: addDuration(now, clocks[0]), resolve_by: addDuration(now, clocks[1]) }
-          : {}),
+        ...(clocks ? { respond_by: addDuration(now, clocks[0]) } : {}),
+        ...(origin.resolve_by
+          ? { resolve_by: origin.resolve_by }
+          : clocks
+            ? { resolve_by: addDuration(now, clocks[1]) }
+            : {}),
         review_by: addDuration(now, policy.review_within),
         definition_version: definition.definition_version,
         consequence_class: definition.consequence_class,
-        ...(clocks && policy.chase_ladder
+        ...(origin.fingerprint ? { fingerprint: origin.fingerprint } : {}),
+        ...(origin.fingerprint_until ? { fingerprint_until: origin.fingerprint_until } : {}),
+        ...(origin.fold ? { fold: origin.fold } : {}),
+        ...((clocks || origin.resolve_by) && policy.chase_ladder
           ? {
               chase_ladder: policy.chase_ladder,
               chase_steps: policy.chase_ladders[policy.chase_ladder]!.filter(
@@ -518,4 +537,93 @@ export function tick(env: Env, item: WorkItem): ItemEvent[] {
     });
   }
   return events;
+}
+
+/**
+ * Link the pull request or the specs-service artifact an item's evidence waits on — what arms
+ * `merged_change` and `decision_accepted`. The holder, the accountable human, or an intake adapter
+ * (the `intake` role) may link; a link, once made, is not moved.
+ */
+export function link(env: Env, item: WorkItem, kind: 'pull_request' | 'artifact', ref: string): ItemEvent[] {
+  const { actor } = env;
+  if (item.state === 'closed') throw new Refusal(`\`${item.item_id}\` is closed (${item.outcome}).`);
+  const holder = isHeld(item) && item.assigned_to === actor.principal;
+  if (!holder && actor.principal !== item.accountable && !actor.roles.includes('intake')) {
+    throw new Refusal(
+      `Only the holder of \`${item.item_id}\`, its accountable human or an intake adapter may link it.`,
+    );
+  }
+  const current = item.links?.[kind];
+  if (current === ref) return [];
+  if (current) throw new Refusal(`\`${item.item_id}\` is already linked to ${current}.`);
+  return [
+    {
+      type: 'WorkItemLinked',
+      item: item.item_id,
+      at: env.now,
+      ...attribution(env, item),
+      body: { link: kind, ref },
+    },
+  ];
+}
+
+/**
+ * A fact meets the entries armed for it; once every entry is met the item closes \`done\` in the same
+ * transaction, whoever holds it or none. A fact that meets nothing decides nothing.
+ */
+export function satisfy(env: Env, item: WorkItem, fact: Fact): ItemEvent[] {
+  const met = satisfiedBy(item, fact);
+  if (met.length === 0) return [];
+  const by = attribution(env, item);
+  const events: ItemEvent[] = met.map((a) => ({
+    type: 'WorkItemEvidenceSatisfied',
+    item: item.item_id,
+    at: env.now,
+    ...by,
+    body: {
+      index: a.index,
+      kind: item.evidence_plan[a.index]!.kind,
+      key: a.key,
+      fact: fact.ref,
+      occurred_at: fact.occurred_at,
+    },
+  }));
+  const after = evolveAll(item, events)!;
+  if (evidenceSatisfied(after)) {
+    events.push({
+      type: 'WorkItemClosed',
+      item: item.item_id,
+      at: env.now,
+      ...by,
+      body: { outcome: 'done' },
+    });
+  }
+  return events;
+}
+
+/** A further signal on an open item: counted, the window moved, and for a fold, its re-scan owed. */
+export function attachSignal(
+  env: Env,
+  item: WorkItem,
+  signal: { fingerprint: string; kind: string; fingerprint_until?: string; fold?: boolean },
+): ItemEvent[] {
+  if (item.state === 'closed')
+    throw new Refusal(`\`${item.item_id}\` is closed; a signal raises a new item.`);
+  const already = item.evidence_plan.some(
+    (e) => e.kind === 'rescan_clear' && e.fingerprint === signal.fingerprint,
+  );
+  return [
+    {
+      type: 'WorkItemSignalAttached',
+      item: item.item_id,
+      at: env.now,
+      ...attribution(env, item),
+      body: {
+        fingerprint: signal.fingerprint,
+        signal_kind: signal.kind,
+        ...(signal.fingerprint_until ? { fingerprint_until: signal.fingerprint_until } : {}),
+        ...(signal.fold && !already ? { adds_rescan_clear: true } : {}),
+      },
+    },
+  ];
 }

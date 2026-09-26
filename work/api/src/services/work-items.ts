@@ -24,6 +24,7 @@ import type { Notifier } from '../notify/notifier.js';
 import { evolve, talliesOf, type ItemEvent } from '../domain/events.js';
 import { itemId, type PrincipalKind } from '../domain/ids.js';
 import { isHeld, nextAt, type State, type WorkItem } from '../domain/item.js';
+import { armed } from '../domain/evidence.js';
 import { NotFound } from '../http/errors.js';
 import { itemPayloadKey, writePayload, type PayloadStore } from '../record/payload-store.js';
 import { emit, type Recordable } from './recorder.js';
@@ -96,7 +97,7 @@ export function nextHumanTouchpoint(item: WorkItem): string {
 export class WorkItemService {
   constructor(private readonly deps: WorkItemDeps) {}
 
-  private async env(scope: Scope): Promise<Env> {
+  async env(scope: Scope): Promise<Env> {
     return {
       definition: await this.deps.workspaces.current(scope.workspace),
       actor: scope.actor,
@@ -112,7 +113,7 @@ export class WorkItemService {
   /**
    * Fold the events onto the head and stage everything they imply on `tx`. Returns the new head.
    */
-  private async stage(
+  async stage(
     tx: Transaction,
     ctx: Scope,
     correlation: string,
@@ -142,6 +143,18 @@ export class WorkItemService {
       });
     }
     ctx.handle.items.stage(tx, before, head!);
+    // The expectations follow the head: what it waits on now is written, what it no longer waits on
+    // is removed, in the same transaction (ADR-0019 §5).
+    const was = new Map((before ? armed(before) : []).map((a) => [`${a.key}\u0000${a.index}`, a]));
+    const is = new Map(armed(head!).map((a) => [`${a.key}\u0000${a.index}`, a]));
+    for (const [k, a] of was) {
+      if (!is.has(k))
+        ctx.handle.expectations.stageDelete(tx, { key: a.key, item_id: head!.item_id, index: a.index });
+    }
+    for (const [k, a] of is) {
+      if (!was.has(k))
+        ctx.handle.expectations.stagePut(tx, { key: a.key, item_id: head!.item_id, index: a.index });
+    }
     for (const [name, by] of tallies) ctx.handle.tallies.stageAdd(tx, name, by);
     for (const edge of edges) ctx.handle.items.stageEdge(tx, edge);
     await emit(
@@ -177,20 +190,11 @@ export class WorkItemService {
           if (!(await handle.items.get(id))) throw new NotFound(`No item \`${id}\` in this workspace.`);
           edges.push({ from: id, rel, to: '' });
         }
-        const n = await handle.counters.get('item');
-        const id = itemId(n + 1);
-        const events = decide.raise(env, id, input);
-        handle.counters.bump('item', n, 1, tx);
-        if (key) handle.requests.stage(tx, { principal: ctx.actor.principal, key, item_id: id }, env.now);
-        const item = await this.stage(
-          tx,
-          ctx,
-          correlation,
-          null,
-          events,
-          edges.map((e) => ({ ...e, to: id })),
-        );
-        return { item: item!, replayed: false };
+        const item = await this.raiseIn(tx, ctx, env, correlation, input, {}, edges);
+        if (key) {
+          handle.requests.stage(tx, { principal: ctx.actor.principal, key, item_id: item.item_id }, env.now);
+        }
+        return { item, replayed: false };
       });
     } catch (error) {
       // Two publishes with one key raced, and the other won: answer with what it raised.
@@ -202,7 +206,35 @@ export class WorkItemService {
     }
   }
 
-  private async act<R>(
+  /**
+   * Raise an item on `tx`: the next id from the workspace's counter, decided and recorded. The caller
+   * stages whatever else the raise implies (a request key, a fingerprint, a fold, a delivery).
+   */
+  async raiseIn(
+    tx: Transaction,
+    scope: Scope,
+    env: Env,
+    correlation: string,
+    input: RaiseInput,
+    origin: decide.Origin = {},
+    edges: Edge[] = [],
+  ): Promise<WorkItem> {
+    const n = await scope.handle.counters.get('item');
+    const id = itemId(n + 1);
+    const events = decide.raise(env, id, input, origin);
+    scope.handle.counters.bump('item', n, 1, tx);
+    const item = await this.stage(
+      tx,
+      scope,
+      correlation,
+      null,
+      events,
+      edges.map((e) => ({ ...e, to: id })),
+    );
+    return item!;
+  }
+
+  async act<R>(
     ctx: Scope,
     id: string,
     command: (
@@ -249,6 +281,21 @@ export class WorkItemService {
     return (
       await this.act(scopeOf(ctx), id, (env, head) => ({
         events: decide.resolve(env, head, outcome, reason),
+        result: null,
+      }))
+    ).item;
+  }
+
+  /** Link the pull request or the artifact the evidence waits on; arms the entry that needs it. */
+  async link(
+    ctx: RequestContext,
+    id: string,
+    kind: 'pull_request' | 'artifact',
+    ref: string,
+  ): Promise<WorkItem> {
+    return (
+      await this.act(scopeOf(ctx), id, (env, head) => ({
+        events: decide.link(env, head, kind, ref),
         result: null,
       }))
     ).item;

@@ -91,7 +91,18 @@ export interface Chase {
 
 export interface EvidenceEntry {
   kind: EvidenceKind;
+  /** For `signal_ok` and `rescan_clear`: the fingerprint whose all-clear satisfies it. */
+  fingerprint?: string;
+  /** When the fact happened — its own time, not when it was recorded. */
   satisfied_at?: string;
+  /** The fact, by reference: a pull request, a deploy, a signal's delivery. */
+  satisfied_by?: string;
+}
+
+/** What an item is linked to: the pull request that arms `merged_change`, the artifact that arms `decision_accepted`. */
+export interface Links {
+  pull_request?: string;
+  artifact?: string;
 }
 
 /** What an item is about: an application and environment, or another subject. */
@@ -113,6 +124,13 @@ export interface WorkItem {
   raised_by: RaisedBy;
   raised_cause?: string;
   raised_by_principal: string;
+  /** The signal fingerprint that raised it — dedup and correlation key (ADR-0019 §7). */
+  fingerprint?: string;
+  /** The weekly obligation this item is, `<fold>#<period>`, when it is one. */
+  fold?: string;
+  /** How many further signals attached to it. */
+  signals?: number;
+  links?: Links;
   consequence_class: string;
   definition_version: number;
 

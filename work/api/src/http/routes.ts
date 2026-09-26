@@ -9,7 +9,7 @@
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { buildContext, type RequestContext } from '../auth/context.js';
+import { buildContext, requireRole, type RequestContext } from '../auth/context.js';
 import { Unauthenticated, type TokenVerifier } from '../auth/verify.js';
 import type { Config } from '../config.js';
 import type { Store } from '../db/client.js';
@@ -17,7 +17,10 @@ import { Refusal } from '../domain/decide.js';
 import { ITEM_ID } from '../domain/ids.js';
 import { EVIDENCE_KINDS, ITEM_CLASSES, REMEDIATION_CLASSES, STATES } from '../domain/item.js';
 import type { PayloadStore } from '../record/payload-store.js';
-import { WorkItemService } from '../services/work-items.js';
+import { factKeys, type Fact } from '../domain/evidence.js';
+import { signalSchema } from '../domain/intake.js';
+import { IntakeService } from '../services/intake.js';
+import { scopeOf, WorkItemService } from '../services/work-items.js';
 import { WorkspaceRegistry } from '../services/workspaces.js';
 import { errorHandler } from './errors.js';
 
@@ -89,6 +92,66 @@ const resolveSchema = z
 
 const transitionSchema = z.object({ state: z.enum(STATES) }).strict();
 
+const tokenOf = (label: string) =>
+  z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:@/+=#-]{0,255}$/, `${label} must be a token, not prose`);
+const at = z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/, 'must be ISO 8601 UTC');
+const pullRequest = z
+  .string()
+  .regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+#[1-9][0-9]*$/, 'a pull request is <owner>/<repo>#<number>');
+
+const linkSchema = z.union([
+  z.object({ pull_request: pullRequest }).strict(),
+  z.object({ artifact: tokenOf('an artifact') }).strict(),
+]);
+
+/** The facts an adapter reports, each the evidence entry it can satisfy (ADR-0019 §5). */
+const factSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('merged_change'),
+      repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/),
+      pull_number: z.number().int().positive(),
+      merged_at: at,
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('deploy_event'),
+      application: tokenOf('application'),
+      environment: tokenOf('environment'),
+      occurred_at: at,
+      digest: tokenOf('digest').optional(),
+    })
+    .strict(),
+  z.object({ kind: z.literal('decision_accepted'), artifact: tokenOf('artifact'), occurred_at: at }).strict(),
+]);
+
+export function factOf(input: z.infer<typeof factSchema>): Fact {
+  switch (input.kind) {
+    case 'merged_change':
+      return {
+        kind: 'merged_change',
+        key: factKeys.merged_change(input.repository, input.pull_number),
+        ref: `${input.repository}#${input.pull_number}`,
+        occurred_at: input.merged_at,
+      };
+    case 'deploy_event':
+      return {
+        kind: 'deploy_event',
+        key: factKeys.deploy_event(input.application, input.environment),
+        ref: input.digest ?? `deploy:${input.application}:${input.environment}:${input.occurred_at}`,
+        occurred_at: input.occurred_at,
+      };
+    case 'decision_accepted':
+      return {
+        kind: 'decision_accepted',
+        key: factKeys.decision_accepted(input.artifact),
+        ref: input.artifact,
+        occurred_at: input.occurred_at,
+      };
+  }
+}
+
 const frontierSchema = z
   .object({
     for: z.string().optional(),
@@ -116,6 +179,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
   const now = deps.now ?? (() => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'));
   const workspaces = new WorkspaceRegistry(deps.store);
   const items = new WorkItemService({ store: deps.store, payloads: deps.payloads, workspaces, now });
+  const intake = new IntakeService(items);
 
   app.get('/health', async () => ({ status: 'ok' }));
 
@@ -147,6 +211,32 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     return result.claimed
       ? { result: 'claimed', item, lease_expires_at: item.lease_expires_at }
       : { result: 'refused', check: result.check, sentence: result.sentence, item };
+  });
+
+  /** Link the pull request or artifact the evidence waits on. */
+  app.post<ItemParams>('/v1/workspaces/:ws/items/:id/link', async (request) => {
+    const ctx = await contextFor(deps, request);
+    const body = linkSchema.parse(request.body);
+    const [kind, ref] =
+      'pull_request' in body
+        ? (['pull_request', body.pull_request] as const)
+        : (['artifact', body.artifact] as const);
+    return { item: await items.link(ctx, request.params.id, kind, ref) };
+  });
+
+  /** A signal, in the envelope every adapter produces. The adapters' seat: `intake`. */
+  app.post<WsParams>('/v1/workspaces/:ws/signals', async (request, reply) => {
+    const ctx = await contextFor(deps, request);
+    requireRole(ctx, 'intake');
+    const result = await intake.signal(scopeOf(ctx), signalSchema.parse(request.body));
+    return reply.code(result.outcome === 'raised' && !result.replayed ? 201 : 200).send(result);
+  });
+
+  /** A fact from the world — a merge, a deploy, an accepted decision — applied to what waits on it. */
+  app.post<WsParams>('/v1/workspaces/:ws/facts', async (request) => {
+    const ctx = await contextFor(deps, request);
+    requireRole(ctx, 'intake');
+    return intake.fact(scopeOf(ctx), factOf(factSchema.parse(request.body)));
   });
 
   /** The holder renews its lease. */

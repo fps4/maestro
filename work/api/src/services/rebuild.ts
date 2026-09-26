@@ -19,7 +19,8 @@ import {
 } from '@fps4/maestro-spine';
 import type { Store } from '../db/client.js';
 import { PROJECTION_VERSION, type OutboxRow } from '../db/handle.js';
-import type { Edge } from '../db/work-items.js';
+import type { Edge, FingerprintWindow, FoldRecord } from '../db/work-items.js';
+import { armed } from '../domain/evidence.js';
 import { evolve, talliesOf, type ItemEvent } from '../domain/events.js';
 import { spineWorkspaceId } from '../domain/ids.js';
 import type { WorkItem } from '../domain/item.js';
@@ -79,6 +80,10 @@ export class RebuildService {
 
     const heads = new Map<string, WorkItem>();
     const edges: Edge[] = [];
+    // Derived from the events like the heads: each fingerprint's window and the item it names, each
+    // week's fold; the expectations from the heads as they end.
+    const windows = new Map<string, FingerprintWindow>();
+    const folds = new Map<string, FoldRecord>();
     const tallies = new Map<string, number>();
     const rows: OutboxRow[] = [];
     let expected = 1;
@@ -113,6 +118,15 @@ export class RebuildService {
           if (item.body.parent) edges.push({ from: item.body.parent, rel: 'child', to: item.item });
           if (item.body.milestone) edges.push({ from: item.body.milestone, rel: 'member', to: item.item });
           highest = Math.max(highest, Number(item.item.slice('wrk-'.length)));
+          const { fingerprint, fingerprint_until, fold } = item.body;
+          if (fingerprint && fingerprint_until) {
+            windows.set(fingerprint, { fingerprint, item_id: item.item, window_until: fingerprint_until });
+          }
+          if (fold) folds.set(fold, { fold, item_id: item.item });
+        }
+        if (item.type === 'WorkItemSignalAttached' && item.body.fingerprint_until) {
+          const w = windows.get(item.body.fingerprint);
+          if (w && w.item_id === item.item) w.window_until = item.body.fingerprint_until;
         }
         rows.push({
           ...event,
@@ -129,6 +143,13 @@ export class RebuildService {
     if (rows.length > 0) await handle.outbox.insertMany(rows);
 
     await handle.items.putMany([...heads.values()], edges);
+    await handle.fingerprints.putMany([...windows.values()]);
+    await handle.folds.putMany([...folds.values()]);
+    await handle.expectations.putMany(
+      [...heads.values()].flatMap((h) =>
+        armed(h).map((a) => ({ key: a.key, item_id: h.item_id, index: a.index })),
+      ),
+    );
     await handle.tallies.putMany(tallies);
     const counters = [
       ...(last > 0 ? [{ name: 'outbox', value: last }] : []),

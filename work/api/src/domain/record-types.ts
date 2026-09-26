@@ -49,6 +49,9 @@ const bodies: Record<ItemEventType, z.ZodTypeAny> = {
       definition_version: z.number().int().positive(),
       consequence_class: z.string().regex(/^c[0-9]$/),
       chase_ladder: id.optional(),
+      fingerprint: id.optional(),
+      fingerprint_until: instant.optional(),
+      fold: id.optional(),
       chase_steps: z.array(z.enum(CHASE_STEPS).exclude(['breach'])).optional(),
     })
     .strict(),
@@ -73,6 +76,24 @@ const bodies: Record<ItemEventType, z.ZodTypeAny> = {
     })
     .strict(),
   WorkItemBreached: z.object({ clock: z.enum(CLOCKS), due: instant }).strict(),
+  WorkItemLinked: z.object({ link: z.enum(['pull_request', 'artifact']), ref: id }).strict(),
+  WorkItemEvidenceSatisfied: z
+    .object({
+      index: z.number().int().nonnegative(),
+      kind: z.enum(EVIDENCE_KINDS),
+      key: id,
+      fact: id,
+      occurred_at: instant,
+    })
+    .strict(),
+  WorkItemSignalAttached: z
+    .object({
+      fingerprint: id,
+      signal_kind: id,
+      fingerprint_until: instant.optional(),
+      adds_rescan_clear: z.boolean().optional(),
+    })
+    .strict(),
   WorkItemClosed: z.object({ outcome: z.enum(OUTCOMES) }).strict(),
 };
 

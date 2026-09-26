@@ -107,7 +107,30 @@ const policy = z
     ceilings: z.record(identifier, z.record(level, z.array(remediation))).default({}),
     // Read by later slices (intake, the notifier). Declared now so a tenant's policy file validates
     // whole; a registry can take the fields over later.
-    advisories: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),
+    /**
+     * Advisories and findings by their severity: an item each, with its deadline — or folded into a
+     * weekly obligation, or the board is nothing but bumps (maestro use-cases, UC1b).
+     */
+    advisories: z
+      .record(
+        z.enum(['critical', 'high', 'medium', 'low']),
+        z.union([
+          z.object({ class: z.enum(ITEM_CLASSES), resolve_within: duration }).strict(),
+          z.object({ fold_into: identifier }).strict(),
+        ]),
+      )
+      .default({}),
+    /** A repeat of a fingerprint inside this window attaches to its item rather than raising another. */
+    dedup_window: duration.default('PT10M'),
+    /** What each signal kind raises (maestro docs/signals.md, "What a signal becomes"). */
+    signal_classes: z.record(z.string(), z.enum(ITEM_CLASSES)).default({
+      alarm_state: 'remediation',
+      dlq: 'remediation',
+      error_rate: 'remediation',
+      latency: 'remediation',
+      silence: 'remediation',
+      drift: 'objective',
+    }),
     /**
      * Named ladders of steps (reminder, chase, escalate_accountable, escalate_steward, breach). The
      * steps before `breach` fire evenly across an item's window from `opened_at` to `resolve_by`; the
@@ -117,6 +140,8 @@ const policy = z
     /** The ladder every item with a `resolve_by` is chased on. None, and nothing is chased. */
     chase_ladder: identifier.optional(),
     alerts: z.record(z.string(), z.unknown()).default({}),
+    // Read by M3's runner, declared so a tenant's policy file validates whole.
+    heartbeat_grace: duration.optional(),
   })
   .strict();
 

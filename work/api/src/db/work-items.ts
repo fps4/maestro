@@ -190,3 +190,154 @@ export class RequestRepository {
     );
   }
 }
+
+/** An armed evidence entry, under the key its fact will compute (ADR-0019 §5, §3 #8). */
+export interface Expectation {
+  key: string;
+  item_id: string;
+  index: number;
+}
+
+export class ExpectationRepository {
+  constructor(private readonly b: Bound) {}
+
+  /** #8 — the open items waiting on a fact's key: one partition. */
+  async waitingOn(key: string): Promise<Expectation[]> {
+    const rows = await this.b.items.query(this.b.keys.expectations(key));
+    return rows.map((r) => strip<Expectation>(r));
+  }
+
+  stagePut(tx: Transaction, e: Expectation): void {
+    tx.put({ ...this.b.keys.expectation(e.key, e.item_id, e.index), kind: KINDS.expectation, ...e });
+  }
+
+  stageDelete(tx: Transaction, e: Expectation): void {
+    tx.delete(this.b.keys.expectation(e.key, e.item_id, e.index));
+  }
+
+  async putMany(all: Expectation[]): Promise<void> {
+    await this.b.items.batchWrite(
+      all.map((e) => ({
+        ...this.b.keys.expectation(e.key, e.item_id, e.index),
+        kind: KINDS.expectation,
+        ...e,
+      })),
+    );
+  }
+}
+
+/** A fingerprint's window: the item it raised and until when a repeat attaches to it (ADR-0019 §7). */
+export interface FingerprintWindow {
+  fingerprint: string;
+  item_id: string;
+  window_until: string;
+}
+
+export class FingerprintRepository {
+  constructor(private readonly b: Bound) {}
+
+  async get(fp: string): Promise<FingerprintWindow | null> {
+    const row = await this.b.items.get(this.b.keys.fingerprint(fp));
+    return row ? strip<FingerprintWindow>(row) : null;
+  }
+
+  /** Moved on the condition that it has not moved since it was read: two racing signals raise one item. */
+  stage(tx: Transaction, next: FingerprintWindow, read: FingerprintWindow | null): void {
+    tx.put(
+      { ...this.b.keys.fingerprint(next.fingerprint), kind: KINDS.fingerprint, ...next },
+      {
+        condition: (e) =>
+          read
+            ? `${e.n('item_id')} = ${e.v(read.item_id)} AND ${e.n('window_until')} = ${e.v(read.window_until)}`
+            : `attribute_not_exists(${e.n(PK)})`,
+        onConflict: `Fingerprint \`${next.fingerprint}\` moved while this signal was decided.`,
+        retry: true,
+      },
+    );
+  }
+
+  async putMany(all: FingerprintWindow[]): Promise<void> {
+    await this.b.items.batchWrite(
+      all.map((f) => ({ ...this.b.keys.fingerprint(f.fingerprint), kind: KINDS.fingerprint, ...f })),
+    );
+  }
+}
+
+/** The week's obligation a fold raised (ADR-0019 §7): `<fold>#<period>` → its item. */
+export interface FoldRecord {
+  fold: string;
+  item_id: string;
+}
+
+export class FoldRepository {
+  constructor(private readonly b: Bound) {}
+
+  private key(fold: string) {
+    const at = fold.lastIndexOf('#');
+    return this.b.keys.fold(fold.slice(0, at), fold.slice(at + 1));
+  }
+
+  async get(fold: string): Promise<FoldRecord | null> {
+    const row = await this.b.items.get(this.key(fold));
+    return row ? strip<FoldRecord>(row) : null;
+  }
+
+  /**
+   * Raised once a week: the first finding wins, every later one attaches. Moved only on the condition
+   * that it still names the item that was read — when that week's obligation closed early and another
+   * finding arrives, it raises the week's next one.
+   */
+  stage(tx: Transaction, record: FoldRecord, read: FoldRecord | null): void {
+    tx.put(
+      { ...this.key(record.fold), kind: KINDS.fold, ...record },
+      {
+        condition: (e) =>
+          read ? `${e.n('item_id')} = ${e.v(read.item_id)}` : `attribute_not_exists(${e.n(PK)})`,
+        onConflict: `The week's \`${record.fold}\` was raised first by another finding.`,
+        retry: true,
+      },
+    );
+  }
+
+  async putMany(all: FoldRecord[]): Promise<void> {
+    await this.b.items.batchWrite(all.map((f) => ({ ...this.key(f.fold), kind: KINDS.fold, ...f })));
+  }
+}
+
+/** A delivery already taken in, and what it became. Not record: an idempotency cache, seven days. */
+export interface DeliveryRecord {
+  source: string;
+  delivery_id: string;
+  outcome: string;
+  item_ids: string[];
+}
+
+export const DELIVERY_TTL_SECONDS = 7 * 86_400;
+
+export class DeliveryRepository {
+  constructor(private readonly b: Bound) {}
+
+  async get(source: string, id: string): Promise<DeliveryRecord | null> {
+    const row = await this.b.items.get(this.b.keys.delivery(source, id));
+    return row ? strip<DeliveryRecord>(row) : null;
+  }
+
+  private row(d: DeliveryRecord, now: string): Item {
+    return {
+      ...this.b.keys.delivery(d.source, d.delivery_id),
+      kind: KINDS.delivery,
+      ...d,
+      expires_at: Math.floor(Date.parse(now) / 1000) + DELIVERY_TTL_SECONDS,
+    };
+  }
+
+  /** In the raising transaction: a redelivery fails the condition and is answered with the first result. */
+  stageInsert(tx: Transaction, d: DeliveryRecord, now: string): void {
+    tx.insert(this.row(d, now), `Delivery \`${d.source}:${d.delivery_id}\` was already taken in.`);
+  }
+
+  /** After the facts it carried were applied — each of those was idempotent on its own. */
+  async put(d: DeliveryRecord, now: string): Promise<void> {
+    await this.b.items.put(this.row(d, now));
+  }
+}

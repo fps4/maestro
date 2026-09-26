@@ -100,7 +100,8 @@ cd api && npm ci && npm run bundle && npm run sbom   # bundle/{api,relay,sweep}.
 M2 in progress: the work item — raise, claim with authority checked, release, resolve, the
 frontier, the rates, the rebuild — and its clocks — leases and heartbeats, the chase ladder through
 the notifier (a log line locally, a Slack webhook on AWS), breaches, expiry, the sweep — are in.
-Evidence and intake, and the MCP tracker contract, follow. See maestro's [roadmap](https://github.com/fps4/maestro/blob/main/docs/roadmap.md).
+Signals intake (the envelope; dedup by delivery and fingerprint; the weekly fold) and evidence (link,
+facts, closure on evidence) are in. The source adapters and the MCP tracker contract follow. See maestro's [roadmap](https://github.com/fps4/maestro/blob/main/docs/roadmap.md).
 
 ## Licence
 

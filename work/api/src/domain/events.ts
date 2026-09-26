@@ -63,6 +63,11 @@ export type Raised = Base<
     /** The ladder that chases it and its steps before the breach, copied on at raise. */
     chase_ladder?: string;
     chase_steps?: Exclude<ChaseStep, 'breach'>[];
+    /** Raised by a signal: its fingerprint, and until when a repeat attaches rather than raises. */
+    fingerprint?: string;
+    fingerprint_until?: string;
+    /** Raised as a weekly obligation: `<fold>#<ISO week>`. */
+    fold?: string;
   },
   { title: string }
 >;
@@ -92,12 +97,37 @@ export type Chased = Base<
     delivery: 'delivered' | 'failed' | 'no_recipient';
   }
 >;
+export type Linked = Base<'WorkItemLinked', { link: 'pull_request' | 'artifact'; ref: string }>;
+/** An armed evidence entry met by a fact. `occurred_at` is the fact's own time. */
+export type EvidenceSatisfied = Base<
+  'WorkItemEvidenceSatisfied',
+  { index: number; kind: EvidenceKind; key: string; fact: string; occurred_at: string }
+>;
+/**
+ * A further signal on an item: a repeat of its fingerprint inside the window (the window moves on),
+ * or a finding folded into a weekly obligation (which gains that finding's own `rescan_clear`).
+ */
+export type SignalAttached = Base<
+  'WorkItemSignalAttached',
+  { fingerprint: string; signal_kind: string; fingerprint_until?: string; adds_rescan_clear?: boolean }
+>;
 /** A clock passed with its commitment unmet. Recorded, never a closure. */
 export type Breached = Base<'WorkItemBreached', { clock: Clock; due: string }>;
 export type Closed = Base<'WorkItemClosed', { outcome: Outcome }, { reason: string }>;
 
 export type ItemEvent =
-  Raised | Assigned | ClaimRefused | Released | StateChanged | Escalated | Chased | Breached | Closed;
+  | Raised
+  | Assigned
+  | ClaimRefused
+  | Released
+  | StateChanged
+  | Escalated
+  | Chased
+  | Breached
+  | Linked
+  | EvidenceSatisfied
+  | SignalAttached
+  | Closed;
 export type ItemEventType = ItemEvent['type'];
 
 export class EvolveError extends Error {
@@ -138,7 +168,13 @@ export function evolve(head: WorkItem | null, event: ItemEvent): WorkItem {
       ...(b.onboarding_level ? { onboarding_level: b.onboarding_level } : {}),
       ...(b.remediation_class ? { remediation_class: b.remediation_class } : {}),
       ...(b.reversible !== undefined ? { reversible: b.reversible } : {}),
-      evidence_plan: b.evidence_plan.map((kind) => ({ kind })),
+      evidence_plan: b.evidence_plan.map((kind) =>
+        b.fingerprint && (kind === 'signal_ok' || kind === 'rescan_clear')
+          ? { kind, fingerprint: b.fingerprint }
+          : { kind },
+      ),
+      ...(b.fingerprint ? { fingerprint: b.fingerprint } : {}),
+      ...(b.fold ? { fold: b.fold } : {}),
       severity: b.severity,
       opened_at: event.at,
       ...(b.respond_by ? { respond_by: b.respond_by } : {}),
@@ -193,6 +229,35 @@ export function evolve(head: WorkItem | null, event: ItemEvent): WorkItem {
       }
       return { ...next, chase: { ...head.chase, next: head.chase.next + 1 } };
     }
+    case 'WorkItemLinked':
+      return { ...next, links: { ...head.links, [event.body.link]: event.body.ref } };
+    case 'WorkItemEvidenceSatisfied': {
+      const entry = head.evidence_plan[event.body.index];
+      if (!entry || entry.kind !== event.body.kind || entry.satisfied_at) {
+        throw new EvolveError(
+          `${event.item} has no unsatisfied ${event.body.kind} at entry ${event.body.index}.`,
+        );
+      }
+      const plan = head.evidence_plan.map((e, i) =>
+        i === event.body.index
+          ? { ...e, satisfied_at: event.body.occurred_at, satisfied_by: event.body.fact }
+          : e,
+      );
+      return { ...next, evidence_plan: plan };
+    }
+    case 'WorkItemSignalAttached':
+      return {
+        ...next,
+        signals: (head.signals ?? 0) + 1,
+        ...(event.body.adds_rescan_clear
+          ? {
+              evidence_plan: [
+                ...head.evidence_plan,
+                { kind: 'rescan_clear' as const, fingerprint: event.body.fingerprint },
+              ],
+            }
+          : {}),
+      };
     case 'WorkItemBreached':
       return { ...next, breached: [...(head.breached ?? []), event.body.clock] };
     case 'WorkItemClosed': {

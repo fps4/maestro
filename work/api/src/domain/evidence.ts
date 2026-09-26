@@ -1,9 +1,11 @@
 /**
  * Evidence (maestro ADR-0019 §5): an item's plan is an ordered list of facts, and an entry is
  * **armed** — written as an expectation under the key the fact will compute — when every earlier
- * entry of another kind is satisfied and its own key is known. Plan order is the order of the world:
- * the deploy counts only after the merge, the re-scan only after the deploy. Entries of one kind are
- * armed together, so a weekly fold's findings clear in any order.
+ * entry it waits for is satisfied and its own key is known. Plan order is the order of the world: the
+ * deploy counts only after the merge. An entry waits for every earlier entry of another kind, with one
+ * exception (maestro ADR-0024): a repository's re-scan and the deploy both follow the merge and not
+ * each other, so neither waits for the other. Entries of one kind are armed together, so a weekly
+ * fold's findings clear in any order.
  *
  * A fact that arrives for an entry not yet armed matches nothing and is dropped: an alarm that flaps
  * back to OK before the fix is deployed does not close the item; the next OK after the deploy does.
@@ -57,13 +59,24 @@ export interface Armed {
   after?: string;
 }
 
+/**
+ * Kinds that follow the same predecessors but not each other. `rescan_clear` is the repository's
+ * re-scan (Dependabot, code scanning), which reports the fix once it is on the default branch — before,
+ * after or while the fix deploys (ADR-0024).
+ */
+const UNORDERED: ReadonlyArray<readonly [EvidenceKind, EvidenceKind]> = [['deploy_event', 'rescan_clear']];
+
+const waitsFor = (entry: EvidenceKind, earlier: EvidenceKind): boolean =>
+  earlier !== entry &&
+  !UNORDERED.some(([a, b]) => (a === entry && b === earlier) || (b === entry && a === earlier));
+
 /** The entries an open item waits on now. */
 export function armed(item: WorkItem): Armed[] {
   if (item.state === 'closed') return [];
   const out: Armed[] = [];
   item.evidence_plan.forEach((entry, index) => {
     if (entry.satisfied_at) return;
-    const earlier = item.evidence_plan.slice(0, index).filter((e) => e.kind !== entry.kind);
+    const earlier = item.evidence_plan.slice(0, index).filter((e) => waitsFor(entry.kind, e.kind));
     if (earlier.some((e) => !e.satisfied_at)) return;
     const key = keyOf(item, entry);
     if (!key) return;

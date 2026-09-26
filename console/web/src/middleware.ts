@@ -23,9 +23,21 @@ export function middleware(request: NextRequest) {
   if (tokenIsFresh(token)) return NextResponse.next();
 
   // Carry where they were going, so signing in returns them there rather than to the register.
-  const signIn = new URL('/sign-in', request.url);
+  // On the host the browser asked for: behind the API and the edge (ADR-0026), the standalone server
+  // sees its own localhost:<port> as `request.url`, so the origin comes from the request's headers.
+  const signIn = new URL('/sign-in', publicOrigin(request));
   if (pathname !== '/') signIn.searchParams.set('next', pathname + request.nextUrl.search);
   return NextResponse.redirect(signIn);
+}
+
+/** The origin the browser used: the forwarded host and scheme, else the Host header, else the URL's. */
+export function publicOrigin(request: NextRequest): string {
+  const host = request.headers.get('x-forwarded-host') ?? request.headers.get('host');
+  if (!host) return request.nextUrl.origin;
+  const proto =
+    request.headers.get('x-forwarded-proto')?.split(',')[0]?.trim() ||
+    request.nextUrl.protocol.replace(':', '');
+  return `${proto}://${host.split(',')[0]!.trim()}`;
 }
 
 export const config = {

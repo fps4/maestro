@@ -1,0 +1,2099 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>mstr-specs console — UI mock for approval</title>
+<style>
+  /* ------------------------------------------------------------------
+     Tokens. Near-monochrome, light-first. The neutral carries a slight
+     green bias toward the accent so it reads as chosen, not inherited.
+     The accent is RESERVED FOR STATE and for the one action that changes
+     state. Everything else is ink on paper.
+     ------------------------------------------------------------------ */
+  :root {
+    --ground: #F3F5F3;
+    --surface: #FFFFFF;
+    --surface-2: #F9FAF9;
+    --ink: #161A19;
+    --ink-muted: #5B6663;
+    --ink-faint: #8C9491;
+    --rule: #DCE1DE;
+    --rule-strong: #C3CAC6;
+    --accent: #2F5D50;
+    --accent-ink: #234A3F;
+    --accent-soft: #E2EDE8;
+    --critical: #8C2B2B;
+    --critical-soft: #F6E8E8;
+    --warning: #77521A;
+    --warning-soft: #F4EDDE;
+    --shadow: 0 1px 2px rgba(20, 32, 27, .05), 0 10px 30px -20px rgba(20, 32, 27, .35);
+
+    --sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground: #0D100F;
+      --surface: #141917;
+      --surface-2: #181E1C;
+      --ink: #E3E9E6;
+      --ink-muted: #97A19D;
+      --ink-faint: #6C7773;
+      --rule: #232B28;
+      --rule-strong: #333D39;
+      --accent: #78B8A1;
+      --accent-ink: #A6D4C5;
+      --accent-soft: #17251F;
+      --critical: #DD8C8C;
+      --critical-soft: #2A1919;
+      --warning: #CFA463;
+      --warning-soft: #261E11;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 10px 30px -20px rgba(0, 0, 0, .8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0D100F;
+    --surface: #141917;
+    --surface-2: #181E1C;
+    --ink: #E3E9E6;
+    --ink-muted: #97A19D;
+    --ink-faint: #6C7773;
+    --rule: #232B28;
+    --rule-strong: #333D39;
+    --accent: #78B8A1;
+    --accent-ink: #A6D4C5;
+    --accent-soft: #17251F;
+    --critical: #DD8C8C;
+    --critical-soft: #2A1919;
+    --warning: #CFA463;
+    --warning-soft: #261E11;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .5), 0 10px 30px -20px rgba(0, 0, 0, .8);
+  }
+
+  :root[data-theme="light"] {
+    --ground: #F3F5F3;
+    --surface: #FFFFFF;
+    --surface-2: #F9FAF9;
+    --ink: #161A19;
+    --ink-muted: #5B6663;
+    --ink-faint: #8C9491;
+    --rule: #DCE1DE;
+    --rule-strong: #C3CAC6;
+    --accent: #2F5D50;
+    --accent-ink: #234A3F;
+    --accent-soft: #E2EDE8;
+    --critical: #8C2B2B;
+    --critical-soft: #F6E8E8;
+    --warning: #77521A;
+    --warning-soft: #F4EDDE;
+    --shadow: 0 1px 2px rgba(20, 32, 27, .05), 0 10px 30px -20px rgba(20, 32, 27, .35);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 15px;
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 40px 24px 80px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  /* --- page header (mock scaffolding, not the product) --- */
+  .masthead { display: flex; flex-direction: column; gap: 10px; }
+  .masthead h1 {
+    margin: 0;
+    font-size: 28px;
+    line-height: 1.15;
+    letter-spacing: -.022em;
+    font-weight: 620;
+    text-wrap: balance;
+  }
+  .masthead p { margin: 0; color: var(--ink-muted); max-width: 68ch; font-size: 14px; }
+  .masthead .id { font-family: var(--mono); font-size: 13px; color: var(--ink); }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .09em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 500;
+  }
+
+  /* --- screen picker: mock scaffolding, deliberately outside the frame --- */
+  .picker {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .picker button {
+    font: inherit;
+    font-size: 13px;
+    padding: 5px 11px;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    background: none;
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
+  .picker button:hover { background: var(--surface); color: var(--ink); }
+  .picker button[aria-current="true"] {
+    background: var(--surface);
+    border-color: var(--rule-strong);
+    color: var(--ink);
+    font-weight: 560;
+  }
+  .picker button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* ------------------------------------------------------------------
+     The console frame
+     ------------------------------------------------------------------ */
+  .frame {
+    display: grid;
+    grid-template-columns: 216px 1fr;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 6px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    min-height: 640px;
+  }
+  .frame.bare { grid-template-columns: 1fr; min-height: 520px; }
+  .frame.bare .rail, .frame.bare .topbar { display: none; }
+
+  .rail {
+    background: var(--surface-2);
+    border-right: 1px solid var(--rule);
+    padding: 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 22px;
+  }
+  .wordmark {
+    font-family: var(--mono);
+    font-size: 13px;
+    letter-spacing: -.01em;
+    font-weight: 600;
+    padding: 2px 8px 0;
+  }
+  .wordmark span { color: var(--ink-faint); }
+  .ws-switch {
+    margin: 0 4px;
+    padding: 7px 9px;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    background: var(--surface);
+    font-size: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .ws-switch b { font-family: var(--mono); font-weight: 560; font-size: 12px; }
+  .ws-switch em { font-style: normal; color: var(--ink-faint); font-size: 11px; }
+
+  .rail nav { display: flex; flex-direction: column; gap: 1px; }
+  .rail nav a {
+    font-size: 13.5px;
+    color: var(--ink-muted);
+    text-decoration: none;
+    padding: 5px 9px;
+    border-radius: 3px;
+    border-left: 2px solid transparent;
+  }
+  .rail nav a.on { color: var(--ink); font-weight: 560; background: var(--surface); border-left-color: var(--ink); }
+  .rail-group { display: flex; flex-direction: column; gap: 6px; }
+  .rail-foot { margin-top: auto; font-size: 11.5px; color: var(--ink-faint); padding: 0 9px; display: flex; flex-direction: column; gap: 2px; }
+  .rail-foot b { font-weight: 560; color: var(--ink-muted); font-family: var(--mono); font-size: 11.5px; }
+
+  .col { display: flex; flex-direction: column; min-width: 0; }
+
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 11px 20px;
+    border-bottom: 1px solid var(--rule);
+    background: var(--surface);
+  }
+  .crumbs { font-size: 12.5px; color: var(--ink-faint); display: flex; gap: 7px; align-items: center; flex-wrap: wrap; }
+  .crumbs b { color: var(--ink); font-weight: 560; }
+  .crumbs .mono { font-size: 12.5px; }
+  .whoami { display: flex; align-items: center; gap: 9px; font-size: 12.5px; color: var(--ink-muted); white-space: nowrap; }
+  .avatar {
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent-ink);
+    display: grid; place-items: center;
+    font-size: 10px; font-family: var(--mono); font-weight: 600;
+    border: 1px solid var(--rule);
+  }
+
+  .canvas { padding: 22px 24px 32px; overflow-x: auto; }
+  .view { display: none; flex-direction: column; gap: 20px; }
+  .view.on { display: flex; }
+
+  /* --- shared vocabulary --- */
+  .mono { font-family: var(--mono); font-size: .92em; }
+  h2.title { margin: 0; font-size: 20px; letter-spacing: -.018em; font-weight: 600; text-wrap: balance; }
+  h3.sec { margin: 0; font-size: 13px; font-weight: 620; letter-spacing: -.005em; }
+  .muted { color: var(--ink-muted); }
+  .faint { color: var(--ink-faint); }
+  .small { font-size: 12.5px; }
+  .xsmall { font-size: 11.5px; }
+  .stack { display: flex; flex-direction: column; gap: 10px; }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .spread { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .card.flat { background: var(--surface-2); }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .grid-main { display: grid; grid-template-columns: minmax(0, 1.75fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  .grid-editor { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+  @media (max-width: 900px) {
+    .grid2, .grid-main, .grid-editor { grid-template-columns: 1fr; }
+    .frame { grid-template-columns: 1fr; }
+    .rail { border-right: none; border-bottom: 1px solid var(--rule); }
+  }
+
+  /* --- state chips: form carries the state as much as colour --- */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    padding: 1px 7px;
+    border-radius: 2px;
+    border: 1px solid var(--rule-strong);
+    color: var(--ink-muted);
+    background: var(--surface);
+    white-space: nowrap;
+  }
+  .chip.proposed { border-color: var(--accent); color: var(--accent-ink); border-style: dashed; }
+  .chip.accepted { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+  .chip.draft { border-style: dashed; color: var(--ink-faint); }
+  .chip.superseded { color: var(--ink-faint); background: var(--surface-2); }
+  .chip.rejected { border-color: var(--critical); background: var(--critical-soft); color: var(--critical); }
+  .chip.expired { border-color: var(--warning); background: var(--warning-soft); color: var(--warning); }
+  .chip.withdrawn { color: var(--ink-faint); text-decoration: line-through; }
+  .chip.pin { border-color: var(--accent); color: var(--accent-ink); background: var(--accent-soft); font-weight: 600; }
+
+  .prov {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    border-bottom: 1px dotted var(--rule-strong);
+  }
+  .prov.extracted { color: var(--warning); border-bottom-style: dashed; border-bottom-color: var(--warning); }
+  .prov.declared { color: var(--ink-muted); }
+  .prov.reconstructed { color: var(--ink-faint); border-bottom-style: double; }
+
+  /* --- tables: tabular density is the point --- */
+  table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 10.5px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 500;
+    padding: 0 10px 7px 0;
+    border-bottom: 1px solid var(--rule-strong);
+    white-space: nowrap;
+  }
+  td {
+    padding: 8px 10px 8px 0;
+    border-bottom: 1px solid var(--rule);
+    vertical-align: baseline;
+    font-variant-numeric: tabular-nums;
+  }
+  td.num, th.num { text-align: right; padding-right: 14px; }
+  tbody tr:hover td { background: var(--surface-2); }
+  .t-wrap { overflow-x: auto; }
+  .t-title { font-weight: 560; }
+  .t-sub { color: var(--ink-faint); font-size: 11.5px; display: block; }
+
+  /* --- tiles --- */
+  .tiles { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  @media (max-width: 760px) { .tiles { grid-template-columns: repeat(2, 1fr); } }
+  .tile {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 10px 12px;
+    background: var(--surface-2);
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .tile b { font-size: 22px; font-weight: 600; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .tile span { font-size: 11.5px; color: var(--ink-muted); }
+  .tile.alert { border-color: var(--warning); background: var(--warning-soft); }
+  .tile.alert b, .tile.alert span { color: var(--warning); }
+
+  /* --- key/value --- */
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; font-size: 12.5px; align-items: baseline; }
+  .kv dt { color: var(--ink-faint); font-family: var(--mono); font-size: 11px; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; }
+  .kv dd { margin: 0; }
+
+  /* --- buttons --- */
+  .btn {
+    font: inherit; font-size: 13px; font-weight: 540;
+    padding: 6px 13px;
+    border-radius: 4px;
+    border: 1px solid var(--rule-strong);
+    background: var(--surface);
+    color: var(--ink);
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn:hover { background: var(--surface-2); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+  :root[data-theme="dark"] .btn.primary, .btn.primary { }
+  @media (prefers-color-scheme: dark) { .btn.primary { color: #0D100F; } }
+  :root[data-theme="dark"] .btn.primary { color: #0D100F; }
+  :root[data-theme="light"] .btn.primary { color: #FFFFFF; }
+  .btn.primary:hover { background: var(--accent-ink); border-color: var(--accent-ink); }
+  .btn.danger { border-color: var(--critical); color: var(--critical); }
+  .btn.small { font-size: 12px; padding: 3px 9px; }
+  .btn[disabled] { opacity: .45; cursor: not-allowed; }
+
+  /* --- notices --- */
+  .notice {
+    border: 1px solid var(--rule-strong);
+    border-left-width: 3px;
+    border-radius: 3px;
+    padding: 9px 12px;
+    font-size: 12.5px;
+    background: var(--surface-2);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  .notice.warn { border-left-color: var(--warning); background: var(--warning-soft); color: var(--warning); }
+  .notice.warn b { color: var(--warning); }
+  .notice.hard { border-left-color: var(--critical); background: var(--critical-soft); color: var(--critical); }
+  .notice.ok { border-left-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); }
+
+  /* --- the mutability line: drafts look editable, versions look sealed --- */
+  .sealed { border-left: 3px solid var(--rule-strong); padding-left: 12px; }
+  .open-edit { border-left: 3px dashed var(--rule-strong); padding-left: 12px; }
+
+  .ledger { display: flex; flex-direction: column; }
+  .ledger-row {
+    display: grid;
+    grid-template-columns: 54px 1fr auto;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--rule);
+    align-items: baseline;
+  }
+  .ledger-row:last-child { border-bottom: none; }
+  .ord { font-family: var(--mono); font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ledger-row.current { background: var(--surface-2); margin: 0 -10px; padding-left: 10px; padding-right: 10px; }
+
+  .field {
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 7px 9px;
+    background: var(--surface);
+    font-size: 13px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .field label { font-family: var(--mono); font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); }
+  .field .val { font-size: 13px; }
+  .field.editing { border-style: dashed; background: var(--surface-2); }
+
+  .doc {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    line-height: 1.65;
+    background: var(--surface-2);
+    border: 1px dashed var(--rule-strong);
+    border-radius: 4px;
+    padding: 12px 14px;
+    white-space: pre-wrap;
+    overflow-x: auto;
+    color: var(--ink);
+    min-height: 260px;
+  }
+  .doc.record { border-style: solid; border-color: var(--rule-strong); background: var(--surface); }
+  .doc .h { font-weight: 700; }
+  .doc .cur { border-left: 2px solid var(--accent); margin-left: -14px; padding-left: 12px; }
+
+  .diff { font-family: var(--mono); font-size: 12px; line-height: 1.7; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; }
+  .diff div { padding: 0 10px; white-space: pre-wrap; }
+  .diff .add { background: var(--accent-soft); color: var(--accent-ink); }
+  .diff .del { background: var(--critical-soft); color: var(--critical); }
+  .diff .ctx { color: var(--ink-muted); }
+  .diff .hunk { background: var(--surface-2); color: var(--ink-faint); border-top: 1px solid var(--rule); border-bottom: 1px solid var(--rule); }
+
+  .check { display: flex; gap: 9px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--rule); font-size: 12.5px; }
+  .check:last-child { border-bottom: none; }
+  .check .mark { font-family: var(--mono); font-size: 12px; font-weight: 700; width: 14px; flex: none; }
+  .check.pass .mark { color: var(--accent); }
+  .check.fail .mark { color: var(--critical); }
+
+  .radio { display: flex; gap: 9px; align-items: flex-start; border: 1px solid var(--rule); border-radius: 4px; padding: 9px 11px; font-size: 13px; cursor: pointer; }
+  .radio.on { border-color: var(--accent); background: var(--accent-soft); }
+  .radio .dot { width: 12px; height: 12px; border-radius: 50%; border: 1px solid var(--rule-strong); flex: none; margin-top: 4px; }
+  .radio.on .dot { border-color: var(--accent); border-width: 4px; }
+
+  .lineage-svg { width: 100%; height: auto; display: block; }
+  .lineage-svg text { font-family: var(--mono); fill: var(--ink); }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 11.5px; color: var(--ink-muted); }
+  .legend i { font-style: normal; display: inline-flex; align-items: center; gap: 6px; }
+  .swatch { width: 22px; height: 0; border-top: 2px solid var(--ink-muted); display: inline-block; }
+  .swatch.pinned { border-top: 2px solid var(--accent); }
+  .swatch.follows { border-top: 2px dashed var(--ink-faint); }
+  .swatch.future { border-top: 2px dotted var(--ink-faint); }
+
+  /* --- sign-in --- */
+  .signin { display: grid; place-items: center; padding: 60px 24px; }
+  .signin-card { width: 100%; max-width: 372px; display: flex; flex-direction: column; gap: 16px; }
+  .input {
+    border: 1px solid var(--rule-strong); border-radius: 4px;
+    padding: 8px 10px; font: inherit; font-size: 13.5px;
+    background: var(--surface); color: var(--ink); width: 100%;
+  }
+  .input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* --- annotation strip below each frame --- */
+  .notes {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+    gap: 14px 26px;
+    padding: 16px 0 0;
+    border-top: 1px solid var(--rule);
+  }
+  .note { display: flex; flex-direction: column; gap: 3px; font-size: 12.5px; }
+  .note b { font-size: 12.5px; font-weight: 600; }
+  .note span { color: var(--ink-muted); }
+  .note code { font-family: var(--mono); font-size: 11.5px; color: var(--ink); }
+
+  .footnote { font-size: 12.5px; color: var(--ink-muted); max-width: 74ch; }
+  .footnote strong { color: var(--ink); font-weight: 600; }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .btn, .picker button, .rail nav a { transition: background-color .12s ease, color .12s ease, border-color .12s ease; }
+  }
+</style>
+
+</head>
+<body>
+<div class="page">
+
+  <header class="masthead">
+    <p class="eyebrow">mstr-specs · console · UI mock v3 · for approval</p>
+    <h1>Eleven screens for a service whose whole product is that a record cannot change afterwards</h1>
+    <p>
+      The console for <span class="id">fps4/maestro-specs</span>. Every screen below is built from the
+      workspace this repository seeded when the design was approved (<span class="mono">ws-aannemer-x</span>,
+      definition v1: opportunity → business case → specification → intake assessment → pack binding),
+      its facet names, fictional standards, and the gates of that definition. Nothing here is
+      placeholder text. <strong>Since 2026-09-18 the shipped demo workspace is a different one</strong>
+      (<span class="mono">config/workspaces/aannemer-x.yaml</span>, v2: cause analysis, intake assessment,
+      specification, change record): the tokens, component vocabulary and state treatments here are
+      what the console implements; the screen content is illustrative of the mechanism, not of the
+      current definition. The Catalogue and Standards screens appear only for a workspace that
+      declares <span class="mono">catalogue_refs</span>.
+    </p>
+    <p>
+      <strong>New in v3 — the standards live here too.</strong> A standard has a lineage, immutable
+      versions, a publication gate with an accountable human, a diff, a body someone reads and
+      facets a machine evaluates. That is this service's shape item for item, so the catalogue is
+      not a second system — it is this one with a different workspace definition. <b>Ours</b> carry
+      full text and the know-how an agent needs; <b>external</b> ones carry a citation, our summary
+      and our reading, because ISO's licence forbids more. The <b>binding</b> records which of them
+      this tenant accepted, who accepted each, and when.
+    </p>
+    <p>
+      So <i>specification</i> here means <b>a governed statement of what must be true</b> — which a
+      business case, a specification and a standard all are. The name stays; the definition is the
+      one in <span class="mono">GLOSSARY.md</span>.
+    </p>
+    <p>
+      <strong>The design decision under every screen:</strong> a draft and a version must never look
+      like the same object. Drafts carry dashed edges and live controls; versions carry a solid rule,
+      a monospace digest and no edit affordance at all. That is ADR-0003 rendered rather than
+      described.
+    </p>
+  </header>
+
+  <nav class="picker" id="picker" aria-label="Screens in this mock">
+    <button data-view="register" aria-current="true">Register</button>
+    <button data-view="artifact">Artifact</button>
+    <button data-view="editor">Draft editor</button>
+    <button data-view="diff">Diff</button>
+    <button data-view="decide">Decide</button>
+    <button data-view="lineage">Lineage</button>
+    <button data-view="catalogue">Catalogue</button>
+    <button data-view="standards">Standards &amp; binding</button>
+    <button data-view="search">Search</button>
+    <button data-view="definition">Workspace definition</button>
+    <button data-view="signin">Sign in</button>
+  </nav>
+
+  <div class="frame" id="frame">
+    <aside class="rail">
+      <div class="wordmark">mstr<span>-</span>specs</div>
+      <div class="ws-switch" id="ws-switch">
+        <b>ws-aannemer-x</b>
+        <em>Aannemer X · definition v3</em>
+      </div>
+      <div class="rail-group">
+        <p class="eyebrow" style="padding: 0 9px;">Workspace</p>
+        <nav>
+          <a href="#" class="on" data-rail="register">Register</a>
+          <a href="#" data-rail="catalogue">Catalogue</a>
+          <a href="#" data-rail="standards">Standards &amp; binding</a>
+          <a href="#" data-rail="search">Search</a>
+          <a href="#" data-rail="definition">Definition</a>
+        </nav>
+      </div>
+      <div class="rail-group">
+        <p class="eyebrow" style="padding: 0 9px;">Awaiting you</p>
+        <nav>
+          <a href="#" data-rail="decide">Explore gate · 2</a>
+          <a href="#" data-rail="decide">Assess gate · 1</a>
+        </nav>
+      </div>
+      <div class="rail-foot">
+        <b>specs-service</b>
+        <span>This store is a projection. The record sink is authoritative.</span>
+      </div>
+    </aside>
+
+    <div class="col">
+      <div class="topbar">
+        <div class="crumbs" id="crumbs"></div>
+        <div class="whoami">
+          <span>Jan Dekker · <span class="mono">reviewer</span></span>
+          <span class="avatar">JD</span>
+        </div>
+      </div>
+
+      <div class="canvas">
+
+        <!-- ============================ REGISTER ============================ -->
+        <section class="view on" id="v-register">
+          <div class="spread">
+            <div class="stack" style="gap: 3px;">
+              <h2 class="title">Register</h2>
+              <p class="small muted" style="margin: 0;">Everything in flight in this workspace, with the lifecycle phase it sits in.</p>
+            </div>
+            <div class="row">
+              <button class="btn small">Filter</button>
+              <button class="btn small">Export chain of record</button>
+              <button class="btn primary">New draft</button>
+            </div>
+          </div>
+
+          <div class="tiles">
+            <div class="tile"><b>14</b><span>In flight</span></div>
+            <div class="tile"><b>3</b><span>Awaiting a decision</span></div>
+            <div class="tile alert"><b>1</b><span>Expired · re-verification overdue</span></div>
+            <div class="tile alert"><b>1</b><span>Standards acceptance lapsed</span></div>
+          </div>
+
+          <div class="t-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Artifact</th>
+                  <th>Type</th>
+                  <th>Phase</th>
+                  <th>State</th>
+                  <th class="num">Latest</th>
+                  <th>Gate</th>
+                  <th class="num">Updated</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <span class="t-title">Materiaalstaat-generator</span>
+                    <span class="t-sub mono">bc-4417</span>
+                  </td>
+                  <td class="small muted">business case</td>
+                  <td class="small">in review</td>
+                  <td><span class="chip proposed">proposed</span></td>
+                  <td class="num mono">@7</td>
+                  <td class="small">Explore — awaiting sponsor</td>
+                  <td class="num small muted">4 Aug</td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="t-title">Materiaalstaat-generator — specification</span>
+                    <span class="t-sub mono">bc-4417-spec</span>
+                  </td>
+                  <td class="small muted">specification</td>
+                  <td class="small">drafting</td>
+                  <td><span class="chip draft">draft</span></td>
+                  <td class="num mono faint">rev 23</td>
+                  <td class="small faint">—</td>
+                  <td class="num small muted">today</td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="t-title">Standards binding — nl-construction 3.2.0</span>
+                    <span class="t-sub mono">pb-aannemer-x</span>
+                  </td>
+                  <td class="small muted">pack binding</td>
+                  <td class="small">run</td>
+                  <td><span class="chip accepted">accepted</span></td>
+                  <td class="num mono">@4</td>
+                  <td class="small" style="color: var(--warning);">1 acceptance lapsed at 3.2.0</td>
+                  <td class="num small muted">14 Jun</td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="t-title">Werkvoorbereiding loopt vast op materiaalstaten</span>
+                    <span class="t-sub mono">opp-2201</span>
+                  </td>
+                  <td class="small muted">opportunity</td>
+                  <td class="small">explore</td>
+                  <td><span class="chip accepted">accepted</span></td>
+                  <td class="num mono">@1</td>
+                  <td class="small faint">—</td>
+                  <td class="num small muted">12 Jul</td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="t-title">Urenregistratie — bestaand systeem</span>
+                    <span class="t-sub mono">ia-0912</span>
+                  </td>
+                  <td class="small muted">intake assessment</td>
+                  <td class="small">in review</td>
+                  <td><span class="chip proposed">proposed</span></td>
+                  <td class="num mono">@2</td>
+                  <td class="small">Assess — awaiting sponsor</td>
+                  <td class="num small muted">1 Aug</td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="t-title">Keuringsregistratie</span>
+                    <span class="t-sub mono">spec-3311</span>
+                  </td>
+                  <td class="small muted">specification · descriptive</td>
+                  <td class="small">run</td>
+                  <td><span class="chip expired">expired</span></td>
+                  <td class="num mono">@6</td>
+                  <td class="small" style="color: var(--warning);">re-verification overdue 41 d</td>
+                  <td class="num small muted">24 Jun</td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="t-title">Digitale opleverdossiers</span>
+                    <span class="t-sub mono">bc-3980</span>
+                  </td>
+                  <td class="small muted">business case</td>
+                  <td class="small">closed</td>
+                  <td><span class="chip rejected">rejected</span></td>
+                  <td class="num mono">@4</td>
+                  <td class="small">Explore — declined, already solved</td>
+                  <td class="num small muted">2 Aug</td>
+                </tr>
+                <tr>
+                  <td>
+                    <span class="t-title">Voorraadtelling met barcodes</span>
+                    <span class="t-sub mono">bc-4102</span>
+                  </td>
+                  <td class="small muted">business case</td>
+                  <td class="small">closed</td>
+                  <td><span class="chip withdrawn">withdrawn</span></td>
+                  <td class="num mono">@2</td>
+                  <td class="small faint">—</td>
+                  <td class="num small muted">28 Jul</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p class="xsmall faint" style="margin: 0;">
+            7 of 14 shown · a superseded version never appears here, only its lineage
+          </p>
+        </section>
+
+        <!-- ============================ ARTIFACT ============================ -->
+        <section class="view" id="v-artifact">
+          <div class="spread">
+            <div class="stack" style="gap: 3px;">
+              <p class="eyebrow">business case · lineage</p>
+              <h2 class="title">Materiaalstaat-generator</h2>
+              <div class="row small muted">
+                <span class="mono">bc-4417</span>
+                <span class="faint">·</span>
+                <span>phase <b>in review</b></span>
+                <span class="faint">·</span>
+                <span>written under definition <span class="mono">v3</span></span>
+              </div>
+            </div>
+            <div class="row">
+              <button class="btn small">Lineage</button>
+              <button class="btn small">Diff @6 → @7</button>
+              <button class="btn primary">Open Explore gate</button>
+            </div>
+          </div>
+
+          <div class="grid-main">
+            <div class="stack" style="gap: 14px;">
+              <h3 class="sec">Versions</h3>
+              <div class="ledger">
+                <div class="ledger-row current sealed">
+                  <span class="ord">@7</span>
+                  <div class="stack" style="gap: 3px;">
+                    <div class="row" style="gap: 8px;">
+                      <span class="chip proposed">proposed</span>
+                      <span class="xsmall faint mono">sha256:9f2c4a…e18b</span>
+                    </div>
+                    <span class="xsmall muted">
+                      proposed by <b class="mono">usr-p-visser</b> · contributors
+                      <span class="mono">agt-case-shaper-3</span>, <span class="mono">usr-p-visser</span>
+                    </span>
+                    <span class="xsmall faint">Baseline target lowered to 8.0 days; nl-wkb added to the regime</span>
+                  </div>
+                  <span class="xsmall faint" style="white-space: nowrap;">4 Aug 09:14</span>
+                </div>
+                <div class="ledger-row sealed">
+                  <span class="ord">@6</span>
+                  <div class="stack" style="gap: 3px;">
+                    <div class="row" style="gap: 8px;">
+                      <span class="chip superseded">superseded</span>
+                      <span class="xsmall faint mono">sha256:41ba07…22d9</span>
+                    </div>
+                    <span class="xsmall muted">proposed by <b class="mono">usr-p-visser</b></span>
+                  </div>
+                  <span class="xsmall faint">2 Aug</span>
+                </div>
+                <div class="ledger-row sealed">
+                  <span class="ord">@5</span>
+                  <div class="stack" style="gap: 3px;">
+                    <div class="row" style="gap: 8px;">
+                      <span class="chip rejected">request&nbsp;changes</span>
+                      <span class="xsmall faint mono">sha256:7c30de…9a41</span>
+                    </div>
+                    <span class="xsmall muted">
+                      decided by <b class="mono">usr-j-dekker</b> at <b>Explore</b> —
+                      “beneficiary count is a guess; no baseline measurement”
+                    </span>
+                  </div>
+                  <span class="xsmall faint">29 Jul</span>
+                </div>
+                <div class="ledger-row sealed">
+                  <span class="ord">@4</span>
+                  <div class="stack" style="gap: 3px;">
+                    <div class="row" style="gap: 8px;">
+                      <span class="chip superseded">superseded</span>
+                      <span class="xsmall faint mono">sha256:aa19f0…c7e2</span>
+                    </div>
+                    <span class="xsmall muted">proposed by <b class="mono">agt-case-shaper-3</b>, confirmed by <b class="mono">usr-p-visser</b></span>
+                  </div>
+                  <span class="xsmall faint">27 Jul</span>
+                </div>
+                <div class="ledger-row" style="opacity:.72;">
+                  <span class="ord faint">@3—@1</span>
+                  <span class="xsmall faint">three earlier versions</span>
+                  <button class="btn small">Show</button>
+                </div>
+              </div>
+
+              <div class="card open-edit" style="border-left-color: var(--accent);">
+                <div class="spread" style="gap: 8px;">
+                  <div class="stack" style="gap: 2px;">
+                    <div class="row" style="gap: 8px;">
+                      <span class="chip draft">draft · rev 4</span>
+                      <span class="xsmall faint">based on @7</span>
+                    </div>
+                    <span class="xsmall muted">Open since 4 Aug · expires 2 Nov if untouched</span>
+                  </div>
+                  <button class="btn small">Resume editing</button>
+                </div>
+              </div>
+            </div>
+
+            <div class="stack" style="gap: 14px;">
+              <div class="card">
+                <h3 class="sec">Links</h3>
+                <div class="stack" style="gap: 9px;">
+                  <div class="stack" style="gap: 2px;">
+                    <span class="xsmall faint mono">ADDRESSES →</span>
+                    <span class="small"><span class="mono">opp-2201</span> · follows the lineage</span>
+                  </div>
+                  <div class="stack" style="gap: 2px;">
+                    <span class="row xsmall" style="gap: 6px;">
+                      <span class="faint mono">← JUSTIFIED_BY</span>
+                      <span class="chip pin">pinned</span>
+                    </span>
+                    <span class="small">
+                      <span class="mono">bc-4417-spec@3</span> is frozen to
+                      <span class="mono">bc-4417@7</span>
+                    </span>
+                    <span class="xsmall faint">Frozen at acceptance. It reads against @7 however often this case is superseded.</span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="card">
+                <h3 class="sec">Facets at @7</h3>
+                <dl class="kv">
+                  <dt>outcome</dt>
+                  <dd>14.2 → 8.0 days <span class="prov extracted">extracted · confirmed</span></dd>
+                  <dt>beneficiary</dt>
+                  <dd>werkvoorbereider ×6 <span class="prov declared">declared</span></dd>
+                  <dt>personal data</dt>
+                  <dd>yes <span class="prov declared">declared</span></dd>
+                  <dt>regime</dt>
+                  <dd class="mono">nl-wkb, gdpr <span class="prov extracted">extracted · confirmed</span></dd>
+                  <dt>consequence</dt>
+                  <dd class="mono">c3 <span class="prov declared">declared</span></dd>
+                  <dt>decider</dt>
+                  <dd class="mono">usr-j-dekker</dd>
+                </dl>
+              </div>
+
+              <div class="card">
+                <div class="spread" style="gap: 6px;">
+                  <h3 class="sec">Standards in force at @7</h3>
+                  <span class="xsmall faint mono">nl-construction 3.2.0</span>
+                </div>
+                <div class="stack" style="gap: 8px;">
+                  <div class="row" style="gap: 8px; align-items: flex-start;">
+                    <span class="chip accepted" style="margin-top: 1px;">met</span>
+                    <span class="stack" style="gap: 0;">
+                      <span class="mono xsmall">NL-AVG-GRONDSLAG-001</span>
+                      <span class="xsmall faint">lawful basis declared · evaluated 4 Aug by the standards evaluator</span>
+                    </span>
+                  </div>
+                  <div class="row" style="gap: 8px; align-items: flex-start;">
+                    <span class="chip accepted" style="margin-top: 1px;">met</span>
+                    <span class="stack" style="gap: 0;">
+                      <span class="mono xsmall">NL-SUFF-BASELINE-002</span>
+                      <span class="xsmall faint">outcome measured, not estimated</span>
+                    </span>
+                  </div>
+                  <div class="row" style="gap: 8px; align-items: flex-start;">
+                    <span class="chip expired" style="margin-top: 1px;">unsupported</span>
+                    <span class="stack" style="gap: 0;">
+                      <span class="mono xsmall">NL-WKA-VERKLARING-001</span>
+                      <span class="xsmall" style="color: var(--warning);">the tenant's acceptance lapsed at pack 3.2.0</span>
+                    </span>
+                  </div>
+                  <div class="row" style="gap: 8px; align-items: flex-start;">
+                    <span class="chip" style="margin-top: 1px;">n/a</span>
+                    <span class="stack" style="gap: 0;">
+                      <span class="mono xsmall">NL-WKB-GEREEDMELDING-001</span>
+                      <span class="xsmall faint">applies_when gevolgklasse == 1 — not this case</span>
+                    </span>
+                  </div>
+                </div>
+                <span class="xsmall faint">
+                  Verdicts recorded against this exact version. This service computes none of them.
+                  Read the binding <span class="mono">pb-aannemer-x@4</span> for who accepted each.
+                </span>
+              </div>
+
+              <div class="card flat">
+                <h3 class="sec">Classification</h3>
+                <p class="xsmall muted" style="margin: 0;">
+                  Validated at propose. Lawful basis <span class="mono">legitimate_interest</span>,
+                  retention <span class="mono">7y</span>, subjects named in the body.
+                  Erasure is redaction in place, recorded.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================ EDITOR ============================ -->
+        <section class="view" id="v-editor">
+          <div class="spread">
+            <div class="stack" style="gap: 3px;">
+              <p class="eyebrow">draft · mutable · not a record</p>
+              <h2 class="title">Materiaalstaat-generator — specification</h2>
+              <div class="row small muted">
+                <span class="mono">bc-4417-spec</span>
+                <span class="faint">·</span>
+                <span>rev <b class="mono">23</b></span>
+                <span class="faint">·</span>
+                <span class="faint">saved 4 seconds ago</span>
+              </div>
+            </div>
+            <div class="row">
+              <span class="xsmall faint">Contributors</span>
+              <span class="chip"><span class="mono">agt-spec-writer-1</span></span>
+              <span class="chip"><span class="mono">usr-j-dekker</span></span>
+              <button class="btn small">Discard draft</button>
+              <button class="btn primary" disabled>Propose version</button>
+            </div>
+          </div>
+
+          <div class="notice warn">
+            <b>Two facets are extracted and unconfirmed, so this cannot be proposed.</b>
+            <span>
+              An agent proposed <span class="mono">acceptance_criteria</span> and
+              <span class="mono">affected_roles</span>. The Explore gate declares
+              <span class="mono">confirmed_facets: true</span>, and an unconfirmed extraction never
+              reaches a gate — confirm each below, or edit it first.
+            </span>
+          </div>
+
+          <div class="grid-editor">
+            <div class="stack" style="gap: 10px;">
+              <div class="spread">
+                <h3 class="sec">Body <span class="faint mono xsmall">markdown/v1</span></h3>
+                <div class="row">
+                  <button class="btn small">Write</button>
+                  <button class="btn small">Preview</button>
+                  <button class="btn small">Attachments · 2</button>
+                </div>
+              </div>
+              <div class="doc"><span class="h">## Scope</span>
+
+De generator stelt de materiaalstaat samen uit het
+constructiemodel en de bestelhistorie, en levert
+hem als PDF en als CSV aan de werkvoorbereider.
+
+<span class="h">## Wat er nu gebeurt</span>
+
+De werkvoorbereider telt met de hand uit de
+tekening, gemiddeld 14,2 dagen per project.
+
+![situatieschets](attachment:att-91)
+
+<span class="cur"><span class="h">## Buiten scope</span>
+
+- Inkoop en bestelling
+- Koppeling met de leverancierscatalogus█</span></div>
+              <p class="xsmall faint" style="margin: 0;">
+                Autosaved on every pause. A save carrying a stale <span class="mono">rev</span> is
+                refused with the current state rather than overwriting it.
+              </p>
+            </div>
+
+            <div class="stack" style="gap: 10px;">
+              <h3 class="sec">Facets <span class="faint xsmall">— the only thing a gate reads</span></h3>
+
+              <div class="field editing">
+                <label>declared_outcome</label>
+                <span class="val">14,2 → 8,0 dagen per project</span>
+                <span class="xsmall"><span class="prov declared">declared · usr-j-dekker</span></span>
+              </div>
+
+              <div class="field editing" style="border-color: var(--warning);">
+                <label style="color: var(--warning);">acceptance_criteria · 6 items</label>
+                <span class="val small">AC-1 … AC-6, from the clarify pass</span>
+                <div class="row" style="gap: 7px; margin-top: 4px;">
+                  <span class="xsmall"><span class="prov extracted">extracted · agt-spec-writer-1</span></span>
+                  <button class="btn small">Review &amp; confirm</button>
+                </div>
+              </div>
+
+              <div class="field editing" style="border-color: var(--warning);">
+                <label style="color: var(--warning);">affected_roles</label>
+                <span class="val mono small">werkvoorbereider, uitvoerder</span>
+                <div class="row" style="gap: 7px; margin-top: 4px;">
+                  <span class="xsmall"><span class="prov extracted">extracted · agt-spec-writer-1</span></span>
+                  <button class="btn small">Review &amp; confirm</button>
+                </div>
+              </div>
+
+              <div class="field editing">
+                <label>class</label>
+                <span class="val mono">generative</span>
+                <span class="xsmall faint">Distinct type. A descriptive specification is not this one with a flag.</span>
+              </div>
+
+              <div class="field editing">
+                <label>personal_data_in_scope</label>
+                <span class="val">yes — names of werkvoorbereiders appear in the body</span>
+                <span class="xsmall"><span class="prov declared">declared · usr-j-dekker</span></span>
+              </div>
+
+              <div class="card flat" style="gap: 6px;">
+                <span class="eyebrow">Pin on propose</span>
+                <span class="xsmall muted">
+                  <span class="mono">justified_by → bc-4417</span> will freeze to whichever version
+                  is accepted at the moment this specification is accepted. It cannot be repointed
+                  afterwards.
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================ DIFF ============================ -->
+        <section class="view" id="v-diff">
+          <div class="spread">
+            <div class="stack" style="gap: 3px;">
+              <p class="eyebrow">what changed, and who accepted it</p>
+              <h2 class="title">bc-4417 · @6 → @7</h2>
+              <div class="row xsmall faint mono">
+                <span>sha256:41ba07…22d9</span>
+                <span>→</span>
+                <span>sha256:9f2c4a…e18b</span>
+              </div>
+            </div>
+            <div class="row">
+              <button class="btn small">@5 → @7</button>
+              <button class="btn small">Accepted → latest</button>
+            </div>
+          </div>
+
+          <div class="grid2">
+            <div class="stack" style="gap: 10px;">
+              <h3 class="sec">Facet diff <span class="faint xsmall">— structural, every type</span></h3>
+              <div class="card" style="gap: 12px;">
+                <div class="stack" style="gap: 3px;">
+                  <span class="xsmall faint mono">CHANGED · declared_outcome.target</span>
+                  <div class="row" style="gap: 8px;">
+                    <span class="mono small" style="color: var(--critical); text-decoration: line-through;">10.0 days</span>
+                    <span class="faint">→</span>
+                    <span class="mono small" style="color: var(--accent-ink); font-weight: 600;">8.0 days</span>
+                  </div>
+                </div>
+                <div class="stack" style="gap: 3px;">
+                  <span class="xsmall faint mono">ADDED · regulatory_regime</span>
+                  <span class="mono small" style="color: var(--accent-ink);">+ nl-wkb</span>
+                </div>
+                <div class="stack" style="gap: 3px;">
+                  <span class="xsmall faint mono">REMOVED · affected_roles</span>
+                  <span class="mono small" style="color: var(--critical);">− project_controller</span>
+                </div>
+                <div class="stack" style="gap: 3px;">
+                  <span class="xsmall faint mono">PROVENANCE · declared_outcome</span>
+                  <span class="small">
+                    <span class="prov extracted">extracted</span>
+                    <span class="faint"> → </span>
+                    <span class="prov extracted">extracted · confirmed by usr-j-dekker</span>
+                  </span>
+                </div>
+              </div>
+
+              <h3 class="sec">Link diff</h3>
+              <div class="card">
+                <span class="small mono" style="color: var(--accent-ink);">+ addresses → opp-2201</span>
+                <span class="xsmall faint">No pinned link is affected. A pin, once frozen, cannot appear in a diff as repointed — the operation does not exist.</span>
+              </div>
+            </div>
+
+            <div class="stack" style="gap: 10px;">
+              <h3 class="sec">Body diff <span class="faint xsmall">— per format, markdown/v1</span></h3>
+              <div class="diff">
+                <div class="hunk">@@ ## Verwacht resultaat @@</div>
+                <div class="ctx">  De werkvoorbereider stelt de materiaalstaat nu</div>
+                <div class="ctx">  met de hand samen uit de tekening.</div>
+                <div class="del">− Wij verwachten dat dit terugloopt naar 10 dagen.</div>
+                <div class="add">+ Gemeten over 6 projecten: 14,2 dagen gemiddeld.</div>
+                <div class="add">+ Doel is 8,0 dagen, gemeten op dezelfde manier.</div>
+                <div class="ctx"> </div>
+                <div class="hunk">@@ ## Regelgeving @@</div>
+                <div class="ctx">  Persoonsgegevens: namen van werkvoorbereiders</div>
+                <div class="add">+ Wkb — het dossier moet aantoonbaar compleet zijn</div>
+                <div class="ctx">  bij oplevering.</div>
+              </div>
+              <p class="xsmall faint" style="margin: 0;">
+                A body diff a reviewer cannot read is a defect in the format, not in the reviewer.
+                The bar is whether a non-technical owner can confirm their intent was captured.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================ DECIDE ============================ -->
+        <section class="view" id="v-decide">
+          <div class="spread">
+            <div class="stack" style="gap: 3px;">
+              <p class="eyebrow">gate · explore · decides on business_case</p>
+              <h2 class="title">Decide on bc-4417 @7</h2>
+              <p class="small muted" style="margin: 0;">
+                Materiaalstaat-generator · proposed 4 Aug by <span class="mono">usr-p-visser</span>
+              </p>
+            </div>
+            <div class="row">
+              <button class="btn small">Read @7</button>
+              <button class="btn small">Diff @6 → @7</button>
+            </div>
+          </div>
+
+          <div class="grid-main">
+            <div class="stack" style="gap: 16px;">
+              <div class="card">
+                <h3 class="sec">Before this gate opens</h3>
+                <div>
+                  <div class="check pass">
+                    <span class="mark">✓</span>
+                    <div class="stack" style="gap: 1px;">
+                      <b>Every facet confirmed by a human</b>
+                      <span class="xsmall faint">8 of 8 · 3 extracted by <span class="mono">agt-case-shaper-3</span> and confirmed by <span class="mono">usr-p-visser</span></span>
+                    </div>
+                  </div>
+                  <div class="check pass">
+                    <span class="mark">✓</span>
+                    <div class="stack" style="gap: 3px;">
+                      <b>Every applicable standard evaluated · <span class="mono">nl-construction 3.2.0</span></b>
+                      <div class="stack" style="gap: 2px; padding-top: 2px;">
+                        <span class="xsmall"><span class="mono" style="color: var(--accent);">met</span> <span class="mono faint">NL-SUFF-BASELINE-002</span> <span class="faint">· outcome measured over 6 projects</span></span>
+                        <span class="xsmall"><span class="mono" style="color: var(--accent);">met</span> <span class="mono faint">NL-SUFF-BENEFICIARY-001</span> <span class="faint">· role and count named</span></span>
+                        <span class="xsmall"><span class="mono" style="color: var(--accent);">met</span> <span class="mono faint">NL-AVG-GRONDSLAG-001</span> <span class="faint">· legitimate_interest, accepted by Boekhoudkantoor Y</span></span>
+                        <span class="xsmall faint"><span class="mono">n/a</span> <span class="mono">NL-WKB-GEREEDMELDING-001</span> · applies_when not satisfied</span>
+                      </div>
+                      <span class="xsmall faint">Verdicts recorded 4 Aug 09:20 by the standards evaluator against this version's digest. The service recorded them; it did not compute one.</span>
+                    </div>
+                  </div>
+                  <div class="check fail">
+                    <span class="mark">!</span>
+                    <div class="stack" style="gap: 1px;">
+                      <b style="color: var(--warning);">One acceptance lapsed — advisory, not blocking</b>
+                      <span class="xsmall faint">
+                        <span class="mono">NL-WKA-VERKLARING-001</span> was accepted at pack
+                        <span class="mono">3.1.0</span> and 3.2.0 changed it materially. It does not
+                        bear on a business case, so it does not block Explore — but it will block
+                        release, and it is on the record that you decided knowing this.
+                      </span>
+                    </div>
+                  </div>
+                  <div class="check pass">
+                    <span class="mark">✓</span>
+                    <div class="stack" style="gap: 1px;">
+                      <b>Separation of duties · <span class="mono">exclude_creator</span></b>
+                      <span class="xsmall faint">You did not propose this version.</span>
+                    </div>
+                  </div>
+                  <div class="check pass">
+                    <span class="mark">✓</span>
+                    <div class="stack" style="gap: 1px;">
+                      <b>You resolve as the gate owner</b>
+                      <span class="xsmall faint">Resolver <span class="mono">role: sponsor</span> in ws-aannemer-x</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="stack" style="gap: 9px;">
+                <h3 class="sec">Outcome</h3>
+                <label class="radio on"><span class="dot"></span>
+                  <span class="stack" style="gap: 1px;">
+                    <b>Approve</b>
+                    <span class="xsmall muted">@7 becomes accepted, @6 becomes superseded, the phase moves to <span class="mono">prove</span>, and any pinned link freezes to @7.</span>
+                  </span>
+                </label>
+                <label class="radio"><span class="dot"></span>
+                  <span class="stack" style="gap: 1px;">
+                    <b>Request changes</b>
+                    <span class="xsmall muted">Opens a new draft based on @7 carrying your comments. @7 stays in the record — the loop is visible, not erased.</span>
+                  </span>
+                </label>
+                <label class="radio"><span class="dot"></span>
+                  <span class="stack" style="gap: 1px;">
+                    <b>Decline</b>
+                    <span class="xsmall muted">Requires one of the five recorded Explore outcomes. Silence is not an outcome.</span>
+                  </span>
+                </label>
+              </div>
+
+              <div class="stack" style="gap: 6px;">
+                <h3 class="sec">Reasoning <span class="faint xsmall">— carried onto the decision, permanently</span></h3>
+                <textarea class="input" rows="3" style="font-family: var(--sans);">Baseline is now measured over six projects rather than estimated, which was the objection at @5. Wkb is correctly in scope.</textarea>
+              </div>
+            </div>
+
+            <div class="stack" style="gap: 14px;">
+              <div class="card">
+                <h3 class="sec">Attribution <span class="faint xsmall mono">maestro-default</span></h3>
+                <dl class="kv">
+                  <dt>accountable</dt>
+                  <dd><b>Jan Dekker</b> <span class="mono xsmall faint">usr-j-dekker</span></dd>
+                  <dt>acting</dt>
+                  <dd><b>Jan Dekker</b> <span class="xsmall faint">console</span></dd>
+                  <dt>seat</dt>
+                  <dd class="mono">sponsor</dd>
+                  <dt>oversight</dt>
+                  <dd class="mono">O2</dd>
+                  <dt>consequence</dt>
+                  <dd class="mono">c3</dd>
+                </dl>
+                <p class="xsmall faint" style="margin: 0;">
+                  <b>accountable</b> must resolve to a principal of kind <span class="mono">human</span>.
+                  A decision naming an agent there is a refused write, and the refusal is itself recorded.
+                </p>
+              </div>
+
+              <div class="notice ok">
+                <b>This decision is immutable once recorded.</b>
+                <span>It carries the digest of @7, every evaluation in force, and your attribution. There is no edit and no delete.</span>
+              </div>
+
+              <button class="btn primary" style="width: 100%; padding: 9px;">Record decision</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================ LINEAGE ============================ -->
+        <section class="view" id="v-lineage">
+          <div class="spread">
+            <div class="stack" style="gap: 3px;">
+              <p class="eyebrow">both directions, across links</p>
+              <h2 class="title">Lineage of bc-4417</h2>
+              <p class="small muted" style="margin: 0;">
+                Why does this application exist, and what happened to my idea — the same graph read
+                from either end.
+              </p>
+            </div>
+            <div class="row">
+              <button class="btn small">Backward</button>
+              <button class="btn small">Forward</button>
+            </div>
+          </div>
+
+          <div class="card" style="padding: 18px 14px;">
+            <svg class="lineage-svg" viewBox="0 0 940 250" role="img"
+                 aria-label="Lineage: opportunity opp-2201 leads to business case bc-4417 at version 7, which is pinned by specification bc-4417-spec at version 3, which leads to a not-yet-existing deployment and conformance record.">
+              <defs>
+                <marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0 0 L8 4 L0 8 z" fill="var(--ink-faint)"></path>
+                </marker>
+                <marker id="ar-pin" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto">
+                  <path d="M0 0 L8 4 L0 8 z" fill="var(--accent)"></path>
+                </marker>
+              </defs>
+
+              <!-- edges -->
+              <line x1="176" y1="72" x2="234" y2="72" stroke="var(--ink-faint)" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ar)"></line>
+              <line x1="410" y1="72" x2="468" y2="72" stroke="var(--accent)" stroke-width="2" marker-end="url(#ar-pin)"></line>
+              <line x1="644" y1="72" x2="702" y2="72" stroke="var(--ink-faint)" stroke-width="1.5" stroke-dasharray="2 4" marker-end="url(#ar)"></line>
+              <line x1="820" y1="104" x2="820" y2="150" stroke="var(--ink-faint)" stroke-width="1.5" stroke-dasharray="2 4" marker-end="url(#ar)"></line>
+
+              <text x="196" y="64" font-size="9.5" fill="var(--ink-faint)" letter-spacing="0.5">addresses</text>
+              <text x="415" y="64" font-size="9.5" fill="var(--accent)" letter-spacing="0.5" font-weight="600">justified_by · PIN @7</text>
+              <text x="655" y="64" font-size="9.5" fill="var(--ink-faint)" letter-spacing="0.5">deployed_as</text>
+
+              <!-- opportunity -->
+              <rect x="10" y="44" width="166" height="56" rx="4" fill="var(--surface-2)" stroke="var(--rule-strong)"></rect>
+              <text x="22" y="63" font-size="10.5" font-weight="600">opp-2201</text>
+              <text x="22" y="78" font-size="9" fill="var(--ink-muted)">opportunity · accepted</text>
+              <text x="22" y="91" font-size="9" fill="var(--ink-faint)">raised 12 Jul · usr-p-visser</text>
+
+              <!-- business case -->
+              <rect x="234" y="36" width="176" height="72" rx="4" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="1.5"></rect>
+              <text x="246" y="56" font-size="10.5" font-weight="700">bc-4417 @7</text>
+              <text x="246" y="71" font-size="9" fill="var(--ink-muted)">business case · proposed</text>
+              <text x="246" y="84" font-size="9" fill="var(--ink-faint)">@4 accepted, superseded ×2</text>
+              <text x="246" y="97" font-size="9" fill="var(--ink-faint)">sha256:9f2c4a…e18b</text>
+
+              <!-- specification -->
+              <rect x="468" y="44" width="176" height="56" rx="4" fill="var(--surface-2)" stroke="var(--rule-strong)"></rect>
+              <text x="480" y="63" font-size="10.5" font-weight="600">bc-4417-spec @3</text>
+              <text x="480" y="78" font-size="9" fill="var(--ink-muted)">specification · accepted</text>
+              <text x="480" y="91" font-size="9" fill="var(--ink-faint)">generative · reads against @7</text>
+
+              <!-- deployment (not in this service) -->
+              <rect x="702" y="44" width="176" height="56" rx="4" fill="none" stroke="var(--ink-faint)" stroke-dasharray="3 3"></rect>
+              <text x="714" y="63" font-size="10.5" fill="var(--ink-faint)" font-weight="600">app-0071</text>
+              <text x="714" y="78" font-size="9" fill="var(--ink-faint)">deployment · the instance register</text>
+              <text x="714" y="91" font-size="9" fill="var(--ink-faint)">forward edge arrives with it</text>
+
+              <!-- conformance -->
+              <rect x="702" y="150" width="176" height="52" rx="4" fill="none" stroke="var(--ink-faint)" stroke-dasharray="3 3"></rect>
+              <text x="714" y="169" font-size="10.5" fill="var(--ink-faint)" font-weight="600">conformance</text>
+              <text x="714" y="184" font-size="9" fill="var(--ink-faint)">standards engine · assessed, not asserted</text>
+
+              <!-- the pinned-version callout -->
+              <line x1="322" y1="108" x2="322" y2="150" stroke="var(--accent)" stroke-width="1" stroke-dasharray="2 3"></line>
+              <rect x="234" y="150" width="176" height="52" rx="4" fill="var(--surface)" stroke="var(--accent)"></rect>
+              <text x="246" y="169" font-size="10" font-weight="700" fill="var(--accent)">@7 · frozen</text>
+              <text x="246" y="184" font-size="9" fill="var(--ink-muted)">the specification reads this,</text>
+              <text x="246" y="195" font-size="9" fill="var(--ink-muted)">not whatever bc-4417 says now</text>
+            </svg>
+          </div>
+
+          <div class="legend">
+            <i><span class="swatch pinned"></span> pinned — frozen to a version at acceptance</i>
+            <i><span class="swatch follows"></span> follows the lineage — always the latest accepted</i>
+            <i><span class="swatch future"></span> a service that does not exist yet</i>
+          </div>
+        </section>
+
+        <!-- ============================ CATALOGUE ============================ -->
+        <section class="view" id="v-catalogue">
+          <div class="spread">
+            <div class="stack" style="gap: 3px;">
+              <p class="eyebrow">catalogue workspace · shared across tenants · read-only from here</p>
+              <h2 class="title">Standards, packs and constructs</h2>
+              <p class="small muted" style="margin: 0;">
+                The authoritative texts every tenant is governed against. Versioned, gated and
+                diffed exactly like a specification — because they are the same kind of object.
+              </p>
+            </div>
+            <div class="row">
+              <button class="btn small">nl-construction 3.2.0</button>
+              <button class="btn small">platform 1.4.0</button>
+              <button class="btn small">Compare 3.1.0 → 3.2.0</button>
+            </div>
+          </div>
+
+          <div class="notice">
+            <b>You are reading <span class="mono">ws-catalogue</span> through a read-only handle.</b>
+            <span>
+              It holds no tenant data and cannot be written from a tenant session. A tenant artifact
+              carries a <i>reference</i> to a standard at a version — never a link, because a link
+              would cross the boundary the isolation model exists to hold.
+            </span>
+          </div>
+
+          <div class="grid-main">
+            <div class="stack" style="gap: 16px;">
+              <div class="stack sealed" style="gap: 10px;">
+                <div class="row" style="gap: 8px;">
+                  <span class="chip accepted">in force</span>
+                  <span class="chip"><span class="mono">platform_standard</span></span>
+                  <span class="xsmall faint mono">@6 · sha256:c04b71…3fa2</span>
+                </div>
+                <h3 style="margin: 0; font-size: 17px; letter-spacing: -.015em;">
+                  <span class="mono" style="font-size: 14px;">FPS4-SUFF-BASELINE-002</span><br />
+                  A business case states a measured baseline, not an estimated one
+                </h3>
+                <dl class="kv">
+                  <dt>authority</dt><dd>ours — this is know-how, not a citation</dd>
+                  <dt>tier</dt><dd class="mono">product</dd>
+                  <dt>kind</dt><dd class="mono">sufficiency</dd>
+                  <dt>in force</dt><dd class="mono">2026-04-01 → open</dd>
+                  <dt>supersedes</dt><dd class="mono">@5 <span class="xsmall faint">material change · lapsed 3 acceptances</span></dd>
+                  <dt>severity</dt><dd class="mono">blocking</dd>
+                  <dt>review due</dt><dd class="mono">2027-04-01</dd>
+                </dl>
+              </div>
+
+              <div class="stack" style="gap: 8px;">
+                <div class="spread">
+                  <h3 class="sec">Full text <span class="faint xsmall">— ours, so the body is the standard</span></h3>
+                  <span class="xsmall faint mono">markdown/v1 · rendered</span>
+                </div>
+                <div class="doc record"><span class="h">## The obligation</span>
+
+A business case put to the Explore gate SHALL carry a
+declared_outcome with a baseline, a target, and a unit,
+where the baseline is <span class="h">measured</span> and the measurement
+method is stated.
+
+<span class="h">## Why we hold this</span>
+
+An estimated baseline cannot be falsified, so no later
+conformance assessment can say whether the outcome was
+achieved. Every business case we declined for
+insufficiency in the first year failed here, and in
+eleven of fourteen the sponsor believed they had a
+number.
+
+<span class="h">## What counts as measured</span>
+
+- Observed over at least five instances of the process
+- Collected before the case was written, not for it
+- Reproducible by someone other than the author
+
+An estimate is admissible only with consequence class
+c1 or c2 and an explicit `baseline_estimated: true`,
+which downgrades every conformance claim built on it.
+
+<span class="h">## How to satisfy it quickly</span>
+
+Most werkvoorbereiding processes already leave a trace
+in a planning tool. Six projects of history is usually
+one export away, and that is the cheapest measurement
+available — see the elicitation construct
+`ct-baseline-probe@4`.</div>
+                <p class="xsmall faint" style="margin: 0;">
+                  This is the body a person reads and an agent retrieves. The gate does not read it —
+                  it reads the <span class="mono">assertion</span> facet below.
+                </p>
+              </div>
+
+              <div class="card">
+                <h3 class="sec">Machine-evaluable facets <span class="faint xsmall">— what a gate and an evaluator read</span></h3>
+                <dl class="kv">
+                  <dt>assertion</dt>
+                  <dd class="mono xsmall">declared_outcome.baseline_source == "measured"<br />&amp;&amp; declared_outcome.unit != null<br />&amp;&amp; declared_outcome.method != null</dd>
+                  <dt>applies_when</dt>
+                  <dd class="mono xsmall">type == "business_case"</dd>
+                  <dt>evidence</dt>
+                  <dd class="mono xsmall">measurement_export</dd>
+                  <dt>remediation</dt>
+                  <dd class="xsmall">Block the Explore gate; offer <span class="mono">ct-baseline-probe</span></dd>
+                  <dt>lapse</dt>
+                  <dd class="mono xsmall">freeze_at_last</dd>
+                </dl>
+              </div>
+            </div>
+
+            <div class="stack" style="gap: 14px;">
+              <div class="card">
+                <h3 class="sec">In this catalogue</h3>
+                <div class="stack" style="gap: 9px;">
+                  <div class="stack" style="gap: 1px;">
+                    <div class="row" style="gap: 7px;">
+                      <span class="mono xsmall" style="font-weight: 600;">FPS4-SUFF-BASELINE-002</span>
+                      <span class="chip accepted">in force</span>
+                    </div>
+                    <span class="xsmall faint">platform_standard · full text</span>
+                  </div>
+                  <div class="stack" style="gap: 1px;">
+                    <div class="row" style="gap: 7px;">
+                      <span class="mono xsmall">FPS4-AI-OVERSIGHT-003</span>
+                      <span class="chip accepted">in force</span>
+                    </div>
+                    <span class="xsmall faint">platform_standard · full text · Tier 1</span>
+                  </div>
+                  <div class="stack" style="gap: 1px;">
+                    <div class="row" style="gap: 7px;">
+                      <span class="mono xsmall">ISO-27001-A-8-16</span>
+                      <span class="chip">summary only</span>
+                    </div>
+                    <span class="xsmall faint">external_standard · licensed, not redistributable</span>
+                  </div>
+                  <div class="stack" style="gap: 1px;">
+                    <div class="row" style="gap: 7px;">
+                      <span class="mono xsmall">NIST-800-53-AU-6</span>
+                      <span class="chip accepted">in force</span>
+                    </div>
+                    <span class="xsmall faint">external_standard · full text, public domain</span>
+                  </div>
+                  <div class="stack" style="gap: 1px;">
+                    <div class="row" style="gap: 7px;">
+                      <span class="mono xsmall">NL-WKB-GEREEDMELDING-001</span>
+                      <span class="chip accepted">in force</span>
+                    </div>
+                    <span class="xsmall faint">external_standard · Bbl, freely redistributable</span>
+                  </div>
+                  <div class="stack" style="gap: 1px;">
+                    <div class="row" style="gap: 7px;">
+                      <span class="mono xsmall">EU-AIACT-ART-14</span>
+                      <span class="chip proposed">in force 2026-08-02</span>
+                    </div>
+                    <span class="xsmall faint">external_standard · effective date pending</span>
+                  </div>
+                </div>
+                <span class="xsmall faint">6 of 118 · packs nl-construction and platform</span>
+              </div>
+
+              <div class="card" style="border-left: 3px solid var(--warning);">
+                <h3 class="sec">An external standard, for contrast</h3>
+                <span class="mono xsmall" style="font-weight: 600;">ISO-27001-A-8-16</span>
+                <dl class="kv">
+                  <dt>authority</dt><dd>ISO/IEC — not ours</dd>
+                  <dt>licence</dt><dd style="color: var(--warning);">redistribution prohibited</dd>
+                  <dt>body holds</dt><dd>our summary and our reading</dd>
+                  <dt>source</dt><dd class="xsmall">clause citation + purchase link</dd>
+                  <dt>interpreted by</dt><dd class="xsmall">Boekhoudkantoor Y · arrangement A · not attested</dd>
+                </dl>
+                <p class="xsmall faint" style="margin: 0;">
+                  A distinct type, not a flag. An auditor must know whether they are reading the
+                  obligation or our reading of it, and a flag is settable.
+                </p>
+              </div>
+
+              <div class="card flat">
+                <h3 class="sec">Constructs</h3>
+                <p class="xsmall muted" style="margin: 0;">
+                  <span class="mono">ct-baseline-probe@4</span> and 22 others — the prompts and
+                  elicitation patterns agents use. Versioned and gated here for the same reason
+                  standards are: a prompt carrying domain knowledge is governed content that happens
+                  to be prose.
+                </p>
+                <span class="xsmall faint">Marked <span class="mono">transfers: false</span> — know-how does not leave at exit.</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================= STANDARDS & BINDING ======================= -->
+        <section class="view" id="v-standards">
+          <div class="spread">
+            <div class="stack" style="gap: 3px;">
+              <p class="eyebrow">pack binding · a governed artifact like any other</p>
+              <h2 class="title">Standards this tenant complies with</h2>
+              <div class="row small muted">
+                <span class="mono">pb-aannemer-x</span>
+                <span class="faint">·</span>
+                <span class="mono">@4</span>
+                <span class="chip accepted">accepted</span>
+                <span class="faint">·</span>
+                <span>accepted 14 Jun by <span class="mono">usr-j-dekker</span></span>
+              </div>
+            </div>
+            <div class="row">
+              <button class="btn small">Diff @3 → @4</button>
+              <button class="btn small">Export — this is yours at exit</button>
+              <button class="btn primary">Propose @5</button>
+            </div>
+          </div>
+
+          <div class="notice hard">
+            <b>One acceptance lapsed when nl-construction 3.2.0 published.</b>
+            <span>
+              <span class="mono">NL-WKA-VERKLARING-001</span> was accepted against
+              <span class="mono">3.1.0</span> and the change was classified material, so the
+              acceptance no longer stands. Two specifications rest on it and are shown as
+              unsupported until the advisor re-accepts.
+            </span>
+          </div>
+
+          <div class="grid-main">
+            <div class="stack" style="gap: 18px;">
+              <div class="stack" style="gap: 10px;">
+                <div class="spread">
+                  <h3 class="sec">Acceptances <span class="faint xsmall">— per standard, by a named party, dated</span></h3>
+                  <span class="xsmall faint">facets · a gate reads these</span>
+                </div>
+                <div class="t-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Standard</th>
+                        <th>Tier</th>
+                        <th>Scope</th>
+                        <th>Accepted by</th>
+                        <th class="num">Pack</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td>
+                          <span class="t-title mono">NL-WKB-GEREEDMELDING-001</span>
+                          <span class="t-sub">Gereedmelding 14 dagen voor ingebruikname</span>
+                        </td>
+                        <td class="small muted">regulatory</td>
+                        <td class="small">project<span class="t-sub mono">prj-2026-114</span></td>
+                        <td class="small">
+                          Borger Z B.V.
+                          <span class="t-sub mono">kwaliteitsborger · INST-004</span>
+                        </td>
+                        <td class="num mono small">3.2.0</td>
+                        <td><span class="chip accepted">active</span></td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <span class="t-title mono">NL-WKA-VERKLARING-001</span>
+                          <span class="t-sub">Ketenaansprakelijkheid — verklaring betalingsgedrag</span>
+                        </td>
+                        <td class="small muted">regulatory</td>
+                        <td class="small">tenant</td>
+                        <td class="small">
+                          Boekhoudkantoor Y
+                          <span class="t-sub mono">accountant</span>
+                        </td>
+                        <td class="num mono small faint">3.1.0</td>
+                        <td><span class="chip expired">lapsed</span></td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <span class="t-title mono">NL-CAO-BOUW-LOON-004</span>
+                          <span class="t-sub">Loonschalen CAO Bouw &amp; Infra</span>
+                        </td>
+                        <td class="small muted">regulatory</td>
+                        <td class="small">tenant</td>
+                        <td class="small">
+                          Boekhoudkantoor Y
+                          <span class="t-sub mono">accountant</span>
+                        </td>
+                        <td class="num mono small">3.2.0</td>
+                        <td><span class="chip accepted">active</span></td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <span class="t-title mono">NL-BOUW-COSTCODE-002</span>
+                          <span class="t-sub">Kostencodering conform DICO</span>
+                        </td>
+                        <td class="small muted">product</td>
+                        <td class="small">tenant</td>
+                        <td class="small faint">— overridden</td>
+                        <td class="num mono small">3.2.0</td>
+                        <td><span class="chip rejected">override</span></td>
+                      </tr>
+                      <tr>
+                        <td>
+                          <span class="t-title mono">NL-AVG-GRONDSLAG-001</span>
+                          <span class="t-sub">Lawful basis per personal-data category</span>
+                        </td>
+                        <td class="small muted">regulatory</td>
+                        <td class="small">tenant</td>
+                        <td class="small">
+                          Boekhoudkantoor Y
+                          <span class="t-sub mono">accountant</span>
+                        </td>
+                        <td class="num mono small">3.2.0</td>
+                        <td><span class="chip accepted">active</span></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <p class="xsmall faint" style="margin: 0;">
+                  5 of 23 shown · an acceptance names a party, a person and a date because a standard
+                  is interpreted, not merely quoted
+                </p>
+              </div>
+
+              <div class="stack" style="gap: 10px;">
+                <h3 class="sec">Overrides <span class="faint xsmall">— product tier only; a regulatory standard cannot be overridden</span></h3>
+                <div class="card" style="border-left: 3px solid var(--critical); gap: 7px;">
+                  <div class="row" style="gap: 8px;">
+                    <b class="mono small">NL-BOUW-COSTCODE-002</b>
+                    <span class="chip rejected">override</span>
+                    <span class="xsmall" style="color: var(--warning);">expires 31 Dec 2026 · 147 days</span>
+                  </div>
+                  <p class="small muted" style="margin: 0;">“Cost codes migrate in Q4; the current scheme predates DICO adoption.”</p>
+                  <span class="xsmall faint">accepted by <span class="mono">usr-j-dekker</span> · every override is a recorded exception with an expiry, never a setting</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="stack" style="gap: 14px;">
+              <div class="card">
+                <h3 class="sec">Pack in force</h3>
+                <dl class="kv">
+                  <dt>pack</dt><dd class="mono">nl-construction</dd>
+                  <dt>pinned</dt><dd class="mono">3.2.0 <span class="xsmall faint">published 12 Jul</span></dd>
+                  <dt>upgrade</dt><dd class="mono">notify</dd>
+                  <dt>source</dt><dd class="xsmall faint">the pack registry — read-only here. This service never authors a standard.</dd>
+                </dl>
+              </div>
+
+              <div class="card">
+                <h3 class="sec">Oversight chosen <span class="faint xsmall">— within the ceiling, never above</span></h3>
+                <dl class="kv">
+                  <dt>release gate</dt>
+                  <dd><span class="mono">O1</span> <span class="xsmall faint">ceiling O2 — more human, not less</span></dd>
+                  <dt>case shaping</dt>
+                  <dd><span class="mono">O3</span> <span class="xsmall faint">ceiling O4</span></dd>
+                  <dt>isolation</dt>
+                  <dd class="mono">L1</dd>
+                </dl>
+              </div>
+
+              <div class="card">
+                <h3 class="sec">Consequence policy</h3>
+                <dl class="kv">
+                  <dt>default</dt><dd class="mono">c2</dd>
+                  <dt>c4 when</dt><dd class="xsmall mono">filing_to_bevoegd_gezag</dd>
+                  <dt>c4 when</dt><dd class="xsmall mono">binding_calculation_on_pay</dd>
+                  <dt>c3 when</dt><dd class="xsmall mono">persoonsgegevens_of_non_employees</dd>
+                </dl>
+                <span class="xsmall faint">A predicate raises the class. None lowers it.</span>
+              </div>
+
+              <div class="notice">
+                <b>Platform standards are not here.</b>
+                <span class="xsmall">
+                  The Tier 1 invariants and the build standards are the platform's own, claimed by
+                  inheritance and evidenced through the conformance record. This screen is the
+                  <i>tenant's</i> obligations only.
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================ SEARCH ============================ -->
+        <section class="view" id="v-search">
+          <div class="stack" style="gap: 12px;">
+            <h2 class="title">Search</h2>
+            <input class="input" value="materiaalstaat" aria-label="Search this workspace" />
+            <div class="row small muted">
+              <span>28 results</span>
+              <span class="faint">·</span>
+              <span>facets and bodies</span>
+              <span class="faint">·</span>
+              <span>within <span class="mono">ws-aannemer-x</span> only</span>
+            </div>
+          </div>
+
+          <div class="stack" style="gap: 12px;">
+            <div class="card sealed">
+              <div class="spread" style="gap: 8px;">
+                <div class="stack" style="gap: 2px;">
+                  <div class="row" style="gap: 8px;">
+                    <b class="mono small">bc-4417@7</b>
+                    <span class="chip proposed">proposed</span>
+                    <span class="xsmall faint">business case</span>
+                  </div>
+                  <b>Materiaalstaat-generator</b>
+                </div>
+                <span class="xsmall faint">4 Aug</span>
+              </div>
+              <p class="small muted" style="margin: 0;">
+                …De werkvoorbereider stelt de <b style="color: var(--ink);">materiaalstaat</b> nu met
+                de hand samen uit de tekening, gemiddeld 14,2 dagen per project…
+              </p>
+              <span class="xsmall faint">matched in <span class="mono">body</span></span>
+            </div>
+
+            <div class="card sealed">
+              <div class="spread" style="gap: 8px;">
+                <div class="stack" style="gap: 2px;">
+                  <div class="row" style="gap: 8px;">
+                    <b class="mono small">bc-4417-spec</b>
+                    <span class="chip draft">draft · rev 23</span>
+                    <span class="xsmall faint">specification</span>
+                  </div>
+                  <b>Materiaalstaat-generator — specification</b>
+                </div>
+                <span class="xsmall faint">today</span>
+              </div>
+              <p class="small muted" style="margin: 0;">
+                <span class="mono xsmall">declared_outcome.statement</span> —
+                de <b style="color: var(--ink);">materiaalstaat</b> wordt samengesteld uit het
+                constructiemodel…
+              </p>
+              <span class="xsmall faint">matched in <span class="mono">facets</span> · a draft is shown but nothing may cite it</span>
+            </div>
+
+            <div class="card sealed">
+              <div class="spread" style="gap: 8px;">
+                <div class="stack" style="gap: 2px;">
+                  <div class="row" style="gap: 8px;">
+                    <b class="mono small">bc-3980@4</b>
+                    <span class="chip rejected">rejected</span>
+                    <span class="xsmall faint">business case</span>
+                  </div>
+                  <b>Digitale opleverdossiers</b>
+                </div>
+                <span class="xsmall faint">2 Aug</span>
+              </div>
+              <p class="small muted" style="margin: 0;">
+                …het opleverdossier bevat de <b style="color: var(--ink);">materiaalstaat</b> en de
+                keuringsrapporten…
+              </p>
+              <span class="xsmall faint">matched in <span class="mono">body</span> · declined at Explore, <i>already solved</i></span>
+            </div>
+          </div>
+
+          <div class="notice">
+            <b>Search cannot cross a workspace.</b>
+            <span>
+              The index lives in this workspace's own database, so the boundary holds by
+              construction rather than by a filter someone might forget.
+            </span>
+          </div>
+        </section>
+
+        <!-- ============================ DEFINITION ============================ -->
+        <section class="view" id="v-definition">
+          <div class="spread">
+            <div class="stack" style="gap: 3px;">
+              <p class="eyebrow">read-only · the service ships none of this</p>
+              <h2 class="title">Workspace definition</h2>
+              <p class="small muted" style="margin: 0;">
+                <span class="mono">definition_version 3</span> · applied 1 Aug by
+                <span class="mono">usr-admin</span> · stamped on every version written under it
+              </p>
+            </div>
+            <button class="btn small">Download YAML</button>
+          </div>
+
+          <div class="grid2">
+            <div class="stack" style="gap: 12px;">
+              <h3 class="sec">Artifact types</h3>
+              <div class="t-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Type</th><th>Body</th><th>Links</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="mono">opportunity</td>
+                      <td class="small muted mono">markdown/v1</td>
+                      <td class="xsmall faint">—</td>
+                    </tr>
+                    <tr>
+                      <td class="mono">business_case</td>
+                      <td class="small muted mono">markdown/v1</td>
+                      <td class="xsmall"><span class="mono">addresses → opportunity</span></td>
+                    </tr>
+                    <tr>
+                      <td class="mono">specification</td>
+                      <td class="small muted mono">markdown/v1</td>
+                      <td class="xsmall">
+                        <span class="mono">justified_by → business_case</span>
+                        <span class="chip pin" style="margin-left: 4px;">pinned</span>
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="mono">intake_assessment</td>
+                      <td class="small muted mono">markdown/v1</td>
+                      <td class="xsmall faint">—</td>
+                    </tr>
+                    <tr>
+                      <td class="mono">pack_binding</td>
+                      <td class="small muted mono">markdown/v1</td>
+                      <td class="xsmall faint">—</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <h3 class="sec">Lifecycle</h3>
+              <div class="card flat" style="gap: 5px;">
+                <span class="small mono">explore → prove <span class="faint">via_gate: explore</span></span>
+                <span class="small mono">prove → build <span class="faint">via_gate: assess</span></span>
+                <span class="small mono">build → run <span class="faint">via_gate: release</span></span>
+                <span class="small mono">run → retire <span class="faint">via_gate: retire</span></span>
+                <span class="small mono faint">run → run <span>via: system — expiry, set by the consumer</span></span>
+              </div>
+            </div>
+
+            <div class="stack" style="gap: 12px;">
+              <h3 class="sec">Gates</h3>
+              <div class="card" style="gap: 7px;">
+                <div class="row" style="gap: 8px;">
+                  <b class="mono small">explore</b>
+                  <span class="xsmall faint">decides on <span class="mono">business_case</span></span>
+                </div>
+                <dl class="kv">
+                  <dt>owner</dt><dd class="mono">role: sponsor</dd>
+                  <dt>outcomes</dt><dd class="mono">approve · request_changes · decline</dd>
+                  <dt>requires</dt><dd class="mono">confirmed_facets · sufficiency_v2</dd>
+                  <dt>sod</dt><dd class="mono">exclude_creator</dd>
+                </dl>
+              </div>
+              <div class="card" style="gap: 7px;">
+                <div class="row" style="gap: 8px;">
+                  <b class="mono small">assess</b>
+                  <span class="xsmall faint">decides on <span class="mono">intake_assessment</span></span>
+                </div>
+                <dl class="kv">
+                  <dt>owner</dt><dd class="mono">role: sponsor</dd>
+                  <dt>requires</dt><dd class="mono">confirmed_facets · intake_sufficiency</dd>
+                  <dt>sod</dt><dd class="faint">not declared — the exemption is visible, not assumed</dd>
+                </dl>
+              </div>
+
+              <div class="notice ok">
+                <b><span class="mono">pack_binding</span> is a fifth type, and it cost a definition rather than a release.</b>
+                <span>
+                  Nothing in the service knows what a standard, an advisor or a Wkb acceptance is.
+                  The binding is an artifact with a large facet schema, because a gate reads facets
+                  and an acceptance must be readable by a gate.
+                </span>
+              </div>
+
+              <div class="notice">
+                <b>Changes are additive against accepted versions.</b>
+                <span>
+                  A version written under v2 stays readable under v2. A breaking facet change creates
+                  a new type rather than a new version of one.
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ============================ SIGN IN ============================ -->
+        <section class="view" id="v-signin">
+          <div class="signin">
+            <div class="signin-card">
+              <div class="stack" style="gap: 4px;">
+                <div class="wordmark" style="padding: 0; font-size: 15px;">mstr<span>-</span>specs</div>
+                <p class="small muted" style="margin: 0;">Specification records for Aannemer X</p>
+              </div>
+
+              <div class="stack" style="gap: 9px;">
+                <input class="input" type="email" value="j.dekker@aannemerx.nl" aria-label="Email" />
+                <input class="input" type="password" value="••••••••••••" aria-label="Password" />
+                <button class="btn primary" style="padding: 9px;">Sign in</button>
+              </div>
+
+              <p class="xsmall faint" style="margin: 0;">
+                Authentication is identity-service's. This console holds no credentials and stores
+                the token in an httpOnly cookie the browser cannot read.
+              </p>
+
+              <div class="notice">
+                <b>Roles are stamped into the token.</b>
+                <span class="mono xsmall">author · reviewer · workspace_admin · auditor</span>
+                <span class="xsmall">What you may author, and which gates you may decide, is resolved here — never by the browser.</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="notes" id="notes"></div>
+
+  <p class="footnote">
+    <strong>What I need from you.</strong> Approve the look and the screen inventory, or tell me what
+    to change. On approval every decision above flips to accepted, I record them as ADRs in the repo,
+    and I build steps 1–9 of the architecture's build order against exactly these surfaces.
+  </p>
+
+</div>
+
+<script>
+  const CRUMBS = {
+    register:   ['ws-aannemer-x', 'Register'],
+    artifact:   ['ws-aannemer-x', 'Register', 'bc-4417'],
+    editor:     ['ws-aannemer-x', 'Register', 'bc-4417-spec', 'Draft rev 23'],
+    diff:       ['ws-aannemer-x', 'Register', 'bc-4417', 'Diff @6 → @7'],
+    decide:     ['ws-aannemer-x', 'Register', 'bc-4417', 'Explore gate'],
+    lineage:    ['ws-aannemer-x', 'Register', 'bc-4417', 'Lineage'],
+    catalogue:  ['ws-catalogue', 'Catalogue', 'FPS4-SUFF-BASELINE-002@6'],
+    standards:  ['ws-aannemer-x', 'Standards & binding', 'pb-aannemer-x@4'],
+    search:     ['ws-aannemer-x', 'Search'],
+    definition: ['ws-aannemer-x', 'Definition'],
+    signin:     [],
+  };
+
+  const RAIL = {
+    register: 'register', artifact: 'register', editor: 'register', diff: 'register',
+    decide: 'decide', lineage: 'register', catalogue: 'catalogue', standards: 'standards',
+    search: 'search', definition: 'definition', signin: null,
+  };
+
+  const NOTES = {
+    register: [
+      ['The summary reads before the list', 'Expired and idle drafts are the two things a stale register hides, so they are tiles, not rows you have to find.'],
+      ['State is form as well as colour', 'A dashed outline means in flight, a filled chip means decided, a strike means retracted. The chip is legible with colour removed.'],
+      ['A superseded version never appears', 'The register lists lineages in flight. Version history belongs to the artifact.'],
+    ],
+    artifact: [
+      ['Versions are a ledger, not cards', 'Solid left rule, monospace ordinal, digest visible. Nothing on the row can be edited because nothing about it can be.'],
+      ['The open draft sits below the ledger', 'Dashed rule, accent edge, one control. It is adjacent to the record and visibly not part of it.'],
+      ['The pin gets its own treatment', 'It is the one link that reads against a frozen version, and the panel says which version and that it cannot be repointed.'],
+    ],
+    editor: [
+      ['Unconfirmed extraction blocks propose', 'The button is disabled and the notice names the two facets and the gate requirement that makes it so. The rule is enforced where it is felt.'],
+      ['Provenance is per field, in the field', 'A dotted underline for declared, a dashed amber one for extracted. It travels with the value onto the version.'],
+      ['Everything here is dashed', 'The draft surface uses dashed borders throughout, so the mutable/immutable line is carried by the frame rather than by a label.'],
+    ],
+    diff: [
+      ['Facet diff and body diff, side by side', 'A gate reads the left column and a human reads the right. Confirming an extraction is a human act on both at once.'],
+      ['A pin cannot appear as repointed', 'The link diff says so explicitly, because the absence of an operation is the guarantee.'],
+      ['Accent for added, critical for removed', 'The only place the accent hue is not about state — and it is still about what changed.'],
+    ],
+    decide: [
+      ['Requirements before outcomes', 'You cannot reach the outcome radios without passing the four checks. An unmet requirement is a hard stop with a reason, never a greyed button.'],
+      ['Each outcome states its consequence', 'Approve says what becomes superseded and what freezes. A decision with invisible effects is one nobody can take responsibly.'],
+      ['Attribution is shown, not collected', 'accountable is resolved and locked to a human principal. The rule is visible at the moment it matters.'],
+    ],
+    lineage: [
+      ['The pinned edge is the only solid one', 'Everything else follows a lineage and is drawn dashed. The graph teaches the distinction without a legend — the legend is there anyway.'],
+      ['Services that do not exist are dotted', 'Deployment and conformance are drawn as outlines, so the trail is honestly incomplete rather than quietly truncated.'],
+      ['The frozen version is called out', 'A branch off bc-4417 showing @7 as what the specification reads, whatever the lineage says now.'],
+    ],
+    catalogue: [
+      ['A standard is an artifact, so it gets the artifact machinery', 'Lineage, immutable versions, a publication gate with an accountable human, diff between 3.1.0 and 3.2.0, export. None of that is new code — it is the same engine the specifications run on.'],
+      ['Ours carries full text and the know-how', 'Why we hold it, what counts as satisfying it, and how to satisfy it quickly. That is the part an agent needs and the part a citation cannot give.'],
+      ['External is a distinct type, not a flag', 'Licence disposition differs and so does what the body means. ISO gets our summary; NIST and the Bbl get full text; both say which on the page.'],
+      ['Effective dating is real here and nowhere else', 'A standard is accepted at one time and in force between two others, and can lapse with no successor. That is the one addition the version model needs.'],
+    ],
+    standards: [
+      ['The standards are not ours — the acceptances are', 'A standard object lives in the pack registry, shared across tenants and read-only here. What this service holds is who accepted it, when, and against which pack version.'],
+      ['A lapse is a state, not a notification', 'A material pack change lapses the acceptance and the artifacts resting on it read as unsupported. It survives being ignored, which a message does not.'],
+      ['An override carries an expiry or it is not an override', 'Product tier only, with a justification and a named accepting human. A regulatory standard has no override control at all.'],
+      ['This screen is the exit deliverable', 'It hands over as the tenant’s own record of what they accepted and why — a better artifact than the dated pack snapshot, and it is theirs.'],
+    ],
+    search: [
+      ['Facet matches and body matches are labelled', 'They mean different things: one is evaluable, the other is prose. Merging them would hide which.'],
+      ['Drafts appear, marked as drafts', 'You can find your work in progress; the result says nothing may cite it.'],
+      ['The boundary is stated on the page', 'Not as a limitation but as the guarantee it is.'],
+    ],
+    definition: [
+      ['Configuration is a screen, not a file', 'The types, gates and lifecycle are the domain model, and they are data. Showing them makes that claim checkable.'],
+      ['A declared omission is rendered', 'The assess gate has no separation of duties, and the screen says so rather than showing nothing.'],
+      ['Read-only in v1', 'Applying a definition is a governed change through the CLI. The console shows what is in force.'],
+    ],
+    signin: [
+      ['Nothing but the sign-in exists here', 'The header and rail live inside the authenticated layout, so a visitor never receives markup containing them.'],
+      ['The roles are named on the page', 'Four roles, stamped into the token by identity-service. Authorisation is resolved server-side, always.'],
+      ['Same restraint, no chrome', 'One card, one action. The product’s seriousness starts here.'],
+    ],
+  };
+
+  const frame = document.getElementById('frame');
+  const crumbs = document.getElementById('crumbs');
+  const notes = document.getElementById('notes');
+
+  function show(name) {
+    document.querySelectorAll('.view').forEach((v) => v.classList.toggle('on', v.id === 'v-' + name));
+    document.querySelectorAll('#picker button').forEach((b) =>
+      b.setAttribute('aria-current', String(b.dataset.view === name)));
+
+    frame.classList.toggle('bare', name === 'signin');
+
+    const path = CRUMBS[name] || [];
+    crumbs.innerHTML = path
+      .map((seg, i) => {
+        const last = i === path.length - 1;
+        const cls = i === 0 ? 'mono' : last ? '' : '';
+        return `<span class="${cls}">${last && i > 0 ? '<b>' + seg + '</b>' : seg}</span>`;
+      })
+      .join('<span aria-hidden="true">/</span>');
+
+    document.querySelectorAll('.rail nav a').forEach((a) =>
+      a.classList.toggle('on', a.dataset.rail === RAIL[name]));
+
+    // The catalogue is a different workspace, reached read-only. Say so in the switcher
+    // rather than letting the rail imply you are still inside the tenant.
+    document.getElementById('ws-switch').innerHTML =
+      name === 'catalogue'
+        ? '<b>ws-catalogue</b><em>Shared · read-only from a tenant</em>'
+        : '<b>ws-aannemer-x</b><em>Aannemer X · definition v3</em>';
+
+    notes.innerHTML = (NOTES[name] || [])
+      .map(([t, d]) => `<div class="note"><b>${t}</b><span>${d}</span></div>`)
+      .join('');
+  }
+
+  document.getElementById('picker').addEventListener('click', (e) => {
+    const btn = e.target.closest('button');
+    if (btn) show(btn.dataset.view);
+  });
+
+  document.querySelectorAll('.radio').forEach((r) => {
+    r.addEventListener('click', () => {
+      document.querySelectorAll('.radio').forEach((o) => o.classList.remove('on'));
+      r.classList.add('on');
+    });
+  });
+
+  show('register');
+</script>
+</body>
+</html>

@@ -1,0 +1,120 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/**
+ * The token layer — the approved design in docs/design/ui/console-mock.html.
+ *
+ * Light-first, near-monochrome, tabular density. The neutral carries a slight green bias toward the
+ * accent so it reads as chosen rather than inherited. **The accent is reserved for state** and for
+ * the one action that changes state; a component that spends it on decoration has taken it away
+ * from the thing it is there to mark.
+ */
+:root {
+  --ground: 243 245 243;
+  --surface: 255 255 255;
+  --surface-2: 249 250 249;
+  --ink: 22 26 25;
+  --ink-muted: 91 102 99;
+  --ink-faint: 140 148 145;
+  --rule: 220 225 222;
+  --rule-strong: 195 202 198;
+  --accent: 47 93 80;
+  --accent-ink: 35 74 63;
+  --accent-soft: 226 237 232;
+  --accent-on: 255 255 255;
+  --critical: 140 43 43;
+  --critical-soft: 246 232 232;
+  --warning: 119 82 26;
+  --warning-soft: 244 237 222;
+
+  --font-sans:
+    ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+/* The viewer's OS preference is the default signal; the explicit attribute must win over it in
+ * both directions, which is why the tokens are redefined three times rather than inverted once. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ground: 13 16 15;
+    --surface: 20 25 23;
+    --surface-2: 24 30 28;
+    --ink: 227 233 230;
+    --ink-muted: 151 161 157;
+    --ink-faint: 108 119 115;
+    --rule: 35 43 40;
+    --rule-strong: 51 61 57;
+    --accent: 120 184 161;
+    --accent-ink: 166 212 197;
+    --accent-soft: 23 37 31;
+    --accent-on: 13 16 15;
+    --critical: 221 140 140;
+    --critical-soft: 42 25 25;
+    --warning: 207 164 99;
+    --warning-soft: 38 30 17;
+  }
+}
+
+:root[data-theme='dark'] {
+  --ground: 13 16 15;
+  --surface: 20 25 23;
+  --surface-2: 24 30 28;
+  --ink: 227 233 230;
+  --ink-muted: 151 161 157;
+  --ink-faint: 108 119 115;
+  --rule: 35 43 40;
+  --rule-strong: 51 61 57;
+  --accent: 120 184 161;
+  --accent-ink: 166 212 197;
+  --accent-soft: 23 37 31;
+  --accent-on: 13 16 15;
+  --critical: 221 140 140;
+  --critical-soft: 42 25 25;
+  --warning: 207 164 99;
+  --warning-soft: 38 30 17;
+}
+
+:root[data-theme='light'] {
+  --ground: 243 245 243;
+  --surface: 255 255 255;
+  --surface-2: 249 250 249;
+  --ink: 22 26 25;
+  --ink-muted: 91 102 99;
+  --ink-faint: 140 148 145;
+  --rule: 220 225 222;
+  --rule-strong: 195 202 198;
+  --accent: 47 93 80;
+  --accent-ink: 35 74 63;
+  --accent-soft: 226 237 232;
+  --accent-on: 255 255 255;
+  --critical: 140 43 43;
+  --critical-soft: 246 232 232;
+  --warning: 119 82 26;
+  --warning-soft: 244 237 222;
+}
+
+@layer base {
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-ground text-ink font-sans text-base;
+  }
+  /* Digits that line up in columns, everywhere. A register is read by scanning. */
+  table,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  :focus-visible {
+    @apply outline-none ring-2 ring-accent ring-offset-1 ring-offset-ground;
+  }
+}
+
+@layer components {
+  /* The eyebrow: monospace, letterspaced, small caps in effect. Identifiers and labels are bytes,
+   * not language, and the type treatment says so. */
+  .eyebrow {
+    @apply font-mono text-2xs uppercase tracking-[0.09em] text-faint font-medium;
+  }
+}

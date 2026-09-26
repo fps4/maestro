@@ -1,5 +1,5 @@
 /**
- * Evidence and intake, against DynamoDB Local: maestro's M2 build gate 5 as a test.
+ * Evidence and intake, against DynamoDB Local: maestro's acceptance scenario W5 as a test.
  *
  * 5. The advisory lane end to end without an agent: advisory → item → Dependabot's PR → a person's
  *    merge → deploy event → re-scan → `done` on evidence; medium and low findings fold into one

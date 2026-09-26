@@ -285,7 +285,7 @@ export function evolveAll(head: WorkItem | null, events: readonly ItemEvent[]): 
 
 /**
  * The tallies an event moves (ADR-0019 §2, §3 #11): closures by outcome, refusals by check and
- * class, and breaches by clock, per application per month — the rate the M2 gate asks for in one read. Items about no
+ * class, and breaches by clock, per application per month — the rate acceptance scenario W2 asks for in one read. Items about no
  * application are not tallied. The tally is derived; the events are how it is re-derived.
  */
 export function talliesOf(head: WorkItem, event: ItemEvent): string[] {

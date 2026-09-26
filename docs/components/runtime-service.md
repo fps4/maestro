@@ -1,6 +1,6 @@
 # runtime-service — the instance register
 
-**Repository:** `fps4/maestro-runtime` · **Status:** next (M1 skeleton, M4 fed) · **Decision:** [ADR-0011](../decisions/0011-the-instance-register-is-one-deployable.md)
+**Repository:** `fps4/maestro-runtime` · **Status:** to build · **Decision:** [ADR-0011](../decisions/0011-the-instance-register-is-one-deployable.md)
 
 What was built and what is running where. One deployable, two collections: the **artifact ledger** and the **instance register**, fed by one deploy event. It records; it never deploys, restarts or rolls anything back.
 
@@ -89,8 +89,10 @@ The deploy-event step is a small addition to the application's own pipeline (par
 | scan intake | HTTP | EventBridge → SQS |
 | object storage (SBOMs) | MinIO | S3 |
 
-## Build gates
+## Acceptance
 
-1. (M1) A deploy event creates the artifact and the instance; a second deploy shifts `rollback_target`; the workspace is dropped and rebuilt from the archive identically.
-2. (M4) A deploy of a digest with no build record raises `DigestMismatchDetected` and a SEV item; the instance is marked and never silently corrected.
-3. (M4) `carries(dependency)` returns every deployed instance whose SBOM names it.
+The MVP's acceptance scenarios T1–T3 ([roadmap](../roadmap.md#acceptance)).
+
+1. A deploy event creates the artifact and the instance; a second deploy shifts `rollback_target`; the workspace is dropped and rebuilt from the archive identically.
+2. A deploy of a digest with no build record raises `DigestMismatchDetected` and a SEV item; the instance is marked and never silently corrected.
+3. `carries(dependency)` returns every deployed instance whose SBOM names it.

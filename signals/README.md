@@ -129,5 +129,5 @@ retires — one alert, one owner. Anything maestro does *to* the application wai
 
 ## Status
 
-M1. The module is in code and tested against a mocked provider; the first application onboarded at
+Built: the module is in code and tested against a mocked provider. The first application onboarded at
 N1 proves it against an account.

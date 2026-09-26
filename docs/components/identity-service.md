@@ -37,7 +37,7 @@ An agent runtime is bound to the seats it may act on; a component verifies the s
 
 An advisor who operates in several tenants authenticates once, carries an explicit tenant context per request, and every record names the acting principal, the tenant, and — where they are not a member in their own right — the delegation that authorised it. On the record, not in the token; an auditor reads events, not expired JWTs.
 
-## Deployment on AWS (M1)
+## Deployment on AWS
 
 | Piece | |
 |---|---|
@@ -50,11 +50,11 @@ An advisor who operates in several tenants authenticates once, carries an explic
 
 ## Changes the MVP asks of it
 
-| Change | Milestone | Size |
+| Change | State |
 |---|---|---|
-| Terraform module | M1 | done — `identity-service` PR #107, the relay in #109 |
-| Principal lifecycle events (`PrincipalRegistered`, `PrincipalSuspended`, `PrincipalReinstated`, `SeatOccupancyChanged`) emitted by the registry to the spine; maestro principal ids (`prn-h-…`) minted here and carried as the token claim `prn` | M1 | done — `identity-service` PR #108 (its ADR-0022) |
-| CI off the ds1 runner; the ds1 deploy, seed and migration workflows retired | M1 | done — `identity-service` PR #105 |
-| An enumeration endpoint for principals in a realm, for the registry to reconcile | M2 | small |
+| Terraform module | done — `identity-service` PR #107, the relay in #109 |
+| Principal lifecycle events (`PrincipalRegistered`, `PrincipalSuspended`, `PrincipalReinstated`, `SeatOccupancyChanged`) emitted by the registry to the spine; maestro principal ids (`prn-h-…`) minted here and carried as the token claim `prn` | done — `identity-service` PR #108 (its ADR-0022) |
+| CI off the ds1 runner; the ds1 deploy, seed and migration workflows retired | done — `identity-service` PR #105 |
+| An enumeration endpoint for principals in a realm, for the registry to reconcile | to build (small) |
 
 The Slack↔principal link and the external population are [post-MVP](../beyond-mvp.md).

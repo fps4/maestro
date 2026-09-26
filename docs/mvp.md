@@ -8,10 +8,12 @@
 |---|---|---|
 | [identity-service](components/identity-service.md) | principals — human, agent, workload; realms; delegated administration | built |
 | [specs-service](components/specs-service.md) | artifacts, drafts and versions, gates, decisions, questions | built |
-| [work-service](components/work-service.md) | work items in six classes, authority at claim, clocks from policy, signals intake, the board | next |
-| [runtime-service](components/runtime-service.md) | the artifact ledger and the instance register, fed by deploy events | next |
-| [agent-service](components/agent-service.md) | runs, steps, transcripts — the record of what agents did; the runner is GitHub Actions + Claude Code | next |
-| [the spine](components/spine.md) | S3 archive as the system of record, SNS/SQS delivery, a relay from every outbox, a verifier | built (M1) |
+| [work-service](components/work-service.md) | work items in six classes, authority at claim, clocks from policy, signals intake, the board | building |
+| [runtime-service](components/runtime-service.md) | the artifact ledger and the instance register, fed by deploy events | to build |
+| [agent-service](components/agent-service.md) | runs, steps, transcripts — the record of what agents did; the runner is GitHub Actions + Claude Code | to build |
+| [the spine](components/spine.md) | S3 archive as the system of record, SNS/SQS delivery, a relay from every outbox, a verifier | built |
+
+**Done when every [acceptance scenario](roadmap.md#acceptance) passes live on the first tenant** ([ADR-0022](decisions/0022-one-mvp-built-whole.md)); nothing is released before that.
 
 Plus the [signals contract](signals.md) — a Terraform module and a CDK construct an application applies to be observed — and a Claude Code plugin (`maestro-skills`) so every repository in an estate can talk to the components.
 
@@ -26,7 +28,7 @@ Plus the [signals contract](signals.md) — a Terraform module and a CDK constru
 
 **Serverless AWS.** Every component is a Lambda behind API Gateway (Fastify unchanged, via the Web Adapter); consoles through OpenNext and CloudFront; relays and clocks are scheduled Lambdas; infrastructure as Terraform ([ADR-0016](decisions/0016-terraform-is-the-infrastructure-language.md)); CI on GitHub-hosted runners. `docker compose` is the local development loop and nothing else.
 
-**MongoDB Atlas Flex** is the database ([ADR-0005](decisions/0005-atlas-flex-is-the-mvp-database.md)): a connection string, no code change, pay per use. No component knows which database it runs on beyond the driver.
+**DynamoDB** is the database ([ADR-0018](decisions/0018-dynamodb-is-the-mvp-database.md)): one table per component, created by its Terraform module and reached by its functions' roles, with no database credential anywhere.
 
 **Identity stays identity-service**, not Cognito ([ADR-0006](decisions/0006-identity-stays-identity-service.md)): agent principals and delegated administration are the reasons.
 
@@ -42,7 +44,7 @@ Each component writes its events to a transactional outbox. A scheduled relay dr
 
 ## The first application
 
-The first application maestro observes — **app1** throughout these docs — is a serverless application on AWS: Lambda functions, infrastructure as code, configuration changes by PR under CODEOWNERS, its own failure monitor with P1–P4 alerts to Slack. Its maestro glue (the signals module, a deploy-event step) lives in its own repository. It is onboarded at N2 by milestone 4.
+The first application maestro observes — **app1** throughout these docs — is a serverless application on AWS: Lambda functions, infrastructure as code, configuration changes by PR under CODEOWNERS, its own failure monitor with P1–P4 alerts to Slack. Its maestro glue (the signals module, a deploy-event step) lives in its own repository. It is onboarded at N2 before the MVP is done.
 
 ## Four seams kept open
 

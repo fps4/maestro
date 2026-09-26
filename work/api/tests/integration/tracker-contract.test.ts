@@ -1,5 +1,5 @@
 /**
- * M2 build gate 6: a skill written against the tracker contract runs its acceptance suite green
+ * The MVP's acceptance scenario W6: a skill written against the tracker contract runs its acceptance suite green
  * against the MCP server. The suite (`tests/contract/tracker.ts`) knows the six operations and
  * nothing else; here it is bound to `POST /v1/workspaces/:ws/mcp` on the demo workspace.
  *

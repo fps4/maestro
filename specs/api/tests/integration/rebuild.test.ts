@@ -1,5 +1,5 @@
 /**
- * The M1 gate (ADR-0020): a workspace's items are dropped and rebuilt from the archive and the
+ * maestro's acceptance scenario R2 (specs-service ADR-0020): a workspace's items are dropped and rebuilt from the archive and the
  * payloads alone, and every read returns identically.
  *
  * The loop is driven over HTTP the way people and agents drive it — an agent proposes under a

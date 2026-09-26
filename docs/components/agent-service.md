@@ -1,6 +1,6 @@
 # agent-service — the record of runs
 
-**Repository:** `fps4/maestro` · **Status:** next (M3) · **Decision:** [ADR-0008](../decisions/0008-agent-service-record-half-first.md)
+**Repository:** `fps4/maestro` · **Status:** to build · **Decision:** [ADR-0008](../decisions/0008-agent-service-record-half-first.md)
 
 What agents did: every run, its plan, its steps, its ceiling, the next human touchpoint, and its outcome — with the full transcript kept as a classified payload. It executes nothing. The runner is a GitHub Actions workflow per run kind, invoking Claude Code under an agent principal.
 
@@ -84,7 +84,9 @@ A recurring `review` item in work-service selects one run in N per seat for a pe
 | `transcript(run)` | API — reader role only; never MCP |
 | `export(workspace)` | API — runs and outcomes; transcripts only with the reader role |
 
-## Build gates (M3)
+## Acceptance
+
+The MVP's acceptance scenarios A1, A3, A4 and A5 ([roadmap](../roadmap.md#acceptance)).
 
 1. A `bump` run on a red CI: every step, the plan and the next human touchpoint visible while it runs; the transcript readable afterwards by the reader role and by nobody else.
 2. A run that attempts an act outside its ceiling records `ActionRefused` with the check named, and the run continues or closes `refused` per the construct.

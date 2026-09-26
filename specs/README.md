@@ -78,7 +78,7 @@ specs/
  ├── web/              # The console (Next.js) — author, review, decide, read the standards
  ├── config/workspaces/  # THE domain model, as data: the demo tenant (aannemer-x) and the catalogue
  ├── infra/docker/     # Dockerfiles + compose — the local loop and CI, not a deployment target
- ├── terraform/        # The module a tenant's root deploys: the table, the store, the API, the relay (M1)
+ ├── terraform/        # The module a tenant's root deploys: the table, the store, the API, the relay
  └── docs/             # design/ · design/ui/ (the approved console design) · decisions/
 ```
 
@@ -259,7 +259,7 @@ is its grant. For anything else — an evaluator's token, a notifier's webhook �
 each secret in `secrets` with `data.aws_secretsmanager_secret_version` and sets it as the named
 variable on both functions, so the value is also in Terraform state. ADR-0017 keeps that state in
 an encrypted, private bucket with an encrypted mirror and never in a repository, which is
-acceptable for M1. The follow-up that keeps values out of state altogether is the Secrets Manager
+acceptable until the MVP's build list replaces it. The follow-up that keeps values out of state altogether is the Secrets Manager
 Lambda extension, reading at runtime.
 
 ### Building the bundles

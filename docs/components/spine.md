@@ -1,6 +1,6 @@
 # The spine
 
-**Repository:** `fps4/maestro`, in [`spine/`](../../spine/) · **Status:** M1 closed 2026-09-22 — the core, the S3 and SNS adapters, the sealer, the Terraform module (with a LocalStack stand-in) and the relays of specs-service and identity-service are deployed on the first tenant; the three gates passed there ([roadmap](../roadmap.md)) · **Decision:** [ADR-0003](../decisions/0003-the-spine-is-an-archive-and-a-queue.md)
+**Repository:** `fps4/maestro`, in [`spine/`](../../spine/) · **Status:** built — the core, the S3 and SNS adapters, the sealer, the Terraform module (with a LocalStack stand-in) and the relays of specs-service and identity-service are deployed on the first tenant, where acceptance scenarios R1–R3 passed on 2026-09-22 ([roadmap](../roadmap.md#acceptance)) · **Decision:** [ADR-0003](../decisions/0003-the-spine-is-an-archive-and-a-queue.md)
 
 The record every component writes to and every auditor reads from. An S3 archive as the system of record, SNS/SQS for delivery, a relay from every outbox, and a verifier that runs with every service off. [Figure 3](../diagrams.md#figure-3--the-spine).
 
@@ -97,7 +97,7 @@ Canonicalisation is JCS (RFC 8785); a leaf is the RFC 6962 leaf hash of an event
 
 ## Projections
 
-Every component database is a projection: a consumer with a checkpoint and a version, rebuildable from zero by reading the archive. A projection version change forces a rebuild, never an in-place migration. **Dropping and rebuilding a workspace is a build gate for every component.**
+Every component database is a projection: a consumer with a checkpoint and a version, rebuildable from zero by reading the archive. A projection version change forces a rebuild, never an in-place migration. **Dropping and rebuilding a workspace is an acceptance scenario for every component** (R2).
 
 ## Export and verify
 
@@ -106,7 +106,7 @@ Every component database is a projection: a consumer with a checkpoint and a ver
 | `append(event)` | service-to-service only | the only write; idempotency key required |
 | `read(workspace, subject?, from_seq)` | API, MCP | ordered replay from the archive |
 | `verify(workspace, period_range)` | API, MCP, **CLI with no service** | recomputes every leaf, every root and the chain; returns pass or the period, the first divergent `seq` and why |
-| `export(workspace)` | API | archive + manifests + the verifier binary — the exit deliverable, exercised in M1's gate |
+| `export(workspace)` | API | archive + manifests + the verifier binary — the exit deliverable, exercised by acceptance scenario R3 |
 
 MCP exposes read, verify and export — never append.
 
@@ -116,7 +116,9 @@ MCP exposes read, verify and export — never append.
 
 [`spine/terraform/`](../../spine/terraform/) is the module a tenant's root calls ([ADR-0016](../decisions/0016-terraform-is-the-infrastructure-language.md)): the archive bucket (Object Lock with a default retention, versioned, encrypted, `prevent_destroy`, a policy denying plaintext transport and retention bypass to everyone), the `events.fifo` topic, the digests topic with an email subscription per tenant contact, the sealer as a Lambda on an EventBridge schedule after midnight UTC with a role that reads and writes the archive and never deletes, and two alarms — the sealer errored, the sealer has not run in a day. It outputs the policy and the environment a component's relay module attaches to its own scheduled Lambda. Its tests run against a mocked provider on every PR; nothing in the public repository deploys to an account ([ADR-0017](../decisions/0017-the-tenant-repository-runs-the-pipeline.md)).
 
-## Build gates (M1)
+## Acceptance
+
+The MVP's acceptance scenarios R1–R4 ([roadmap](../roadmap.md#acceptance)).
 
 1. specs-service's outbox relays to S3 and SNS; a consumer queue receives in order per workspace. *(In code against the S3 and SNS adapters over fakes; the component's relay is next.)*
 2. A workspace database is dropped and rebuilt from the archive alone; every read returns identically.

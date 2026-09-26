@@ -2,7 +2,7 @@
  * The rebuilder (ADR-0020 §4): a workspace's items, from the archive and the payloads alone.
  *
  * This is what makes "the archive is the record and this table a projection" (architecture §5)
- * a fact rather than a sentence — maestro's M1 gate. Verify first: an archive the spine's verifier
+ * a fact rather than a sentence — maestro's acceptance scenario R2. Verify first: an archive the spine's verifier
  * does not pass is not rebuilt from. Then replay every event in `seq` order into an empty prefix,
  * fetching each payload by reference and checking it against the digest the event carries before
  * anything is read from it. What comes out reads identically to what was dropped.

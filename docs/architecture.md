@@ -45,10 +45,10 @@ component ──outbox──▶ relay (scheduled Lambda) ──▶ S3 archive �
 ```
 
 - **The archive is the system of record.** Daily sealed segments per workspace; a Merkle root over canonical JSON (RFC 8785) in sequence order; each segment chained to the previous; the chain computed in code, never by a vendor primitive; Object Lock as defence in depth only.
-- **Every component database is a projection.** Rebuild reads the archive from zero. Dropping and rebuilding a workspace is a build gate for every component.
+- **Every component database is a projection.** Rebuild reads the archive from zero. Dropping and rebuilding a workspace is an acceptance scenario for every component (R2).
 - **The queue is transport.** Fourteen-day retention is irrelevant once the archive exists. Replay never reads it.
 - **Sequence is assigned by the writing service**, per workspace, in the outbox — never derived from a queue or a broker.
-- **`export` and `verify` ship in M1.** The verifier re-reads segments, recomputes the chain, and returns pass or the first divergent sequence. Any party can run it with every service off.
+- **`export` and `verify` ship with the foundation.** The verifier re-reads segments, recomputes the chain, and returns pass or the first divergent sequence. Any party can run it with every service off.
 
 Full design: [components/spine.md](components/spine.md).
 

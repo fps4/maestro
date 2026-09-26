@@ -28,7 +28,7 @@ All four are workspace configuration — a type with facets and body blocks, a g
 - **Isolation by database per workspace**, a handle bound once.
 - **A transactional outbox** — the record sink port.
 
-## Deployment on AWS (M1)
+## Deployment on AWS
 
 | Piece | |
 |---|---|
@@ -45,13 +45,13 @@ Configuration comes from `fps4/maestro-<tenant>/workspaces/*.yaml`, and the tena
 
 ## Changes the MVP asks of it
 
-| Change | Milestone | Size |
+| Change | State |
 |---|---|---|
-| Terraform module; the relay as a scheduled Lambda | M1 | done — fps4/maestro-specs#20 |
-| The outbox holds the spine's envelope; seats and the answerable human (ADR-0019) | M1 | done — fps4/maestro-specs#18 |
-| The payload store and the rebuild (ADR-0020): free text as payloads, `EvaluationRecorded`, a rebuilder that replays a verified archive — the M1 rebuild gate in code | M1 | done — fps4/maestro-specs#21 |
-| Today reads work-service and agent-service alongside its own decisions and questions | M2–M3 | small, in the console |
-| Move the DoD gate to GitHub-hosted runners | M1 | done — fps4/maestro-specs#16 |
-| Read the `prn` claim identity-service now mints instead of minting a principal id on first sight; `principal:adopt` for an identity first seen under a self-minted id — moves the grants and records the supersession forward, no record rewritten | M2 | done — fps4/maestro-specs#26 (specs-service [ADR-0022](../../specs/docs/decisions/0022-the-principal-id-is-identity-services.md)) |
+| Terraform module; the relay as a scheduled Lambda | done — fps4/maestro-specs#20 |
+| The outbox holds the spine's envelope; seats and the answerable human (ADR-0019) | done — fps4/maestro-specs#18 |
+| The payload store and the rebuild (ADR-0020): free text as payloads, `EvaluationRecorded`, a rebuilder that replays a verified archive — acceptance scenario R2 in code | done — fps4/maestro-specs#21 |
+| Today reads work-service and agent-service alongside its own decisions and questions | to build (small, in the console) |
+| Move the DoD gate to GitHub-hosted runners | done — fps4/maestro-specs#16 |
+| Read the `prn` claim identity-service now mints instead of minting a principal id on first sight; `principal:adopt` for an identity first seen under a self-minted id — moves the grants and records the supersession forward, no record rewritten | done — fps4/maestro-specs#26 (specs-service [ADR-0022](../../specs/docs/decisions/0022-the-principal-id-is-identity-services.md)) |
 
 Nothing else. The OpenSpec block shape and the external reader role are [post-MVP](../beyond-mvp.md).

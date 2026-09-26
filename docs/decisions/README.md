@@ -16,7 +16,7 @@ Architecture decision records, numbered from 0001. Each states context in a few 
 | [0010](0010-tenant-configuration-is-one-private-repository-per-tenant.md) | Tenant configuration lives in one private repository per tenant | accepted; the repository's name amended by 0021 |
 | [0011](0011-the-instance-register-is-one-deployable.md) | The instance register is one deployable | accepted |
 | [0012](0012-the-application-owns-detection-maestro-owns-response.md) | The application owns detection; maestro owns response | accepted |
-| [0013](0013-intake-agent-and-customer-tenants-are-post-mvp.md) | Intake agent and customer tenants are post-MVP; the regulated domain is a branch | accepted |
+| [0013](0013-intake-agent-and-customer-tenants-are-post-mvp.md) | Intake agent and customer tenants are post-MVP; the regulated domain is a branch | accepted; its M1–M4 phasing replaced by 0022 |
 | [0014](0014-the-mvp-ci-floor.md) | The MVP CI floor: secret scan, dependency audit, SBOM | accepted |
 | [0015](0015-repositories-and-licence.md) | Repositories: one per component with a consumer; public under MIT | accepted; the first rule amended by 0020 |
 | [0016](0016-terraform-is-the-infrastructure-language.md) | Terraform is the infrastructure language; the tenant repository holds the root module | accepted; the demo-tenant apply withdrawn by 0017; the Atlas clause moot by 0018 |
@@ -25,5 +25,6 @@ Architecture decision records, numbered from 0001. Each states context in a few 
 | [0019](0019-work-services-table.md) | work-service's table: a partition per item, the open set as an index, clocks by a sweep | accepted |
 | [0020](0020-maestros-own-services-live-in-one-repository.md) | maestro's own services live in `fps4/maestro`; a repository is earned by a consumer outside maestro | accepted |
 | [0021](0021-a-tenants-repository-is-maestro-tenant.md) | A tenant's repository is `fps4/maestro-<tenant>`; a tenant is never named after a component | proposed |
+| [0022](0022-one-mvp-built-whole.md) | One MVP, built whole: no milestones, one acceptance list | proposed |
 
 specs-service's own decision log moved with it to [`specs/docs/decisions/`](../../specs/docs/decisions/) (ADR-0001–0022 there) and is closed: its records are cited as "specs-service ADR-00NN", and every new decision, whatever it is about, is recorded here ([ADR-0020](0020-maestros-own-services-live-in-one-repository.md)).

@@ -1,0 +1,4 @@
+web/.npmrc
+web/node_modules/
+web/.next/
+web/.open-next/

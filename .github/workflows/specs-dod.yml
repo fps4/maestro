@@ -41,16 +41,6 @@ jobs:
         if: always()
         run: docker rmi "ms-api:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true
 
-  web-build:
-    # Same shape for the console: typecheck, lint, tests and the production build.
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - run: docker build -t ms-web:${{ github.run_id }}-${{ github.run_attempt }} -f specs/infra/docker/web.Dockerfile specs
-      - name: Cleanup
-        if: always()
-        run: docker rmi "ms-web:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true
-
   test:
     # The full suite against DynamoDB Local (maestro ADR-0018; ADR-0021 here). Unit tests pin the
     # domain rules; integration tests drive the whole loop through HTTP and include the
@@ -91,7 +81,7 @@ jobs:
 
           docker run --rm --network "$NET" \
             -e DYNAMODB_ENDPOINT="http://dynamodb:8000" \
-            ms-ci:$SUFFIX bash -lc "cd api && npm run lint && npm run typecheck && npm test && cd ../web && npm test"
+            ms-ci:$SUFFIX bash -lc "cd api && npm run lint && npm run typecheck && npm test"
       - name: Cleanup
         if: always()
         run: |
@@ -130,7 +120,7 @@ jobs:
         run: |
           docker run --rm ms-ci-audit:${{ github.run_id }}-${{ github.run_attempt }} bash -lc '
             set -e
-            for pkg in api web; do
+            for pkg in api; do
               echo "::group::$pkg"
               (cd $pkg && npm audit --omit=dev || true)
               (cd $pkg && npm audit --omit=dev --audit-level=high)

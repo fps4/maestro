@@ -33,7 +33,7 @@ All four are workspace configuration — a type with facets and body blocks, a g
 | Piece | |
 |---|---|
 | API | Fastify → Lambda Web Adapter (layer, handler `run.sh`) → HTTP API Gateway v2, `$default` route — [`specs/terraform/`](../../specs/terraform/) |
-| Console | its screens in the deployment's one maestro console, which grows from `specs/web` ([ADR-0023](../decisions/0023-maestro-alerts-in-its-one-console.md)): Next.js → OpenNext → Lambda + CloudFront, through [`console/terraform`](../../console/README.md) — built per tenant, `NEXT_PUBLIC_*` at build |
+| Console | its screens in the deployment's one maestro console, `console/web` ([ADR-0023](../decisions/0023-maestro-alerts-in-its-one-console.md)): Next.js → OpenNext → Lambda + CloudFront, through [`console/terraform`](../../console/README.md) — built per tenant, `NEXT_PUBLIC_*` at build |
 | Database | DynamoDB, one table, one key prefix per workspace ([ADR-0018](../decisions/0018-dynamodb-is-the-mvp-database.md)) |
 | Object storage | S3 — one bucket for attachments and payloads (specs-service [ADR-0020](../../specs/docs/decisions/0020-the-payload-store-and-the-rebuild.md)), versioned, never Object-Locked; the payload store is what a rebuild reads |
 | Record sink | outbox holding the spine's envelope, built at the act (specs-service [ADR-0019](../../specs/docs/decisions/0019-the-outbox-holds-spine-envelopes.md)) → the spine's relay handler as `<name>-relay`, EventBridge Scheduler every minute, one at a time, under the spine module's `relay_policy_json` → the archive and the FIFO topic |

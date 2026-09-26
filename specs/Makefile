@@ -39,23 +39,23 @@ api: ## Run the api on the host against the compose DynamoDB Local (after `make 
 	cd api && $(LOCAL_DB) npm run dev
 
 web: ## Run the console on the host
-	cd web && npm run dev
+	cd ../console/web && npm run dev
 
 test: ## Run every test (needs `make dynamodb` first)
 	cd api && DYNAMODB_ENDPOINT=http://127.0.0.1:8030 npm test
-	cd web && npm test
+	cd ../console/web && npm test
 
 lint: ## Lint both packages
 	cd api && npm run lint
-	cd web && npm run lint
+	cd ../console/web && npm run lint
 
 typecheck: ## Typecheck both packages
 	cd api && npm run typecheck
-	cd web && npm run typecheck
+	cd ../console/web && npm run typecheck
 
 fmt: ## Format both packages
 	cd api && npm run format
-	cd web && npm run format
+	cd ../console/web && npm run format
 
 validate: ## Validate every committed workspace definition (no database needed)
 	cd api && npm run workspace:validate

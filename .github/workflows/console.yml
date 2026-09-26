@@ -6,6 +6,32 @@ on:
     branches: [main]
     paths: ['console/**', '.github/workflows/console.yml']
 jobs:
+  web:
+    # The console (ADR-0023): building its image runs typecheck, lint, tests and the production
+    # build (infra/docker/web.Dockerfile). The tag is per run and removed afterwards.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t mc-web:${{ github.run_id }}-${{ github.run_attempt }} -f console/infra/docker/web.Dockerfile console
+      - name: Cleanup
+        if: always()
+        run: docker rmi "mc-web:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true
+
+  dependency-scan:
+    # Known vulnerabilities in what the console ships. High and above fails; the report is printed
+    # either way so a moderate finding is visible without blocking.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: console/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm audit --omit=dev || true
+      - run: npm audit --omit=dev --audit-level=high
+
   terraform:
     runs-on: ubuntu-latest
     defaults:

@@ -147,7 +147,8 @@ services:
   # session cookie into an Authorization header.
   web:
     build:
-      context: ../..
+      # The console lives in console/ (ADR-0023); this loop builds it beside the api it reads.
+      context: ../../../console
       dockerfile: infra/docker/web.Dockerfile
       args:
         NEXT_PUBLIC_API_BASE_URL: ${WEB_API_BASE_URL:-/api}

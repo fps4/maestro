@@ -1,6 +1,5 @@
-# The demo tenant's specs-service console, as a root would call it. Placeholder values only
-# (ADR-0017): nothing here is deployed by the public repositories. A real tenant's root lives in
-# fps4/maestro-<tenant> and calls the module once per console.
+# The demo tenant's console, as a root would call it. Placeholder values only (ADR-0017): nothing
+# here is deployed by the public repositories. A real tenant's root lives in fps4/maestro-<tenant>.
 
 terraform {
   required_version = ">= 1.6"
@@ -13,56 +12,37 @@ terraform {
 }
 
 provider "aws" {
-  region = var.region
+  region = "eu-central-1"
 }
 
-# CloudFront reads certificates from us-east-1 only, and Lambda@Edge runs from there: the module
-# takes this second configuration whatever the deployment's region.
-provider "aws" {
-  alias  = "us_east_1"
-  region = "us-east-1"
-}
-
-variable "region" {
-  type    = string
-  default = "eu-west-1"
-}
-
-variable "open_next_dir" {
-  description = "The console's `.open-next/`, as `npx @opennextjs/aws build` left it. In a tenant repository the pipeline's checkout-components.sh builds it under components/<component>/ (ADR-0017); here the default is specs-service's console in this repository, once built."
+variable "package" {
+  description = "The console's zip, as `npm run build && npm run bundle` in console/web left it."
   type        = string
-  default     = "../../../web/.open-next"
+  default     = "../../tests/fixtures/console.zip"
 }
 
-module "specs_console" {
+# The host name's certificate is issued in the deployment's region and validated by a DNS record the
+# tenant adds where its zone is (Cloudflare, say). Pass it to the module once it is ISSUED:
+#   resource "aws_acm_certificate" "console" { domain_name = "maestro.aannemer-x.example"  validation_method = "DNS" }
+
+module "console" {
   source = "../.."
-  providers = {
-    aws           = aws
-    aws.us_east_1 = aws.us_east_1
-  }
 
-  name               = "aannemer-x-specs-console"
-  open_next_dir      = var.open_next_dir
-  assets_bucket_name = "aannemer-x-specs-console-assets"
+  name                  = "aannemer-x-console"
+  package               = var.package
+  web_adapter_layer_arn = "arn:aws:lambda:eu-central-1:aws:layer:LambdaAdapterLayerArm64:25"
 
-  # Read by the server at request time. NEXT_PUBLIC_* values were baked in at the build step.
+  # Read by the server at request time. NEXT_PUBLIC_* values were baked in at the build.
   environment = {
     API_PROXY_TARGET = "https://specs-api.aannemer-x.example"
   }
 
-  # A domain needs a certificate issued in us-east-1, through the aws.us_east_1 configuration:
-  #   resource "aws_acm_certificate" "specs" { provider = aws.us_east_1  domain_name = "specs.aannemer-x.example"  validation_method = "DNS" }
-  # domain          = "specs.aannemer-x.example"
-  # certificate_arn = aws_acm_certificate.specs.arn
+  # domain          = "maestro.aannemer-x.example"
+  # certificate_arn = aws_acm_certificate.console.arn
 
-  tags = { "maestro:tenant" = "aannemer-x", "maestro:component" = "specs-service" }
+  tags = { "maestro:tenant" = "aannemer-x" }
 }
 
 output "url" {
-  value = module.specs_console.url
-}
-
-# DNS is the root's: a Route 53 alias, or a CNAME elsewhere, from the domain to this name.
-output "distribution_domain_name" {
-  value = module.specs_console.distribution_domain_name
+  value = module.console.url
 }

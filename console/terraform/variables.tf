@@ -1,77 +1,71 @@
 variable "name" {
-  description = "Prefix for every named resource: <name>-server, <name>-signer, <name>-images, … — e.g. maestro-specs-console."
+  description = "Prefix for every named resource: <name> for the function and the API, e.g. fps4-console."
   type        = string
   validation {
-    condition     = can(regex("^[a-z0-9][a-z0-9-]{0,47}$", var.name))
-    error_message = "name is a lower-case token: letters, digits and hyphens, up to 48 characters."
+    condition     = can(regex("^[a-z0-9][a-z0-9-]{1,40}$", var.name))
+    error_message = "name is lower-case letters, digits and dashes, at most 41 characters."
   }
 }
 
-variable "open_next_dir" {
-  description = <<-EOT
-    Path to the `.open-next/` directory `npx @opennextjs/aws build` wrote in the console's directory.
-    Its `open-next.output.json` is what the module reads: which directories are the assets, which
-    function is the server, which path patterns go where. A relative path is resolved from the
-    root module's working directory; pass an absolute one or build it from the root's path.module.
-  EOT
+variable "package" {
+  description = "The console's zip: `npm run build && npm run bundle` in console/web writes bundle/console.zip — Next's standalone server, its static files and run.sh."
+  type        = string
+}
+
+variable "web_adapter_layer_arn" {
+  description = "The AWS Lambda Web Adapter layer for the region and for arm64 (`LambdaAdapterLayerArm64`), published by AWS under its own account."
   type        = string
   validation {
-    condition     = fileexists("${var.open_next_dir}/open-next.output.json")
-    error_message = "open_next_dir must hold open-next.output.json — the directory `npx @opennextjs/aws build` writes."
+    condition     = can(regex("^arn:aws:lambda:[a-z0-9-]+:[^:]+:layer:LambdaAdapterLayerArm64:[0-9]+$", var.web_adapter_layer_arn))
+    error_message = "web_adapter_layer_arn is the LambdaAdapterLayerArm64 layer ARN for the region."
   }
 }
 
 variable "environment" {
   description = <<-EOT
-    Environment variables for the server function: what the console reads at request time on the
-    server — the API's base URL, feature switches. NEXT_PUBLIC_* variables are not read here: Next
-    inlines them into the browser bundle at `next build`, so they are set in the environment of the
-    build step, before the module ever sees the output.
+    What the console's server reads at request time: the APIs it proxies to (API_PROXY_TARGET), switches.
+    NEXT_PUBLIC_* values are not read here — Next bakes them in at the build (the tenant pipeline's
+    build_env). The module sets what it owns on top: the adapter, the port, NODE_ENV.
   EOT
   type        = map(string)
   default     = {}
 }
 
 variable "secrets" {
-  description = <<-EOT
-    Environment variable → Secrets Manager secret ARN, read at plan time and set on the server
-    function — a break-glass API token, a session-signing key. The value lands in the state and in
-    the function's configuration, as a secret in any Lambda environment does; the state bucket is
-    what protects it (ADR-0017). Reading at boot through the Parameters and Secrets Lambda
-    extension is the follow-up, once a console reads its configuration from there.
-  EOT
+  description = "Environment variable → Secrets Manager secret ARN, read at plan and set on the function. The value is then in the state, which the state bucket protects (ADR-0017)."
   type        = map(string)
   default     = {}
 }
 
 variable "domain" {
-  description = "The console's own host name, when the tenant names one. DNS is the root's: an alias to `distribution_domain_name`. Without it the console answers on the distribution's *.cloudfront.net name."
+  description = "The console's own host name, e.g. maestro.<tenant-domain>. With `certificate_arn`, the API answers on it: the edge in front (Cloudflare) points a CNAME at `domain_target`. Without it the console answers on the API's execute-api name only."
   type        = string
   default     = null
 }
 
 variable "certificate_arn" {
-  description = "ACM certificate for `domain`. CloudFront accepts certificates from us-east-1 only, whatever the deployment's region; the root issues it through its `aws.us_east_1` configuration."
+  description = "An ACM certificate for `domain`, ISSUED, in the deployment's own region (a regional API's custom domain). Validated by a DNS record the tenant adds where its zone is."
   type        = string
   default     = null
   validation {
-    condition     = var.certificate_arn == null || can(regex("^arn:[a-z-]+:acm:us-east-1:", var.certificate_arn))
-    error_message = "certificate_arn must be an ACM certificate in us-east-1: CloudFront reads certificates from that region only."
+    condition     = (var.certificate_arn == null) == (var.domain == null)
+    error_message = "domain and certificate_arn are given together or not at all."
   }
 }
 
-variable "assets_bucket_name" {
-  description = "The bucket the static assets are served from. Globally unique, the tenant's to choose; the tenant's tfvars hold it."
-  type        = string
+variable "memory_mb" {
+  description = "Memory for the function. A Next server renders in a few hundred MB; 1024 keeps cold starts short."
+  type        = number
+  default     = 1024
 }
 
-variable "price_class" {
-  description = "Which CloudFront edge locations serve the console. PriceClass_100 is North America and Europe; a console's users sit in one place."
-  type        = string
-  default     = "PriceClass_100"
+variable "timeout_seconds" {
+  description = "Timeout for the function. An HTTP API waits at most 30 seconds for its integration."
+  type        = number
+  default     = 29
   validation {
-    condition     = contains(["PriceClass_100", "PriceClass_200", "PriceClass_All"], var.price_class)
-    error_message = "price_class is PriceClass_100, PriceClass_200 or PriceClass_All."
+    condition     = var.timeout_seconds >= 3 && var.timeout_seconds <= 30
+    error_message = "timeout_seconds is between 3 and 30: the HTTP API's integration timeout is 30 seconds."
   }
 }
 
@@ -80,30 +74,8 @@ variable "log_retention_days" {
   default = 90
 }
 
-variable "memory_mb" {
-  description = "Memory for the server function. A Next.js server renders in a few hundred MB; 1024 keeps cold starts short."
-  type        = number
-  default     = 1024
-}
-
-variable "timeout_seconds" {
-  description = "Timeout for the server function. CloudFront waits at most 60 seconds for an origin, so the ceiling is 60."
-  type        = number
-  default     = 10
-  validation {
-    condition     = var.timeout_seconds >= 1 && var.timeout_seconds <= 60
-    error_message = "timeout_seconds is between 1 and 60: CloudFront's origin read timeout goes no higher."
-  }
-}
-
-variable "image_optimization" {
-  description = "Deploy OpenNext's image optimisation function and route `_next/image*` to it. Off by default: the consoles use no `next/image`. When off, a console that does must set `images.unoptimized` in next.config, or its images 404."
-  type        = bool
-  default     = false
-}
-
 variable "alarm_actions" {
-  description = "ARNs notified when the server function errors — the tenant's ops-signals topic, once work-service listens to it."
+  description = "ARNs notified when the console returns server errors."
   type        = list(string)
   default     = []
 }

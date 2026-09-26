@@ -5,13 +5,6 @@ terraform {
     aws = {
       source  = "hashicorp/aws"
       version = ">= 5.80"
-      # CloudFront's certificate and the Lambda@Edge signer live in us-east-1 whatever the
-      # deployment's region; the root passes a second configuration for it.
-      configuration_aliases = [aws.us_east_1]
-    }
-    archive = {
-      source  = "hashicorp/archive"
-      version = ">= 2.4"
     }
   }
 }

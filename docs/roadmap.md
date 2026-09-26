@@ -58,7 +58,7 @@ What the first live run found and fixed: two IAM grants DynamoDB Local could not
 
 | Still to build | |
 |---|---|
-| The consoles' OpenNext bundles | the console module deploys what a build produces; no console builds one yet |
+| The console deployed: its bundle, the module's Web Adapter shape, the tenant's host name behind its CDN ([ADR-0026](decisions/0026-the-console-behind-the-tenants-edge.md)) | building |
 | The Secrets Manager extension in place of secret values in Terraform state | values in state are accepted until then (ADR-0017); the extension lands before the GitHub App's key, with agent runs |
 | identity-service: an enumeration endpoint for a realm's principals, for the registry to reconcile | small |
 

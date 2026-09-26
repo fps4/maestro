@@ -75,7 +75,7 @@ Per tenant, one Terraform root module composing the components' modules:
 | Piece | Service |
 |---|---|
 | APIs | Lambda (Web Adapter) + HTTP API Gateway, one function per component |
-| Consoles | OpenNext → Lambda (Function URL behind CloudFront, OAC) + S3 assets — [`console/terraform`](../console/README.md) |
+| Consoles | Next's standalone server → Lambda behind the Web Adapter, an HTTP API, the tenant's host name on it; the tenant's CDN in front ([ADR-0026](decisions/0026-the-console-behind-the-tenants-edge.md)) — [`console/terraform`](../console/README.md) |
 | Relays and clocks | EventBridge Scheduler → Lambda |
 | Record | S3 (archive, transcripts, attachments), SNS FIFO, SQS FIFO |
 | Database | DynamoDB, one table per component, the module's own ([ADR-0018](decisions/0018-dynamodb-is-the-mvp-database.md)) |

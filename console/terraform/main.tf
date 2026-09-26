@@ -1,184 +1,181 @@
-# A Next.js console on AWS (ADR-0002, ADR-0016): OpenNext's build output as one Lambda function
-# behind CloudFront, its static assets in S3. The module reads `open-next.output.json` — what
-# OpenNext says it built — and deploys what a console needs from it: the server function and the
-# assets, the image optimiser on request. The rest of what OpenNext can build (ISR's revalidation
-# queue and tag cache, the warmer) is not deployed: the consoles have none of it. See README.md.
-#
-#   viewer ──▶ CloudFront ──▶ _next/*, public files ──▶ S3 (assets, OAC)
-#                        └──▶ everything else ──▶ Lambda function URL (server, OAC + edge signer)
-#                        └──▶ _next/image* ──▶ Lambda function URL (images, OAC)   [optional]
-
-data "aws_partition" "current" {}
-data "aws_caller_identity" "current" {}
+# The console (maestro ADR-0023, ADR-0026): Next's standalone server on Lambda behind the Web Adapter,
+# an HTTP API in front of it, and the tenant's host name on that API. The edge — TLS to the browser,
+# caching the hashed static files, whatever protection the tenant wants — is the tenant's CDN
+# (Cloudflare), not this module. The same shape as every maestro API.
 
 locals {
-  tags = merge({ "maestro:console" = var.name }, var.tags)
+  tags       = merge(var.tags, { "maestro:console" = var.name })
+  secret_env = { for name, s in data.aws_secretsmanager_secret_version.secret : name => s.secret_string }
 
-  # What OpenNext built. Paths in the file are relative to the console's directory
-  # (".open-next/assets"); the module is given `.open-next/` itself.
-  output = jsondecode(file("${var.open_next_dir}/open-next.output.json"))
-
-  server = local.output.origins.default
-  images = try(local.output.origins.imageOptimizer, null)
-  s3     = local.output.origins.s3
-
-  server_bundle = "${var.open_next_dir}/${trimprefix(local.server.bundle, ".open-next/")}"
-  images_bundle = local.images == null ? null : "${var.open_next_dir}/${trimprefix(local.images.bundle, ".open-next/")}"
-
-  # The bucket prefix CloudFront's S3 origin points at ("_assets"). Only what is copied under it
-  # is uploaded: the `_cache` copy an ISR build lists is the incremental cache's, and the module
-  # deploys no incremental cache.
-  origin_path = local.s3.originPath
-  copies      = [for c in local.s3.copy : c if startswith(c.to, local.origin_path)]
-
-  # Every file under every copied directory, keyed by its bucket key. The versioned subdirectory
-  # (`_next`, content-hashed by Next) is immutable; everything else — the console's `public/` —
-  # keeps its name across builds and is revalidated on every request.
-  assets = merge([
-    for c in local.copies : {
-      for f in fileset("${var.open_next_dir}/${trimprefix(c.from, ".open-next/")}", "**") :
-      "${c.to}/${f}" => {
-        source    = "${var.open_next_dir}/${trimprefix(c.from, ".open-next/")}/${f}"
-        immutable = try(startswith(f, "${c.versionedSubDir}/"), false)
-        extension = try(lower(regex("\\.([^./]+)$", f)[0]), "")
-      }
-    }
-  ]...)
-
-  content_types = {
-    html        = "text/html; charset=utf-8"
-    htm         = "text/html; charset=utf-8"
-    js          = "text/javascript; charset=utf-8"
-    mjs         = "text/javascript; charset=utf-8"
-    css         = "text/css; charset=utf-8"
-    json        = "application/json"
-    map         = "application/json"
-    txt         = "text/plain; charset=utf-8"
-    xml         = "application/xml"
-    svg         = "image/svg+xml"
-    png         = "image/png"
-    jpg         = "image/jpeg"
-    jpeg        = "image/jpeg"
-    gif         = "image/gif"
-    webp        = "image/webp"
-    avif        = "image/avif"
-    ico         = "image/x-icon"
-    woff        = "font/woff"
-    woff2       = "font/woff2"
-    ttf         = "font/ttf"
-    otf         = "font/otf"
-    wasm        = "application/wasm"
-    pdf         = "application/pdf"
-    webmanifest = "application/manifest+json"
-    mp4         = "video/mp4"
-    webm        = "video/webm"
-  }
-
-  # CloudFront's path patterns, from the file, in the file's order: the first match wins, so
-  # `_next/data/*` (server) precedes `_next/*` (assets). `*` is the default behaviour. The image
-  # optimiser's pattern is kept only when its function is deployed; without it `_next/image*` falls
-  # through to the assets origin and 404s, which is what a console without `next/image` wants.
-  ordered_behaviors = [
-    for b in local.output.behaviors : b
-    if b.pattern != "*" && (b.origin != "imageOptimizer" || var.image_optimization)
-  ]
-}
-
-# The build was made for a server with no cache behind it, or it was not. A default build expects
-# an S3 incremental cache, a DynamoDB tag cache and an SQS revalidation queue; none is created
-# here. Such a console still serves, and logs a failed cache lookup on every prerendered page.
-check "built_for_ssr" {
-  assert {
-    condition     = try(local.output.additionalProps.disableIncrementalCache, false) && try(local.output.additionalProps.disableTagCache, false)
-    error_message = "open-next.output.json says the build expects an incremental cache and a tag cache; this module creates neither. Build the console with dangerous.disableIncrementalCache and dangerous.disableTagCache in open-next.config.ts (console/README.md)."
+  # What the module owns and `environment` cannot override: the adapter wraps the runtime and
+  # proxies each event to PORT, where run.sh starts `node server.js`; Next's standalone server
+  # listens on PORT and HOSTNAME.
+  owned_environment = {
+    AWS_LAMBDA_EXEC_WRAPPER      = "/opt/bootstrap"
+    AWS_LWA_READINESS_CHECK_PATH = "/sign-in"
+    PORT                         = "8080"
+    HOSTNAME                     = "127.0.0.1"
+    NODE_ENV                     = "production"
   }
 }
 
-# --- the assets ----------------------------------------------------------------------------------
-
-resource "aws_s3_bucket" "assets" {
-  bucket = var.assets_bucket_name
-  tags   = local.tags
+data "aws_secretsmanager_secret_version" "secret" {
+  for_each  = var.secrets
+  secret_id = each.value
 }
 
-resource "aws_s3_bucket_versioning" "assets" {
-  bucket = aws_s3_bucket.assets.id
-  versioning_configuration {
-    status = "Enabled"
-  }
+# --- the function ------------------------------------------------------------------------------------
+
+resource "aws_cloudwatch_log_group" "console" {
+  name              = "/aws/lambda/${var.name}"
+  retention_in_days = var.log_retention_days
+  tags              = local.tags
 }
 
-resource "aws_s3_bucket_public_access_block" "assets" {
-  bucket                  = aws_s3_bucket.assets.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
+resource "aws_iam_role" "console" {
+  name = var.name
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+  tags = local.tags
 }
 
-resource "aws_s3_bucket_ownership_controls" "assets" {
-  bucket = aws_s3_bucket.assets.id
-  rule {
-    object_ownership = "BucketOwnerEnforced"
-  }
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "assets" {
-  bucket = aws_s3_bucket.assets.id
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm = "AES256"
-    }
-    bucket_key_enabled = true
-  }
-}
-
-# CloudFront reads, on behalf of this distribution only; ListBucket so a missing asset is a 404
-# and not a 403. Nobody else, and nothing over plaintext.
-resource "aws_s3_bucket_policy" "assets" {
-  bucket = aws_s3_bucket.assets.id
+# Its own log, and nothing else: the console holds no data; it reads the APIs with the person's token.
+resource "aws_iam_role_policy" "console" {
+  name = "console"
+  role = aws_iam_role.console.id
   policy = jsonencode({
     Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "CloudFrontReads"
-        Effect    = "Allow"
-        Principal = { Service = "cloudfront.amazonaws.com" }
-        Action    = ["s3:GetObject", "s3:ListBucket"]
-        Resource  = [aws_s3_bucket.assets.arn, "${aws_s3_bucket.assets.arn}/*"]
-        Condition = { StringEquals = { "AWS:SourceArn" = aws_cloudfront_distribution.this.arn } }
-      },
-      {
-        Sid       = "DenyInsecureTransport"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource  = [aws_s3_bucket.assets.arn, "${aws_s3_bucket.assets.arn}/*"]
-        Condition = { Bool = { "aws:SecureTransport" = "false" } }
-      },
-    ]
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+      Resource = "${aws_cloudwatch_log_group.console.arn}:*"
+    }]
   })
-  depends_on = [aws_s3_bucket_public_access_block.assets]
 }
 
-# One object per file, inside plan and apply: a new build shows as the objects it adds, changes and
-# removes. The previous build's hashed chunks go with it; a browser holding the old page reloads on
-# its next navigation, which Next does itself when a chunk is gone.
-resource "aws_s3_object" "asset" {
-  for_each = local.assets
+resource "aws_lambda_function" "console" {
+  function_name    = var.name
+  role             = aws_iam_role.console.arn
+  runtime          = "nodejs22.x"
+  architectures    = ["arm64"]
+  handler          = "run.sh"
+  layers           = [var.web_adapter_layer_arn]
+  filename         = var.package
+  source_code_hash = filebase64sha256(var.package)
+  memory_size      = var.memory_mb
+  timeout          = var.timeout_seconds
 
-  bucket        = aws_s3_bucket.assets.id
-  key           = each.key
-  source        = each.value.source
-  etag          = filemd5(each.value.source)
-  content_type  = lookup(local.content_types, each.value.extension, "application/octet-stream")
-  cache_control = each.value.immutable ? "public, max-age=31536000, immutable" : "public, max-age=0, must-revalidate"
+  environment {
+    variables = merge(var.environment, local.secret_env, local.owned_environment)
+  }
+
+  logging_config {
+    log_format = "Text"
+    log_group  = aws_cloudwatch_log_group.console.name
+  }
+
+  tags       = local.tags
+  depends_on = [aws_iam_role_policy.console]
 }
 
-resource "aws_cloudfront_origin_access_control" "assets" {
-  name                              = "${var.name}-assets"
-  description                       = "${var.name}: CloudFront to the assets bucket"
-  origin_access_control_origin_type = "s3"
-  signing_behavior                  = "always"
-  signing_protocol                  = "sigv4"
+# --- the API in front of it --------------------------------------------------------------------------
+
+resource "aws_apigatewayv2_api" "console" {
+  name          = var.name
+  protocol_type = "HTTP"
+  # The tenant's host name is the only way in once it is set; the execute-api name stays for checks.
+  tags = local.tags
+}
+
+resource "aws_apigatewayv2_integration" "console" {
+  api_id                 = aws_apigatewayv2_api.console.id
+  integration_type       = "AWS_PROXY"
+  integration_uri        = aws_lambda_function.console.invoke_arn
+  payload_format_version = "2.0"
+  timeout_milliseconds   = var.timeout_seconds * 1000
+}
+
+resource "aws_apigatewayv2_route" "default" {
+  api_id    = aws_apigatewayv2_api.console.id
+  route_key = "$default"
+  target    = "integrations/${aws_apigatewayv2_integration.console.id}"
+}
+
+resource "aws_cloudwatch_log_group" "gateway" {
+  name              = "/aws/apigateway/${var.name}"
+  retention_in_days = var.log_retention_days
+  tags              = local.tags
+}
+
+resource "aws_apigatewayv2_stage" "default" {
+  api_id      = aws_apigatewayv2_api.console.id
+  name        = "$default"
+  auto_deploy = true
+  tags        = local.tags
+
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.gateway.arn
+    format = jsonencode({
+      requestId        = "$context.requestId"
+      requestTime      = "$context.requestTime"
+      httpMethod       = "$context.httpMethod"
+      path             = "$context.path"
+      status           = "$context.status"
+      responseLength   = "$context.responseLength"
+      integrationError = "$context.integrationErrorMessage"
+    })
+  }
+}
+
+resource "aws_lambda_permission" "gateway" {
+  statement_id  = "AllowHttpApi"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.console.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_apigatewayv2_api.console.execution_arn}/*/*"
+}
+
+# --- the tenant's host name ----------------------------------------------------------------------------
+
+resource "aws_apigatewayv2_domain_name" "console" {
+  count       = var.domain == null ? 0 : 1
+  domain_name = var.domain
+  domain_name_configuration {
+    certificate_arn = var.certificate_arn
+    endpoint_type   = "REGIONAL"
+    security_policy = "TLS_1_2"
+  }
+  tags = local.tags
+}
+
+resource "aws_apigatewayv2_api_mapping" "console" {
+  count       = var.domain == null ? 0 : 1
+  api_id      = aws_apigatewayv2_api.console.id
+  domain_name = aws_apigatewayv2_domain_name.console[0].id
+  stage       = aws_apigatewayv2_stage.default.id
+}
+
+# --- when it fails -----------------------------------------------------------------------------------
+
+resource "aws_cloudwatch_metric_alarm" "console_5xx" {
+  alarm_name          = "${var.name}-5xx"
+  alarm_description   = "The console is returning server errors."
+  namespace           = "AWS/ApiGateway"
+  metric_name         = "5xx"
+  dimensions          = { ApiId = aws_apigatewayv2_api.console.id, Stage = aws_apigatewayv2_stage.default.name }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 5
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+  tags                = local.tags
 }

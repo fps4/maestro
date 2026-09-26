@@ -11,7 +11,7 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { AUTH_MODE, TOKEN_COOKIE, tokenIsFresh } from '@/lib/session';
 
 /** Paths that must work without a session. Add here, not by loosening the matcher. */
-const PUBLIC = ['/sign-in'];
+const PUBLIC = ['/sign-in', '/icon.svg', '/robots.txt'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

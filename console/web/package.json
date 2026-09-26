@@ -12,7 +12,7 @@
     "lint": "next lint && prettier --check .",
     "format": "prettier --write .",
     "test": "vitest run",
-    "bundle": "open-next build"
+    "bundle": "node scripts/bundle.mjs"
   },
   "engines": {
     "node": ">=22"
@@ -26,7 +26,6 @@
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
-    "@opennextjs/aws": "4.1.5",
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",

@@ -30,7 +30,7 @@ Each scenario is run on the first tenant (fps4's own deployment, [first-deployme
 | W2 | A patch-class claim on an N1 application is refused at claim, closes `escalated_out`, and the rate is one call. | [work-service](components/work-service.md#acceptance) | in code |
 | W3 | A deadline-bearing item chases, escalates and breaches on schedule; every step's delivery is recorded. | [work-service](components/work-service.md#acceptance) | in code |
 | W4 | An agent's lease expires and the item returns to `open` with a reason; `accountable` never changes. | [work-service](components/work-service.md#acceptance) | in code |
-| W5 | **The advisory lane with no agent:** advisory → item → Dependabot's PR → a person's merge → deploy event → re-scan → closed `done` on evidence. Medium and low findings fold into one weekly obligation. | [use-cases.md](use-cases.md#uc1b--the-advisory-lane) | in code; the live run waits on the open decisions below |
+| W5 | **The advisory lane with no agent:** advisory → item → Dependabot's PR → a person's merge → deploy event → re-scan → closed `done` on evidence. Medium and low findings fold into one weekly obligation. | [use-cases.md](use-cases.md#uc1b--the-advisory-lane) | in code; the live run waits on intake and the fixture application (build list) |
 | W6 | A skill written against the tracker contract runs its acceptance suite green against the MCP server. | [work-service](components/work-service.md#acceptance) | in code |
 | **Deploys and instances** | | | |
 | T1 | A deploy event creates the artifact and the instance; a second deploy shifts `rollback_target`; a rebuild from the archive is identical. | [runtime-service](components/runtime-service.md#acceptance) | to build |
@@ -59,7 +59,7 @@ What the first live run found and fixed: two IAM grants DynamoDB Local could not
 | Still to build | |
 |---|---|
 | The consoles' OpenNext bundles | the console module deploys what a build produces; no console builds one yet |
-| The Secrets Manager extension in place of secret values in Terraform state | ADR-0017 accepted values in state for the foundation |
+| The Secrets Manager extension in place of secret values in Terraform state | values in state are accepted until then (ADR-0017); the extension lands before the GitHub App's key, with agent runs |
 | identity-service: an enumeration endpoint for a realm's principals, for the registry to reconcile | small |
 
 ### Commitments (work-service): building
@@ -73,7 +73,7 @@ What the first live run found and fixed: two IAM grants DynamoDB Local could not
 | Intake switched on for the first tenant: its workload principal, the webhook secret, a GitHub webhook per observed repository, Dependabot security updates on | to build |
 | A fixture application the first tenant owns and observes, in its tenant repository: a pinned dependency with a published high advisory, and its own deploy workflow | to build |
 | Deploy events from each application's own pipeline: a role the tenant grants per repository (`events:PutEvents`, source `maestro.deploy`) | to build |
-| [work-service.md](components/work-service.md) brought level with what was built (the policy's shape, `steward`, ladder timing, streams) | to build |
+| [work-service.md](components/work-service.md) brought level with what was built: the policy's shape, `steward`, ladder timing, streams, and the interpretations confirmed at merge (evidence arming, `blocked_by`, Today's split) | to build |
 
 ### Deploys and instances (runtime-service): to build
 
@@ -89,7 +89,7 @@ The record half first ([ADR-0008](decisions/0008-agent-service-record-half-first
 
 ### Use case 1 on app1: to build
 
-CloudWatch, EventBridge and app1's own monitor as signal sources. The `cause_analysis` type and its gate in specs-service. The RCA and fix run kinds. Evidence resolved from events. app1 onboarded at N2.
+CloudWatch, EventBridge and app1's own monitor as signal sources. The `cause_analysis` type and its gate in specs-service. The RCA and fix run kinds. Evidence resolved from events. The console and MCP reached at a domain of the tenant's, not the platform's hostnames. app1 onboarded at N2.
 
 ## Decided on the way
 
@@ -99,15 +99,14 @@ CloudWatch, EventBridge and app1's own monitor as signal sources. The `cause_ana
 | The advisory lane's fix is Dependabot's pull request; a `bump` run only when it goes red (A1) | [use-cases.md](use-cases.md#uc1b--the-advisory-lane), confirmed 2026-09-26 |
 | The live advisory lane (W5) runs on a fixture application the first tenant owns, kept in its tenant repository | 2026-09-26 |
 | A deploy event is put by the application's own pipeline | [signals.md](signals.md), confirmed 2026-09-26 |
+| No GitHub issue mirrors a work item: the item is the record, and GitHub is not. A mirror would be a notifier adapter, after the MVP | [use-cases.md](use-cases.md#uc1--human-gated-ops-on-a-serverless-application), 2026-09-26 |
+| The console and MCP are reached at the platform's hostnames while the MVP is built, and at a domain of the tenant's before app1 is onboarded | 2026-09-26 |
+| Secret values may sit in Terraform state while the MVP is built; the Secrets Manager extension replaces them before the GitHub App's key arrives | [ADR-0017](decisions/0017-the-tenant-repository-runs-the-pipeline.md), 2026-09-26 |
+| What work-service's pull requests asked to confirm (ladder timing, `steward`, evidence arming, `blocked_by`, Today's split) stands as proposed: accepted at merge | 2026-09-26 |
 
 ## Open decisions
 
-| Decision | Recommendation |
-|---|---|
-| Whether a GitHub issue mirrors each work item | no: the item is the record, and GitHub is not ([use-cases.md](use-cases.md#uc1--human-gated-ops-on-a-serverless-application)); a mirror would be a notifier adapter after the MVP |
-| Where the console and MCP are reached: the platform's hostnames, or a domain of the tenant's | platform hostnames for the build; a domain before app1 is onboarded |
-| Secret values in Terraform state until the Secrets Manager extension | accepted for the build; the extension before the GitHub App's key arrives (agent runs) |
-| The confirmations asked in work-service's pull requests (ladder timing, `steward`, evidence arming, `blocked_by`, Today's split) | taken as accepted at merge; written into work-service.md with the docs alignment |
+None. A new one is added here, with a recommendation, when it comes up.
 
 ## After the MVP
 

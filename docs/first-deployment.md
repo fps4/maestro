@@ -1,6 +1,6 @@
 # The first deployment: from an empty account to the first act
 
-The runbook for standing a tenant up on AWS — what [tenancy-and-config.md](tenancy-and-config.md) describes as a layout, in the order it is done, with what the first tenant taught. Every step is either the tenant repository's pipeline ([ADR-0017](decisions/0017-the-tenant-repository-runs-the-pipeline.md)) or a person holding a role, and the runbook says which. Placeholders are the demo tenant's (`aannemer-x`, `app1`); a real tenant's values live in its private `maestro-config-<tenant>` repository and nowhere else.
+The runbook for standing a tenant up on AWS — what [tenancy-and-config.md](tenancy-and-config.md) describes as a layout, in the order it is done, with what the first tenant taught. Every step is either the tenant repository's pipeline ([ADR-0017](decisions/0017-the-tenant-repository-runs-the-pipeline.md)) or a person holding a role, and the runbook says which. Placeholders are the demo tenant's (`aannemer-x`, `app1`); a real tenant's values live in its private `maestro-<tenant>` repository and nowhere else.
 
 ## 0. Before anything
 
@@ -10,7 +10,7 @@ The runbook for standing a tenant up on AWS — what [tenancy-and-config.md](ten
 
 ## 1. The tenant repository
 
-`fps4/maestro-config-<tenant>` from the layout in [tenancy-and-config.md](tenancy-and-config.md): `deploy/aws/` composing the components' modules at pinned refs, `deploy/local/` against LocalStack, `.github/workflows/deploy.yml` calling the reusable workflow, `workspaces/*.yaml` in specs-service's definition shape with their facet schemas beside them, `identity/seed.yaml`, `applications/*.yaml`, `secrets.md`, `bootstrap.sh`.
+`fps4/maestro-<tenant>` from the layout in [tenancy-and-config.md](tenancy-and-config.md): `deploy/aws/` composing the components' modules at pinned refs, `deploy/local/` against LocalStack, `.github/workflows/deploy.yml` calling the reusable workflow, `workspaces/*.yaml` in specs-service's definition shape with their facet schemas beside them, `identity/seed.yaml`, `applications/*.yaml`, `secrets.md`, `bootstrap.sh`.
 
 Three things the first tenant got wrong and the layout now says:
 

@@ -16,7 +16,7 @@ api/bundle/
 *.tfstate.*
 
 # Environment / secrets. A deployment's values live in the tenant's configuration repository
-# (fps4/maestro-config-<tenant>), never here.
+# (fps4/maestro-<tenant>), never here.
 .env
 .env.local
 

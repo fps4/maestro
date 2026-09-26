@@ -1,5 +1,5 @@
 # The demo tenant's spine, as a root would call it. Placeholder values only (ADR-0017): nothing here
-# is deployed by the public repositories. A real tenant's root lives in fps4/maestro-config-<tenant>.
+# is deployed by the public repositories. A real tenant's root lives in fps4/maestro-<tenant>.
 
 terraform {
   required_version = ">= 1.6"

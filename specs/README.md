@@ -168,7 +168,7 @@ Health at `GET /health`.
 Serverless AWS, as a Terraform module in [`terraform/`](terraform/) (maestro's
 [ADR-0002](../docs/decisions/0002-serverless-aws-is-the-substrate.md),
 [ADR-0016](../docs/decisions/0016-terraform-is-the-infrastructure-language.md)). A tenant's
-private configuration repository (`fps4/maestro-config-<tenant>` —
+private configuration repository (`fps4/maestro-<tenant>` —
 [`../docs/tenancy-and-config.md`](../docs/tenancy-and-config.md)) holds the root module
 that composes it with the spine's, and the tenant's own pipeline applies it
 ([ADR-0017](../docs/decisions/0017-the-tenant-repository-runs-the-pipeline.md)). Nothing in

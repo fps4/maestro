@@ -44,7 +44,7 @@ An advisor who operates in several tenants authenticates once, carries an explic
 | Service | Express → Lambda Web Adapter (layer, handler `run.sh`) → HTTP API Gateway v2; one realm per tenant deployment — `identity-service` `terraform/` |
 | Console | OpenNext → Lambda + CloudFront, through [`console/terraform`](../../console/README.md) — built per tenant, `NEXT_PUBLIC_*` at build |
 | Database | DynamoDB, one table ([ADR-0018](../decisions/0018-dynamodb-is-the-mvp-database.md)) |
-| Seed | `config/seed.yaml` stays gitignored; per-tenant seed comes from `maestro-config-<tenant>` |
+| Seed | `config/seed.yaml` stays gitignored; per-tenant seed comes from `maestro-<tenant>` |
 | Backups | a scheduled Lambda pages the table into gzipped canonical JSON on S3, optionally AES-256-GCM under a passphrase secret (the earlier job was a plaintext `mongodump`; the module is the first encrypted one) |
 | Record sink | an outbox holding the spine's envelope; the spine's relay handler as a scheduled Lambda, given the table and a grant only — never the signing-key passphrase |
 

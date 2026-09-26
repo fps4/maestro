@@ -14,11 +14,13 @@ What keeps the choice reversible: no record stores an identity provider's subjec
 |---|---|---|
 | Component code, design, decisions | the component's repository | yes |
 | One fictional demo tenant (`aannemer-x`) | `config/examples/` in each component; the template below | yes |
-| A real tenant's configuration | `fps4/maestro-config-<tenant>` | **no** — private, one repository per tenant |
+| A real tenant's configuration | `fps4/maestro-<tenant>` | **no** — private, one repository per tenant |
 | Secrets | Secrets Manager / SSM in the tenant's account, referenced by name | never in any repository |
 | An application's own maestro glue (the signals module applied, the deploy-event step) | the application's repository | the application's business |
 
-### `fps4/maestro-config-<tenant>`
+### `fps4/maestro-<tenant>`
+
+Named after the tenant, never after a component: `specs`, `work`, `runtime`, `skills` and `config` are taken ([ADR-0021](decisions/0021-a-tenants-repository-is-maestro-tenant.md)).
 
 Same layout in every tenant repository:
 
@@ -69,7 +71,7 @@ jobs:
       components: '{"maestro":"v0.4.0","identity-service":"<tag>"}'
 ```
 
-What the tenant repository holds besides: the `production` environment with a required reviewer — the apply job runs in it, so the gate is a person; the deploy role's trust policy admitting `repo:fps4/maestro-config-aannemer-x:environment:production` (the apply) and `repo:fps4/maestro-config-aannemer-x:pull_request` (the plan); `AWS_ROLE_ARN` and `STATE_RECIPIENT` — the age public key; its private half is held by the person `README.md` names and is never in GitHub. On a hosted runner the mirror is a workflow artefact kept seven days; on the tenant's own runner it is written under `/srv/maestro/state/<tenant>/`.
+What the tenant repository holds besides: the `production` environment with a required reviewer — the apply job runs in it, so the gate is a person; the deploy role's trust policy admitting `repo:fps4/maestro-aannemer-x:environment:production` (the apply) and `repo:fps4/maestro-aannemer-x:pull_request` (the plan); `AWS_ROLE_ARN` and `STATE_RECIPIENT` — the age public key; its private half is held by the person `README.md` names and is never in GitHub. On a hosted runner the mirror is a workflow artefact kept seven days; on the tenant's own runner it is written under `/srv/maestro/state/<tenant>/`.
 
 The roots compose the component modules from the checkout the workflow made, by path:
 
@@ -129,4 +131,4 @@ The demo tenant stays fictional: `aannemer-x`, "Aannemer X", `usr-j-dekker`. A r
 
 ## Later
 
-When a customer is given access to their own configuration (the [customer-facing tenants](beyond-mvp.md#customer-facing-tenants) backlog item), their `maestro-config-<tenant>` repository is already theirs to be handed; the layout above is chosen so that nothing needs to be split out of it.
+When a customer is given access to their own configuration (the [customer-facing tenants](beyond-mvp.md#customer-facing-tenants) backlog item), their `maestro-<tenant>` repository is already theirs to be handed; the layout above is chosen so that nothing needs to be split out of it.

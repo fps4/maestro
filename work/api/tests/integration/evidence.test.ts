@@ -186,10 +186,20 @@ describe('evidence and intake', () => {
     expect((await signal(medium(3))).body).toMatchObject({ outcome: 'folded', items: [id] });
     expect((await signal(medium(3))).body).toMatchObject({ outcome: 'folded', items: [id] }); // no second entry
 
+    // Another application's finding that week is its own obligation, answered for by its own owner
+    // (ADR-0025) — not a line on app1's.
+    const other = await signal({ ...medium(5), application: 'app2', fingerprint: 'GHSA-mmmm-0005:app2' });
+    expect(other.body.outcome).toBe('raised');
+    expect(other.body.items[0]).not.toBe(id);
+    expect(await item(other.body.items[0])).toMatchObject({
+      about: { application: 'app2', environment: 'prod' },
+      fold: 'weekly_dependency_hygiene#app2#prod#2026-W40',
+    });
+
     const obligation = await item(id);
     expect(obligation).toMatchObject({
       class: 'obligation',
-      fold: 'weekly_dependency_hygiene#2026-W40',
+      fold: 'weekly_dependency_hygiene#app1#prod#2026-W40',
       resolve_by: '2026-10-05T00:00:00Z',
     });
     expect(obligation.evidence_plan.map((e: { fingerprint: string }) => e.fingerprint)).toEqual([

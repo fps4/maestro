@@ -148,9 +148,12 @@ export function route(definition: WorkspaceDefinition, s: Signal, now: string): 
     const row = policy.advisories[severity as (typeof ADVISORY_SEVERITIES)[number]];
     if (row && 'fold_into' in row) {
       const week = isoWeek(now);
+      // One obligation per application and environment per week (ADR-0025): it is about one
+      // application, and that application's accountable human answers for it.
+      const fold = `${row.fold_into}#${s.application}#${s.environment}#${week.name}`;
       return {
         action: 'fold',
-        fold: `${row.fold_into}#${week.name}`,
+        fold,
         fingerprint: s.fingerprint,
         input: {
           class: 'obligation',
@@ -159,7 +162,7 @@ export function route(definition: WorkspaceDefinition, s: Signal, now: string): 
           evidence_plan: ['rescan_clear'],
           raised_cause: ref(s),
         },
-        origin: { fingerprint: s.fingerprint, fold: `${row.fold_into}#${week.name}`, resolve_by: week.ends },
+        origin: { fingerprint: s.fingerprint, fold, resolve_by: week.ends },
       };
     }
     const cls: ItemClass = row?.class ?? 'remediation';

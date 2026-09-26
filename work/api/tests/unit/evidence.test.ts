@@ -31,7 +31,7 @@ describe('arming, in the order of the world', () => {
     expect(armed(item())).toEqual([]);
   });
 
-  it('arms the merge once linked, the deploy once merged, the re-scan once deployed', () => {
+  it('arms the merge once linked, then the deploy and the re-scan together (ADR-0024)', () => {
     const linked = item({ links: { pull_request: 'acme/app1#42' } });
     expect(armed(linked)).toEqual([{ index: 0, key: 'merged_change#acme/app1#42' }]);
     const merged = item({
@@ -43,6 +43,19 @@ describe('arming, in the order of the world', () => {
       ],
     });
     expect(armed(merged)).toEqual([
+      { index: 1, key: 'deploy_event#app1#prod', after: '2026-09-28T10:00:00Z' },
+      { index: 2, key: 'rescan_clear#GHSA-x:app1', after: '2026-09-28T10:00:00Z' },
+    ]);
+    // Either may come first: the re-scan satisfied leaves the deploy armed, not after the re-scan.
+    const rescanned = item({
+      links: { pull_request: 'acme/app1#42' },
+      evidence_plan: [
+        { kind: 'merged_change', satisfied_at: '2026-09-28T10:00:00Z' },
+        { kind: 'deploy_event' },
+        { kind: 'rescan_clear', satisfied_at: '2026-09-28T10:05:00Z' },
+      ],
+    });
+    expect(armed(rescanned)).toEqual([
       { index: 1, key: 'deploy_event#app1#prod', after: '2026-09-28T10:00:00Z' },
     ]);
     const early = {

@@ -59,7 +59,7 @@ describe('evidence and intake', () => {
   });
   afterAll(async () => h.close());
 
-  it('runs the advisory lane to done on evidence alone, in the order of the world (gate 5)', async () => {
+  it('runs the advisory lane to done on evidence alone, in the order of the world (W5)', async () => {
     const advisory = {
       kind: 'advisory',
       fingerprint: `${GHSA}:app1`,
@@ -130,8 +130,14 @@ describe('evidence and intake', () => {
       ).body,
     ).toEqual({ outcome: 'satisfied', items: [id] });
 
-    // The re-scan does not count before the deploy; a deploy that predates the merge does not count.
-    expect((await signal({ ...advisory, state: 'ok' })).body.outcome).toBe('unmatched');
+    // Dependabot re-scans the repository once the fix is on the default branch, which is usually
+    // before the deploy finishes: it counts, because it follows the merge (ADR-0024). A deploy that
+    // predates the merge does not count; the one after it closes the item.
+    h.setNow('2026-09-28T10:10:00Z');
+    expect(
+      (await signal({ ...advisory, state: 'ok', occurred_at: '2026-09-28T10:05:00Z' }, 'gh-rescan')).body,
+    ).toEqual({ outcome: 'satisfied', items: [id] });
+    expect((await item(id)).state).toBe('open');
     expect(
       (
         await fact({
@@ -142,6 +148,9 @@ describe('evidence and intake', () => {
         })
       ).body.outcome,
     ).toBe('unmatched');
+
+    // The deploy after the merge: done, and nobody ever claimed it.
+    h.setNow('2026-09-28T11:00:00Z');
     expect(
       (
         await fact({
@@ -151,17 +160,8 @@ describe('evidence and intake', () => {
           occurred_at: '2026-09-28T10:30:00Z',
           digest: 'sha256:0123abcd',
         })
-      ).body.outcome,
-    ).toBe('satisfied');
-
-    // The re-scan no longer reports it against what is deployed: done, and nobody ever claimed it.
-    h.setNow('2026-09-28T11:00:00Z');
-    expect(
-      (await signal({ ...advisory, state: 'ok', occurred_at: '2026-09-28T10:45:00Z' }, 'gh-rescan')).body,
-    ).toEqual({
-      outcome: 'satisfied',
-      items: [id],
-    });
+      ).body,
+    ).toEqual({ outcome: 'satisfied', items: [id] });
     const done = await item(id);
     expect(done).toMatchObject({ state: 'closed', outcome: 'done', accountable: OWNER, signals: 1 });
     expect(done.assigned_to).toBeUndefined();
@@ -172,7 +172,7 @@ describe('evidence and intake', () => {
     ]);
   });
 
-  it('folds medium and low findings into one weekly obligation, done when each is re-scanned clear (gate 5)', async () => {
+  it('folds medium and low findings into one weekly obligation, done when each is re-scanned clear (W5)', async () => {
     h.setNow('2026-09-29T08:00:00Z');
     const medium = (n: number, severity = 'medium') => ({
       kind: 'advisory',

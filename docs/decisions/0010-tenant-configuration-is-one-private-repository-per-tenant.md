@@ -1,6 +1,6 @@
 # ADR-0010 · Tenant configuration lives in one private repository per tenant
 
-**Status:** accepted · 2026-09-18
+**Status:** accepted · 2026-09-18 · the repository's name is amended by [ADR-0021](0021-a-tenants-repository-is-maestro-tenant.md): `fps4/maestro-<tenant>`
 
 ## Context
 

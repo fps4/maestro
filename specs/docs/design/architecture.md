@@ -570,7 +570,7 @@ Lambda behind an HTTP API Gateway through the Lambda Web Adapter, code unchanged
 through OpenNext to Lambda and CloudFront; one DynamoDB table, the module's, a prefix per workspace
 (maestro ADR-0018); S3 for attachments and payloads; the record-sink relay as a scheduled Lambda;
 the whole as the Terraform module in `terraform/` (maestro ADR-0016) that a tenant's private
-configuration repository (`fps4/maestro-config-<tenant>`) composes with the spine's and applies
+configuration repository (`fps4/maestro-<tenant>`) composes with the spine's and applies
 at a tag (maestro ADR-0017). `docker compose` is the development loop, not a deployment target;
 the self-hosted deployment this repository used to carry is gone.
 

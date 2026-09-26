@@ -5,7 +5,7 @@ This repository holds maestro's MVP: the design in `docs/`, and the components w
 ## Rules
 
 - **Vocabulary is `CONTEXT.md`.** Use its words. A new term is added there before it is used elsewhere.
-- **Nothing tenant-identifying lands here.** No client names, application names, AWS account ids, hostnames, webhooks or channel ids. The demo tenant is fictional (`aannemer-x`); the first observed application is always `app1`. Tenant configuration lives in `fps4/maestro-config-<tenant>`; see `docs/tenancy-and-config.md`.
+- **Nothing tenant-identifying lands here.** No client names, application names, AWS account ids, hostnames, webhooks or channel ids. The demo tenant is fictional (`aannemer-x`); the first observed application is always `app1`. Tenant configuration lives in `fps4/maestro-<tenant>`; see `docs/tenancy-and-config.md`.
 - **Links are checked.** Run `scripts/check-links.sh` before pushing; CI runs it on every PR.
 - **Services stay apart.** `specs/` and `work/` import from each other only through published contracts (the spine package, HTTP), never by a relative path into the other's source; `scripts/check-boundaries.sh` fails on a crossing. Each service's gate runs when its tree changes (`.github/workflows/<service>-*.yml`); a service's own `README.md` and `Makefile` are where its local loop is.
 - **The retired corpus** (git tag `corpus-2026-09`) is history, not a source. Do not cite its identifiers (T-, D-, PS-numbers) in current documents.

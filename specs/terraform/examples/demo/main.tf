@@ -1,6 +1,6 @@
 # The demo tenant's specs-service, as a root would call it: the spine's module from this repository, and this
 # one composed with its outputs. Placeholder values only (maestro ADR-0017): nothing here is deployed
-# by the public repositories. A real tenant's root lives in fps4/maestro-config-<tenant>, with the
+# by the public repositories. A real tenant's root lives in fps4/maestro-<tenant>, with the
 # values below in its terraform.tfvars. No database credential exists: the module makes the table
 # and grants the functions (maestro ADR-0018).
 

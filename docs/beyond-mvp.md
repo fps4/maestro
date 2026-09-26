@@ -14,7 +14,7 @@ Needs: a Slack app; the Slack↔principal link in identity-service (a Slack user
 
 A customer signs in to their own deployment, sees exactly which documents are at which version, decides at a gate that is theirs, and watches an agent's progress on their item without seeing its reasoning.
 
-Needs: one Terraform module that stands up a tenant as a product; an external reader role and population in identity-service, honoured by every console and MCP tool, with drafts, transcripts and internal annotations excluded by construction; customer-safe run summaries; the board and Today for a customer. Tenant configuration then splits from `maestro-config-<tenant>` into a repository the customer can be given.
+Needs: one Terraform module that stands up a tenant as a product; an external reader role and population in identity-service, honoured by every console and MCP tool, with drafts, transcripts and internal annotations excluded by construction; customer-safe run summaries; the board and Today for a customer. Tenant configuration then splits from `maestro-<tenant>` into a repository the customer can be given.
 
 ## Branch R — the regulated domain
 

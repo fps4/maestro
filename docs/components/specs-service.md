@@ -41,7 +41,7 @@ All four are workspace configuration — a type with facets and body blocks, a g
 | Notifier | SES; Slack webhook |
 | MCP | stateless HTTP per request — Lambda-shaped already |
 
-Configuration comes from `fps4/maestro-config-<tenant>/workspaces/*.yaml`, and the tenant root passes the module its `environment`, `secrets` (Secrets Manager ARNs), `bucket_name`, `web_adapter_layer_arn` and the spine module's `relay_environment` + `relay_policy_json` as `archive`. The public repository deploys to no account ([ADR-0017](../decisions/0017-the-tenant-repository-runs-the-pipeline.md)): its CI ends at `fmt`, `validate`, `terraform test`, an example root that validates, and a bundle that boots.
+Configuration comes from `fps4/maestro-<tenant>/workspaces/*.yaml`, and the tenant root passes the module its `environment`, `secrets` (Secrets Manager ARNs), `bucket_name`, `web_adapter_layer_arn` and the spine module's `relay_environment` + `relay_policy_json` as `archive`. The public repository deploys to no account ([ADR-0017](../decisions/0017-the-tenant-repository-runs-the-pipeline.md)): its CI ends at `fmt`, `validate`, `terraform test`, an example root that validates, and a bundle that boots.
 
 ## Changes the MVP asks of it
 

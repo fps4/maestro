@@ -84,7 +84,7 @@ Per tenant, one Terraform root module composing the components' modules:
 | Notification | SES; Slack webhook |
 | Runner | GitHub Actions, GitHub-hosted, under an agent principal |
 
-The root module lives in, and is parameterised by, `fps4/maestro-config-<tenant>` ([tenancy-and-config.md](tenancy-and-config.md)). Nothing in the public repositories names a tenant.
+The root module lives in, and is parameterised by, `fps4/maestro-<tenant>` ([tenancy-and-config.md](tenancy-and-config.md)). Nothing in the public repositories names a tenant.
 
 ## 6. Repositories
 
@@ -94,6 +94,6 @@ The root module lives in, and is parameterised by, `fps4/maestro-config-<tenant>
 | `fps4/maestro-runtime` | runtime-service | the estate's operations |
 | `fps4/maestro-skills` | the Claude Code plugin | every repository in an estate |
 | `fps4/maestro` | this design; the components with no consumer outside maestro — the spine, specs-service, work-service, agent-service — released together at one tag ([ADR-0020](decisions/0020-maestros-own-services-live-in-one-repository.md)) | — |
-| `fps4/maestro-config-<tenant>` | one tenant's configuration, private | the tenant |
+| `fps4/maestro-<tenant>` | one tenant's configuration, private | the tenant |
 
 Across repositories the boundary is the network and the port contract ([ADR-0015](decisions/0015-repositories-and-licence.md)).

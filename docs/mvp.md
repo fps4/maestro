@@ -38,7 +38,7 @@ Each component writes its events to a transactional outbox. A scheduled relay dr
 
 ## Tenancy
 
-**Tenant = deployment** ([ADR-0007](decisions/0007-tenant-is-a-deployment-by-default.md)). One Terraform root module and state, one identity realm, one archive prefix per tenant. Workspace isolation inside a deployment stays available for a tenant with several estates. Tenant configuration lives outside the public repositories, in `fps4/maestro-config-<tenant>` ([tenancy-and-config.md](tenancy-and-config.md)).
+**Tenant = deployment** ([ADR-0007](decisions/0007-tenant-is-a-deployment-by-default.md)). One Terraform root module and state, one identity realm, one archive prefix per tenant. Workspace isolation inside a deployment stays available for a tenant with several estates. Tenant configuration lives outside the public repositories, in `fps4/maestro-<tenant>` ([tenancy-and-config.md](tenancy-and-config.md)).
 
 ## The first application
 

@@ -1,6 +1,6 @@
 # The demo tenant's specs-service console, as a root would call it. Placeholder values only
 # (ADR-0017): nothing here is deployed by the public repositories. A real tenant's root lives in
-# fps4/maestro-config-<tenant> and calls the module once per console.
+# fps4/maestro-<tenant> and calls the module once per console.
 
 terraform {
   required_version = ">= 1.6"

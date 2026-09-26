@@ -13,7 +13,7 @@ It is not a platform that builds applications. It observes, commits, records, an
 | **identity-service** | who is acting: humans, agents, workloads; realms; delegated administration | [`fps4/identity-service`](https://github.com/fps4/identity-service) | built |
 | **specs-service** | what was agreed: artifacts, versions, gates, decisions, questions | this repository, [`specs/`](specs/) | built |
 | **work-service** | who owes what, by when, under whose authority — and whether it happened | this repository, [`work/`](work/) | building |
-| **runtime-service** | what is deployed where: the artifact ledger and the instance register | `fps4/maestro-runtime` | next |
+| **runtime-service** | what is deployed where: the artifact ledger and the instance register | this repository, `runtime/` | to build |
 | **agent-service** | what agents did: runs, steps, transcripts | this repository, later | next |
 | **the spine** | the record: an S3 archive every component's events flow into, with a verifier | this repository, [`spine/`](spine/) | built |
 

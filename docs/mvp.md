@@ -44,7 +44,9 @@ Each component writes its events to a transactional outbox. A scheduled relay dr
 
 ## The first application
 
-The first application maestro observes — **app1** throughout these docs — is a serverless application on AWS: Lambda functions, infrastructure as code, configuration changes by PR under CODEOWNERS, its own failure monitor with P1–P4 alerts to Slack. Its maestro glue (the signals module, a deploy-event step) lives in its own repository. It is onboarded at N2 before the MVP is done.
+The first application maestro observes — **app1** throughout these docs — is a serverless application on AWS: Lambda functions, infrastructure as code, changes by PR, its own failure monitor with P1–P4 alerts. Its maestro glue (the signals module, a deploy-event step) lives beside it. It is onboarded at N2 before the MVP is done.
+
+**In the MVP, app1 is a fixture the first tenant owns** (decided 2026-09-26): a small application deployed from the tenant's repository by its own pipeline, pinned to dependencies with published advisories, with a staging environment and a failure that can be switched on. It is a playground on purpose: use case 1 breaks it, which no one's real application should be asked to bear before the MVP works. A customer's application is the first after the MVP.
 
 ## Four seams kept open
 

@@ -1,6 +1,6 @@
 # runtime-service — the instance register
 
-**Repository:** `fps4/maestro-runtime` · **Status:** to build · **Decision:** [ADR-0011](../decisions/0011-the-instance-register-is-one-deployable.md)
+**Repository:** `fps4/maestro`, `runtime/` ([ADR-0020](../decisions/0020-maestros-own-services-live-in-one-repository.md): no consumer outside maestro) · **Status:** to build · **Decision:** [ADR-0011](../decisions/0011-the-instance-register-is-one-deployable.md)
 
 What was built and what is running where. One deployable, two collections: the **artifact ledger** and the **instance register**, fed by one deploy event. It records; it never deploys, restarts or rolls anything back.
 

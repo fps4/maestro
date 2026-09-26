@@ -89,7 +89,7 @@ The record half first ([ADR-0008](decisions/0008-agent-service-record-half-first
 
 ### Use case 1 on app1: to build
 
-CloudWatch, EventBridge and app1's own monitor as signal sources. The `cause_analysis` type and its gate in specs-service. The RCA and fix run kinds. Evidence resolved from events. The console and MCP reached at a domain of the tenant's, not the platform's hostnames. app1 onboarded at N2.
+app1 is the fixture, promoted: a staging environment, the signals module and an alarm on it, a failure that can be switched on, and its own monitor. CloudWatch, EventBridge and app1's own monitor as signal sources. The `cause_analysis` type and its gate in specs-service. The RCA and fix run kinds. Evidence resolved from events. The console and MCP reached at a domain of the tenant's, not the platform's hostnames. app1 onboarded at N2.
 
 ## Decided on the way
 
@@ -103,6 +103,13 @@ CloudWatch, EventBridge and app1's own monitor as signal sources. The `cause_ana
 | The console and MCP are reached at the platform's hostnames while the MVP is built, and at a domain of the tenant's before app1 is onboarded | 2026-09-26 |
 | Secret values may sit in Terraform state while the MVP is built; the Secrets Manager extension replaces them before the GitHub App's key arrives | [ADR-0017](decisions/0017-the-tenant-repository-runs-the-pipeline.md), 2026-09-26 |
 | What work-service's pull requests asked to confirm (ladder timing, `steward`, evidence arming, `blocked_by`, Today's split) stands as proposed: accepted at merge | 2026-09-26 |
+| The live runs use test principals in the first tenant's realm: two people (plus-addresses of the architect's, passwords held in Secrets Manager because nobody signs in as them) and one agent credential in the `operations` seat, the architect answerable | 2026-09-26 |
+| maestro's own repositories are observed like any application: Dependabot security updates and a webhook on each, and the tenant pipeline puts deploy events for the services it deploys | 2026-09-26 |
+| The console's code moves from `specs/web` to `console/web`, beside its module, before the work pages land; sign-in stays identity-service's password flow | 2026-09-26 |
+| runtime-service lives in this repository, `runtime/` ([ADR-0020](decisions/0020-maestros-own-services-live-in-one-repository.md)) | 2026-09-26 |
+| The runner drives one default model, Opus 5.5, with effort set by seat and consequence class (`rca` and `fix` high, `bump` low); an ADR records it when the runner is built | 2026-09-26 |
+| The runner's GitHub App may open draft pull requests and read contents, nothing else, installed only on observed repositories; the architect creates it in the `fps4` organisation | 2026-09-26 |
+| **app1 is the first tenant's fixture**, promoted: a staging environment, the signals module, an alarm, a failure that can be switched on, and N2 through an intake decision in specs-service. Not identity-service (maestro signs in through it; U1 would lock the decider out) and not a Docker host application (the MVP's first application exercises the AWS signal path) | [mvp.md](mvp.md#the-first-application), 2026-09-26 |
 
 ## Open decisions
 

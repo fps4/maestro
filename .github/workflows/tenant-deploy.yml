@@ -41,6 +41,10 @@ on:
         description: The directory holding one root module per target
         type: string
         default: deploy
+      build_env:
+        description: 'JSON object of environment variables for the component builds, e.g. a console''s NEXT_PUBLIC_* values, which Next bakes in at build (console/README.md). Not for secrets: the values are in the workflow file.'
+        type: string
+        default: '{}'
     secrets:
       aws_role_arn:
         description: The deploy role assumed through GitHub's OIDC provider; required for target aws
@@ -85,6 +89,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Build settings
+        # What a build bakes in, a console's NEXT_PUBLIC_* values: exported for the step that builds.
+        env:
+          BUILD_ENV: ${{ inputs.build_env }}
+        run: jq -r 'to_entries[] | "\(.key)=\(.value)"' <<<"$BUILD_ENV" >> "$GITHUB_ENV"
       - name: Components at their tags
         env:
           COMPONENTS: ${{ inputs.components }}
@@ -130,6 +139,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Build settings
+        # What a build bakes in, a console's NEXT_PUBLIC_* values: exported for the step that builds.
+        env:
+          BUILD_ENV: ${{ inputs.build_env }}
+        run: jq -r 'to_entries[] | "\(.key)=\(.value)"' <<<"$BUILD_ENV" >> "$GITHUB_ENV"
       - env:
           COMPONENTS: ${{ inputs.components }}
         run: components/maestro/scripts/checkout-components.sh

@@ -22,6 +22,18 @@ maestro alerts only in its console in the MVP ([ADR-0023](decisions/0023-maestro
 
 Needs: a principal's contact from identity-service, given to the notifier and to nothing else; the Slack↔principal link for Slack; an on-call rota in the workspace definition.
 
+### Risk-graded change routing
+
+Raised 2026-09-26, planned for the iteration after the MVP. The MVP routes by risk only at claim, from what an item was declared at raise: its remediation class against the application's onboarding level and the seat's ceiling ([governance-model.md](governance-model.md#authority-at-claim)). Nothing grades the change itself, and nothing but acceptance scenario A2 (a green patch-level bump on N2) lets a change take effect before a person approves it.
+
+The next iteration:
+
+- **A deterministic change classifier on the pull request.** Its inputs: the bump level, CI status, the paths touched (against CODEOWNERS and declared sensitive paths), the size, and whether the change can be reverted. Its output is the change's effective class, checked where the act lands, at merge. A pull request graded above its item's class goes to a person.
+- **Automated approval by rule, never by agent.** A low tier is approved by a rule the tenant writes ("patch bump, CI green, N2, consequence ≤ c2 → merge"), recorded under the policy's version. Agents still never decide (specs-service ADR-0005): the tenant's rule does.
+- **Consequence class read by the ceilings**, so one rule holds at c2 and tightens at c4.
+- **The change-control kinds** (cosmetic, behavioural, assumption-breaking) become a field that routes, rather than a table in the governance model.
+- specs-service gates stay human. Automated acceptance of low-consequence documents would be its own decision.
+
 ## Branch R — the regulated domain
 
 Forks from the finished MVP. Adds a pack registry (standards, ceilings, chase ladders and clocks as versioned, effective-dated content), a standards engine behind specs-service's evaluator port, assurance and drift detection, classification enforced on every payload and transcript, a conformance dossier per application, and ceilings derived from consequence class.

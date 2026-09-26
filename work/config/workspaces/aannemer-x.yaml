@@ -1,0 +1,71 @@
+# The demo tenant — Aannemer X, fictional — as work-service reads it: seats, applications and
+# policy (maestro docs/components/work-service.md, "Policy"). A real tenant's definition lives in
+# its private configuration repository and is applied by its pipeline.
+#
+# Until runtime-service holds the instance register (M4), an application's tier and onboarding
+# level are read from here. They are resolved onto an item at raise and never accepted from a caller.
+
+workspace: aannemer-x
+definition_version: 1
+title: Aannemer X
+consequence_class: c2
+
+# The seat an item is offered to, and how far an agent in it may act alone (O0 a human's).
+seats:
+  operations: { oversight_level: O2 }
+  owner: { oversight_level: O0 }
+
+# Who answers for the workspace's commitments as a whole: the ladder's `escalate_steward` reaches them.
+steward: prn-h-demo-steward
+
+applications:
+  # Governed: maestro holds change control, so a patch is within reach — an agent's too.
+  - id: app1
+    tier: tier2
+    onboarding_level: n2
+    accountable: prn-h-demo-owner
+    environments: [staging, prod]
+    # An advisory against this repository is done when its fix reaches prod.
+    repositories:
+      - { repository: aannemer-x/app1, environment: prod }
+  # Operated: maestro commits availability and response, never correctness. A patch here is the
+  # owner's act, taken in their own process.
+  - id: app2
+    tier: tier3
+    onboarding_level: n1
+    accountable: prn-h-demo-owner
+    environments: [prod]
+
+policy:
+  severity_map: { P1: sev1, P2: sev2, P3: sev3, P4: sev4 }
+  default_severity: sev4
+  clocks:
+    sev1: { tier1: [PT15M, PT4H], tier2: [PT30M, PT8H], tier3: [PT1H, P1D] }
+    sev2: { tier1: [PT1H, P1D], tier2: [PT2H, P2D], tier3: [PT4H, P5D] }
+    sev3: { tier1: [PT4H, P5D], tier2: [P1D, P7D], tier3: [P1D, P14D] }
+    sev4: { tier1: [P1D, P14D], tier2: [P2D, P30D], tier3: [P5D, P30D] }
+  review_within: P30D
+  lease: PT30M
+  offered_to:
+    change: owner
+    objective: owner
+  default_seat: operations
+  # The ceiling for remediation, by onboarding level — for anyone.
+  onboarding:
+    n0: []
+    n1: [restore]
+    n2: [restore, configure, data_correction, patch, code_change]
+  # An agent's ceiling, per seat, by onboarding level: below what the level permits a person.
+  ceilings:
+    operations: { n1: [restore], n2: [restore, configure, patch] }
+  advisories:
+    critical: { class: remediation, resolve_within: P2D }
+    high: { class: remediation, resolve_within: P7D }
+    medium: { fold_into: weekly_dependency_hygiene }
+    low: { fold_into: weekly_dependency_hygiene }
+  # The steps before `breach` fire evenly across the window from opened_at to resolve_by; the breach
+  # is resolve_by itself. Every step is delivered through the notifier, and the delivery recorded.
+  chase_ladders:
+    standard: [reminder, chase, escalate_accountable, escalate_steward, breach]
+  chase_ladder: standard
+  alerts: { slack_on_raise_at_or_above: sev2 }

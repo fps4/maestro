@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.next/
+*.tsbuildinfo
+
+# Lambda bundles and their SBOMs (`npm run bundle`, `npm run sbom` in api/): what terraform/ deploys.
+api/bundle/
+
+# Terraform's working directories. State never lands here (maestro ADR-0017); the guards fail on it.
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+
+# Environment / secrets. A deployment's values live in the tenant's configuration repository
+# (fps4/maestro-config-<tenant>), never here.
+.env
+.env.local
+
+# A workspace definition applied to a real deployment is tenant configuration, not product.
+# Only the demo tenant ships.
+config/workspaces/*
+!config/workspaces/aannemer-x.yaml
+
+# Tooling caches
+.cache/
+coverage/
+.vitest/
+
+# OS
+.DS_Store
+
+# npm writes this on install; the lockfile is what we commit.
+api/.npmrc
+
+# The local record sink's archive (RECORD_SINK=local writes here). The record is the spine's.
+archive/
+# The local payload store (RECORD_PAYLOAD_DIR): what the envelopes reference, erasable.
+payloads/

@@ -1,0 +1,50 @@
+{
+  "name": "@fps4/maestro-work-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "work-service \u2014 who owes what, by when, under whose authority, and whether it happened.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.14"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "bundle": "node scripts/bundle.mjs",
+    "sbom": "node scripts/sbom.mjs",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "table:create": "tsx src/cli/create-table.ts",
+    "workspace:apply": "tsx src/cli/apply-workspace.ts",
+    "workspace:member": "tsx src/cli/member.ts",
+    "workspace:rebuild": "tsx src/cli/rebuild.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-dynamodb": "^3.716.0",
+    "@aws-sdk/client-s3": "^3.716.0",
+    "@aws-sdk/lib-dynamodb": "^3.716.0",
+    "@fastify/cors": "^10.0.2",
+    "@fps4/maestro-spine": "^0.2.2",
+    "fastify": "^5.2.1",
+    "jose": "^5.9.6",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@cyclonedx/cyclonedx-npm": "^6.0.1",
+    "@eslint/js": "^9.18.0",
+    "@types/node": "^22.10.6",
+    "esbuild": "^0.28.2",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^3.2.6"
+  }
+}

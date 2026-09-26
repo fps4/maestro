@@ -58,6 +58,20 @@ is refused in production; `AUTH_MODE=jwks` with `AUTH_JWKS_URL`, `AUTH_ISSUER`, 
 verifies identity-service's tokens. `RECORD_SINK` is `local` (a filesystem archive `spine-verify`
 reads), `s3` (the spine's bucket and topic) or `off` (the relay Lambda drains the outbox).
 
+## MCP
+
+`POST /v1/workspaces/<ws>/mcp` — Streamable HTTP, stateless, one JSON-RPC message per request, the
+caller resolved from its bearer token on every tool call. The tools are the **tracker contract** —
+`publish`, `fetch`, `claim`, `resolve`, `frontier`, `blocking` — and the holder's `heartbeat`,
+`release` and `link`. They call the same service and schemas as the HTTP routes. In production the
+endpoint exists only where `MCP_RESOURCE_URL` is set, which also publishes
+`/.well-known/oauth-protected-resource` and accepts a token bound to that resource.
+
+The contract's acceptance suite is [`api/tests/contract/tracker.ts`](api/tests/contract/tracker.ts):
+written against the six operations alone, bound to this server by
+[`api/tests/contract/mcp.ts`](api/tests/contract/mcp.ts), and run by
+`tests/integration/tracker-contract.test.ts` — M2's sixth gate.
+
 ## The table
 
 One DynamoDB table, the same shape as every maestro component's (`pk`/`sk`, `gsi1`, `gsi2`, the
@@ -103,8 +117,10 @@ frontier, the rates, the rebuild — and its clocks — leases and heartbeats, t
 the notifier (a log line locally, a Slack webhook on AWS), breaches, expiry, the sweep — are in.
 Signals intake (the envelope; dedup by delivery and fingerprint; the weekly fold) and evidence (link,
 facts, closure on evidence) are in. So are the source adapters: GitHub (Dependabot alerts, its pull requests, merges), CloudWatch alarms
-through the applications' `ops-signals` topics, and deploy events through EventBridge. The MCP tracker
-contract follows. See maestro's [roadmap](../docs/roadmap.md).
+through the applications' `ops-signals` topics, and deploy events through EventBridge. So are the
+board (the open set by state, and what closed today), Today (what a person owes, and the agents' work
+they answer for), `blocking`, and the MCP server with the tracker contract. What is left for M2's
+gate: SES beside Slack, and the gate run on a tenant. See maestro's [roadmap](../docs/roadmap.md).
 
 ## Licence
 

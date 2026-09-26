@@ -120,6 +120,8 @@ export interface WorkItem {
   about: About;
   parent?: string;
   milestone?: string;
+  /** The items it was raised waiting on. Whether each still blocks is read from its head. */
+  blocked_by?: string[];
 
   raised_by: RaisedBy;
   raised_cause?: string;

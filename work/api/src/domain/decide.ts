@@ -71,6 +71,7 @@ export interface RaiseInput {
   subject_id?: string;
   parent?: string;
   milestone?: string;
+  blocked_by?: string[];
   remediation_class?: RemediationClass;
   reversible?: boolean;
   severity_hint?: string;
@@ -167,6 +168,7 @@ export function raise(env: Env, id: string, input: RaiseInput, origin: Origin = 
         ...(input.subject_id ? { subject_ref: input.subject_id } : {}),
         ...(input.parent ? { parent: input.parent } : {}),
         ...(input.milestone ? { milestone: input.milestone } : {}),
+        ...(input.blocked_by?.length ? { blocked_by: [...new Set(input.blocked_by)] } : {}),
         severity,
         ...(input.remediation_class ? { remediation_class: input.remediation_class } : {}),
         ...(input.reversible !== undefined ? { reversible: input.reversible } : {}),

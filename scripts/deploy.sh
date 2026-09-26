@@ -8,7 +8,8 @@ usage() {
 usage: scripts/deploy.sh <plan|apply|mirror|local-up|local-down> [--root <dir>]
 
   plan         init (with backend.hcl when the root has one), fmt -check, validate, plan -out=tfplan
-  apply        apply the plan this run made, then mirror
+  apply        apply the plan this run made, then mirror, then put a deploy event per application
+               the plan deployed (a root's deploy-events.json names them)
   mirror       terraform state pull, encrypted with age, to $MAESTRO_STATE_DIR/<tenant>/<utc>.tfstate.age
   local-up     start LocalStack on localhost:4566 for a deploy/local root
   local-down   stop it
@@ -94,11 +95,63 @@ do_apply() {
   [ -f "$root/tfplan" ] || die "no plan in $root; run 'deploy.sh plan' first, in this same run"
   # A mirror that cannot be written is found out before the apply, not after it.
   if has_backend; then mirror_preflight; fi
+  # What the plan deploys, read from the plan before it is spent.
+  local deploys
+  deploys="$(deploys_of_plan)"
   echo "deploy: apply $root/tfplan"
   tf apply -input=false -no-color tfplan
   # A plan applies once: the state has moved on, and the next apply comes from the next plan.
   rm -f "$root/tfplan"
   do_mirror
+  put_deploy_events "$deploys"
+}
+
+# --- deploy events (docs/signals.md) -------------------------------------------------------------
+
+# A root that deploys applications names them in deploy-events.json:
+#   { "<application>": { "module": "module.specs", "environment": "production" }, … }
+# The plan deploys an application when it creates or changes one of the Lambda functions under its
+# module. Each such application gets one `maestro.deploy` event on the account's default bus after
+# the apply — its application, environment, a digest over its functions' code hashes, and the commit
+# that was deployed — which is what work-service's evidence waits for. No map, no events; an apply
+# that changes no function puts none.
+deploys_of_plan() {
+  local map="$root/deploy-events.json"
+  [ -f "$map" ] || return 0
+  command -v jq >/dev/null || die "jq is not on PATH; deploy events need it"
+  tf show -json tfplan | jq -c --slurpfile apps "$map" '
+    . as $plan
+    | $apps[0] | to_entries[]
+    | .key as $app | .value as $at
+    | [ $plan.resource_changes[]?
+        | select(.type == "aws_lambda_function")
+        | select(.address | startswith($at.module + "."))
+        | select(any(.change.actions[]; . == "create" or . == "update"))
+        | "\(.address)=\(.change.after.source_code_hash)" ]
+    | select(length > 0)
+    | { application: $app, environment: $at.environment, code: (sort | join("\n")) }'
+}
+
+sha256() {
+  if command -v sha256sum >/dev/null; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi
+}
+
+put_deploy_events() {
+  local deploys="$1" commit line app env digest detail
+  [ -n "$deploys" ] || return 0
+  command -v aws >/dev/null || die "aws is not on PATH; the deploy events were not put"
+  commit="${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
+  while IFS= read -r line; do
+    app="$(jq -r .application <<<"$line")"
+    env="$(jq -r .environment <<<"$line")"
+    digest="sha256:$(jq -r .code <<<"$line" | sha256)"
+    detail="$(jq -cn --arg a "$app" --arg e "$env" --arg d "$digest" --arg c "$commit" \
+      '{application: $a, environment: $e, digest: $d, commit: $c}')"
+    aws events put-events --query FailedEntryCount --output text \
+      --entries "$(jq -cn --arg detail "$detail" '[{Source: "maestro.deploy", DetailType: "deploy", Detail: $detail}]')" |
+      grep -qx 0 || die "the deploy event for $app/$env was not put"
+    echo "deploy: put maestro.deploy $app/$env $digest"
+  done <<<"$deploys"
 }
 
 # --- the mirror (ADR-0017 §4) --------------------------------------------------------------------

@@ -29,6 +29,8 @@ jobs:
         run: sudo apt-get update -q && sudo apt-get install -y -q age
       - name: The mirror's retention rule
         run: scripts/tests/deploy-mirror.test.sh
+      - name: Deploy events after an apply
+        run: scripts/tests/deploy-events.test.sh
 
   self-test:
     # Called as a tenant would call it, at this commit, with the demo tenant's placeholders. The

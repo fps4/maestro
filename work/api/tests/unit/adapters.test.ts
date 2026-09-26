@@ -9,6 +9,7 @@ import { resolve as resolvePath } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 import {
+  bump,
   bumpedPackage,
   fromEventBridge,
   fromGitHub,
@@ -116,6 +117,64 @@ describe('GitHub', () => {
     ).toMatchObject({ kind: 'ignored' });
     expect(bumpedPackage('Bump @babel/core from 7.1.0 to 7.2.0 in /api')).toBe('@babel/core');
     expect(bumpedPackage('Bump the npm_and_yarn group across 1 directory with 2 updates')).toBeUndefined();
+  });
+
+  it('maps a repository that builds several applications by the manifest’s directory', () => {
+    const doc = parse(
+      readFileSync(resolvePath(__dirname, '../../../config/workspaces/aannemer-x.yaml'), 'utf8'),
+    );
+    doc.applications[0].repositories = [
+      { repository: 'aannemer-x/mono', environment: 'prod', path: 'svc-a/' },
+    ];
+    doc.applications[1].repositories = [
+      { repository: 'aannemer-x/mono', environment: 'prod', path: 'svc-b/' },
+      { repository: 'aannemer-x/mono', environment: 'prod', path: 'svc-b/deep/' },
+    ];
+    const mono = parseWorkspaceDefinition(doc);
+    const at = (manifest: string) =>
+      fromGitHub(mono, 'dependabot_alert', 'g', {
+        ...alert('created', { dependency: { package: { name: 'lodash' }, manifest_path: manifest } }),
+        repository: { full_name: 'aannemer-x/mono' },
+      });
+    expect(at('svc-a/api/package-lock.json')).toMatchObject({
+      signal: { application: 'app1', fingerprint: 'GHSA-aaaa-bbbb-cccc:aannemer-x/mono/svc-a/api:lodash' },
+    });
+    expect(at('svc-b/deep/package-lock.json')).toMatchObject({ signal: { application: 'app2' } });
+    expect(at('tools/package-lock.json')).toMatchObject({
+      kind: 'ignored',
+      reason: expect.stringContaining('tools/package-lock.json'),
+    });
+
+    // Dependabot names the directory in its title; the link carries it, as the fingerprint does.
+    expect(bump('Bump lodash from 4.17.20 to 4.17.21 in /svc-a/api')).toEqual({
+      package: 'lodash',
+      dir: 'svc-a/api',
+    });
+    expect(bump('Bump lodash from 4.17.20 to 4.17.21')).toEqual({ package: 'lodash', dir: '' });
+    expect(
+      fromGitHub(mono, 'pull_request', 'g', {
+        action: 'opened',
+        pull_request: {
+          number: 5,
+          title: 'Bump lodash from 4.17.20 to 4.17.21 in /svc-a/api',
+          user: { login: 'dependabot[bot]' },
+        },
+        repository: { full_name: 'aannemer-x/mono' },
+      }),
+    ).toEqual({
+      kind: 'link',
+      repository: 'aannemer-x/mono/svc-a/api',
+      application: 'app1',
+      package: 'lodash',
+      pull_request: 'aannemer-x/mono#5',
+    });
+
+    doc.applications[0].repositories.push({
+      repository: 'aannemer-x/mono',
+      environment: 'prod',
+      path: 'svc-b/',
+    });
+    expect(() => parseWorkspaceDefinition(doc)).toThrow(/belongs to two applications/);
   });
 
   it('checks the webhook’s signature over the exact bytes, in constant time', () => {

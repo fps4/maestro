@@ -5,7 +5,7 @@ Architecture decision records, numbered from 0001. Each states context in a few 
 | ADR | Decision | Status |
 |---|---|---|
 | [0001](0001-maestro-is-an-ops-engine.md) | maestro is an ops engine; idea-to-code is out of scope | accepted |
-| [0002](0002-serverless-aws-is-the-substrate.md) | Serverless AWS is the substrate; docker compose is the development loop only | accepted; the CDK clause superseded by 0016, the runners clause narrowed by 0017 |
+| [0002](0002-serverless-aws-is-the-substrate.md) | Serverless AWS is the substrate; docker compose is the development loop only | accepted; the CDK clause superseded by 0016, the runners clause narrowed by 0017, the consoles clause by 0026 |
 | [0003](0003-the-spine-is-an-archive-and-a-queue.md) | The spine is an S3 archive with SNS/SQS delivery; the relay ships first | accepted |
 | [0004](0004-exit-is-the-portable-export.md) | Exit is the portable export: archive plus verifier | accepted; *Atlas* leaves its list of managed services by 0018 |
 | [0005](0005-atlas-flex-is-the-mvp-database.md) | MongoDB Atlas Flex is the MVP database | superseded by 0018 |
@@ -29,5 +29,6 @@ Architecture decision records, numbered from 0001. Each states context in a few 
 | [0023](0023-maestro-alerts-in-its-one-console.md) | maestro alerts in its console only in the MVP; a deployment has one console | proposed |
 | [0024](0024-a-repositorys-rescan-follows-the-merge.md) | A repository's re-scan follows the merge, not the deploy | proposed |
 | [0025](0025-the-weekly-fold-is-per-application.md) | The weekly fold is one obligation per application | proposed |
+| [0026](0026-the-console-behind-the-tenants-edge.md) | The console runs like an API, behind the tenant's own edge | proposed |
 
 specs-service's own decision log moved with it to [`specs/docs/decisions/`](../../specs/docs/decisions/) (ADR-0001–0022 there) and is closed: its records are cited as "specs-service ADR-00NN", and every new decision, whatever it is about, is recorded here ([ADR-0020](0020-maestros-own-services-live-in-one-repository.md)).

@@ -1,7 +1,7 @@
 # The console
 
 maestro's one console per deployment ([ADR-0023](../../docs/decisions/0023-maestro-alerts-in-its-one-console.md)):
-Next.js, built by OpenNext and deployed through [`../terraform`](../terraform/). It grew from
+Next.js, its standalone server packaged by `npm run bundle` and deployed through [`../terraform`](../terraform/) ([ADR-0026](../../docs/decisions/0026-the-console-behind-the-tenants-edge.md)). It grew from
 specs-service's console and holds specs-service's screens today (the register, the document, the
 decision page); work-service's (Today, Owed, the work item, the board) join it next, then the run page
 and the estate ([ux.md](../../docs/ux.md)).

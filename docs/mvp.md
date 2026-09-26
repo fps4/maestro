@@ -26,7 +26,7 @@ Plus the [signals contract](signals.md) — a Terraform module and a CDK constru
 
 ## Substrate
 
-**Serverless AWS.** Every component is a Lambda behind API Gateway (Fastify unchanged, via the Web Adapter); consoles through OpenNext and CloudFront; relays and clocks are scheduled Lambdas; infrastructure as Terraform ([ADR-0016](decisions/0016-terraform-is-the-infrastructure-language.md)); CI on GitHub-hosted runners. `docker compose` is the local development loop and nothing else.
+**Serverless AWS.** Every component is a Lambda behind API Gateway (Fastify unchanged, via the Web Adapter); consoles the same way, behind the tenant's own CDN ([ADR-0026](decisions/0026-the-console-behind-the-tenants-edge.md)); relays and clocks are scheduled Lambdas; infrastructure as Terraform ([ADR-0016](decisions/0016-terraform-is-the-infrastructure-language.md)); CI on GitHub-hosted runners. `docker compose` is the local development loop and nothing else.
 
 **DynamoDB** is the database ([ADR-0018](decisions/0018-dynamodb-is-the-mvp-database.md)): one table per component, created by its Terraform module and reached by its functions' roles, with no database credential anywhere.
 

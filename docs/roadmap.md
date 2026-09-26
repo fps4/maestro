@@ -30,7 +30,7 @@ Each scenario is run on the first tenant (fps4's own deployment, [first-deployme
 | W2 | A patch-class claim on an N1 application is refused at claim, closes `escalated_out`, and the rate is one call. | [work-service](components/work-service.md#acceptance) | in code |
 | W3 | A deadline-bearing item chases, escalates and breaches on schedule; every step's delivery is recorded. | [work-service](components/work-service.md#acceptance) | in code |
 | W4 | An agent's lease expires and the item returns to `open` with a reason; `accountable` never changes. | [work-service](components/work-service.md#acceptance) | in code |
-| W5 | **The advisory lane with no agent:** advisory → item → Dependabot's PR → a person's merge → deploy event → re-scan → closed `done` on evidence. Medium and low findings fold into one weekly obligation. | [use-cases.md](use-cases.md#uc1b--the-advisory-lane) | in code; the live run waits on intake and the fixture application (build list) |
+| W5 | **The advisory lane with no agent:** advisory → item → Dependabot's PR → a person's merge → deploy event → re-scan → closed `done` on evidence. Medium and low findings fold into one weekly obligation. | [use-cases.md](use-cases.md#uc1b--the-advisory-lane) | **passed live 2026-09-26** on the fixture: `semver` high → `wrk-2`, Dependabot's #23 linked; merged 12:58:51Z, re-scan clear 12:58:55Z, deploy 12:59:39Z → closed `done`, never claimed. `ms` medium and `debug` low → the week's obligation `wrk-1`, closed `done` when both re-scanned clear |
 | W6 | A skill written against the tracker contract runs its acceptance suite green against the MCP server. | [work-service](components/work-service.md#acceptance) | in code |
 | **Deploys and instances** | | | |
 | T1 | A deploy event creates the artifact and the instance; a second deploy shifts `rollback_target`; a rebuild from the archive is identical. | [runtime-service](components/runtime-service.md#acceptance) | to build |
@@ -67,12 +67,12 @@ What the first live run found and fixed: two IAM grants DynamoDB Local could not
 | Part | State |
 |---|---|
 | The item: six classes, the state machine, authority at claim, policy clocks, ceilings, chase ladders, leases, the sweep | built |
-| Evidence plans; signals intake (dedup, the weekly fold); the GitHub, SNS and EventBridge adapters | in code; deployed with intake switched off |
-| The frontier, the board, Today (API); `blocking`; MCP with the tracker contract | in code (maestro #32), not yet deployed |
+| Evidence plans; signals intake (dedup, the weekly fold); the GitHub, SNS and EventBridge adapters | built; intake on for the first tenant since 2026-09-26 |
+| The frontier, the board, Today (API); `blocking`; MCP with the tracker contract | built (v0.5.0); the MCP endpoint is live, and its contract suite has run only locally |
 | Alerts: each chase step, escalation and breach marked on the person's Today ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)) | the steps are recorded; Today's marks to build |
-| Intake switched on for the first tenant: its workload principal, the webhook secret, a GitHub webhook per observed repository, Dependabot security updates on | to build |
-| A fixture application the first tenant owns and observes, in its tenant repository: a pinned dependency with a published high advisory, and its own deploy workflow | to build |
-| Deploy events from each application's own pipeline: a role the tenant grants per repository (`events:PutEvents`, source `maestro.deploy`) | to build |
+| Intake switched on for the first tenant: its workload principal, the webhook secret, a GitHub webhook per observed repository, Dependabot security updates on | built for the fixture's repository; maestro's own repositories are not observed yet |
+| A fixture application the first tenant owns and observes, in its tenant repository: pinned dependencies with published advisories, and its own deploy workflow | built |
+| Deploy events from each application's own pipeline: a role the tenant grants per repository (`events:PutEvents`, source `maestro.deploy`) | built; the fixture's pipeline is the first |
 | [work-service.md](components/work-service.md) brought level with what was built: the policy's shape, `steward`, ladder timing, streams, and the interpretations confirmed at merge (evidence arming, `blocked_by`, Today's split) | to build |
 
 ### Deploys and instances (runtime-service): to build

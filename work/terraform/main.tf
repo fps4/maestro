@@ -4,11 +4,13 @@
 # and the topic; this one composes with its outputs. A tenant's root calls both (ADR-0017).
 
 locals {
-  tags       = merge({ "maestro:component" = "work-service" }, var.tags)
-  api_name   = "${var.name}-api"
-  relay_name = "${var.name}-relay"
-  sweep_name = "${var.name}-sweep"
-  table_name = coalesce(var.table_name, var.name)
+  tags        = merge({ "maestro:component" = "work-service" }, var.tags)
+  api_name    = "${var.name}-api"
+  relay_name  = "${var.name}-relay"
+  sweep_name  = "${var.name}-sweep"
+  intake_name = "${var.name}-intake"
+  intake_on   = var.intake != null
+  table_name  = coalesce(var.table_name, var.name)
 
   # Each secret's current value, by the environment variable name it is set as.
   secret_env = { for name, secret in data.aws_secretsmanager_secret_version.secret : name => secret.secret_string }
@@ -44,7 +46,7 @@ locals {
     HOST                         = "0.0.0.0"
     RECORD_SINK                  = "off"
     SWEEP_MODE                   = "off" # the sweep function is the one sweep
-  })
+  }, var.intake == null ? {} : { INTAKE_PRINCIPAL = var.intake.principal })
 
   # What each function may do to the table: the item operations the service sends, on the table
   # and its indexes, and nothing that alters the table itself. No Scan: every read the service
@@ -694,6 +696,207 @@ resource "aws_cloudwatch_metric_alarm" "sweep_silent" {
   threshold           = 1
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "breaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+  tags                = local.tags
+}
+
+# --- the intake ------------------------------------------------------------------------------------
+# The adapters' queue (maestro docs/signals.md, "Two channels, one intake"): the applications'
+# ops-signals topics and the deploy-event rule deliver into it, and the intake function translates
+# each record and applies it as the intake workload. A record that fails is retried by SQS, alone,
+# until the dead-letter queue takes it — and that is an alarm.
+
+resource "aws_sqs_queue" "signals_dlq" {
+  count                     = local.intake_on ? 1 : 0
+  name                      = "${local.intake_name}-dlq"
+  message_retention_seconds = 1209600
+  sqs_managed_sse_enabled   = true
+  tags                      = local.tags
+}
+
+resource "aws_sqs_queue" "signals" {
+  count                      = local.intake_on ? 1 : 0
+  name                       = local.intake_name
+  visibility_timeout_seconds = 6 * var.intake_timeout_seconds
+  message_retention_seconds  = 345600
+  sqs_managed_sse_enabled    = true
+  redrive_policy             = jsonencode({ deadLetterTargetArn = aws_sqs_queue.signals_dlq[0].arn, maxReceiveCount = 5 })
+  tags                       = local.tags
+}
+
+resource "aws_cloudwatch_event_rule" "deploys" {
+  count         = local.intake_on ? 1 : 0
+  name          = "${local.intake_name}-deploys"
+  description   = "Deploy events an application's pipeline puts, for work-service's evidence."
+  event_pattern = jsonencode({ source = var.intake.deploy_sources })
+  tags          = local.tags
+}
+
+resource "aws_cloudwatch_event_target" "deploys" {
+  count = local.intake_on ? 1 : 0
+  rule  = aws_cloudwatch_event_rule.deploys[0].name
+  arn   = aws_sqs_queue.signals[0].arn
+}
+
+# Who may send: the named topics, and the deploy rule — nothing else.
+resource "aws_sqs_queue_policy" "signals" {
+  count     = local.intake_on ? 1 : 0
+  queue_url = aws_sqs_queue.signals[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = concat(
+      length(var.intake.signal_topic_arns) == 0 ? [] : [{
+        Sid       = "OpsSignalsTopics"
+        Effect    = "Allow"
+        Principal = { Service = "sns.amazonaws.com" }
+        Action    = "sqs:SendMessage"
+        Resource  = aws_sqs_queue.signals[0].arn
+        Condition = { ArnEquals = { "aws:SourceArn" = var.intake.signal_topic_arns } }
+      }],
+      [{
+        Sid       = "DeployRule"
+        Effect    = "Allow"
+        Principal = { Service = "events.amazonaws.com" }
+        Action    = "sqs:SendMessage"
+        Resource  = aws_sqs_queue.signals[0].arn
+        Condition = { ArnEquals = { "aws:SourceArn" = aws_cloudwatch_event_rule.deploys[0].arn } }
+      }],
+    )
+  })
+}
+
+# One subscription per application topic; the signals module's topic policy lets this account subscribe.
+resource "aws_sns_topic_subscription" "signals" {
+  for_each  = local.intake_on ? toset(var.intake.signal_topic_arns) : toset([])
+  topic_arn = each.value
+  protocol  = "sqs"
+  endpoint  = aws_sqs_queue.signals[0].arn
+}
+
+resource "aws_cloudwatch_log_group" "intake" {
+  count             = local.intake_on ? 1 : 0
+  name              = "/aws/lambda/${local.intake_name}"
+  retention_in_days = var.log_retention_days
+  tags              = local.tags
+}
+
+resource "aws_iam_role" "intake" {
+  count = local.intake_on ? 1 : 0
+  name  = local.intake_name
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+      Action    = "sts:AssumeRole"
+    }]
+  })
+  tags = local.tags
+}
+
+# Its log, the table, the payload store (a raised item's title is a payload), and its own queue.
+resource "aws_iam_role_policy" "intake" {
+  count = local.intake_on ? 1 : 0
+  name  = "intake"
+  role  = aws_iam_role.intake[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["logs:CreateLogStream", "logs:PutLogEvents"]
+        Resource = "${aws_cloudwatch_log_group.intake[0].arn}:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = local.table_actions
+        Resource = local.table_resources
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["s3:PutObject", "s3:GetObject"]
+        Resource = "${aws_s3_bucket.store.arn}/*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
+        Resource = aws_sqs_queue.signals[0].arn
+      },
+    ]
+  })
+}
+
+resource "aws_lambda_function" "intake" {
+  count            = local.intake_on ? 1 : 0
+  function_name    = local.intake_name
+  role             = aws_iam_role.intake[0].arn
+  runtime          = "nodejs22.x"
+  architectures    = ["arm64"]
+  handler          = "index.handler"
+  filename         = var.intake_package
+  source_code_hash = filebase64sha256(var.intake_package)
+  timeout          = var.intake_timeout_seconds
+  memory_size      = var.intake_memory_mb
+  tags             = local.tags
+
+  environment {
+    variables = merge(local.environment_defaults, var.environment, local.secret_env, local.table_environment, local.store_environment, {
+      RECORD_SINK      = "off"
+      SWEEP_MODE       = "off"
+      INTAKE_PRINCIPAL = var.intake.principal
+      INTAKE_WORKSPACE = var.intake.workspace
+    })
+  }
+
+  logging_config {
+    log_format = "JSON"
+    log_group  = aws_cloudwatch_log_group.intake[0].name
+  }
+
+  depends_on = [aws_iam_role_policy.intake]
+}
+
+resource "aws_lambda_event_source_mapping" "intake" {
+  count                   = local.intake_on ? 1 : 0
+  event_source_arn        = aws_sqs_queue.signals[0].arn
+  function_name           = aws_lambda_function.intake[0].arn
+  batch_size              = 10
+  function_response_types = ["ReportBatchItemFailures"]
+}
+
+# A signal nobody could take in: it waits in the dead-letter queue for a person.
+resource "aws_cloudwatch_metric_alarm" "intake_dead_letters" {
+  count               = local.intake_on ? 1 : 0
+  alarm_name          = "${local.intake_name}-dead-letters"
+  alarm_description   = "Signals work-service could not take in, five tries each; they wait in ${local.intake_name}-dlq."
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  dimensions          = { QueueName = aws_sqs_queue.signals_dlq[0].name }
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = var.alarm_actions
+  ok_actions          = var.alarm_actions
+  tags                = local.tags
+}
+
+resource "aws_cloudwatch_metric_alarm" "intake_errors" {
+  count               = local.intake_on ? 1 : 0
+  alarm_name          = "${local.intake_name}-errors"
+  alarm_description   = "work-service's intake errored; the records are retried and may reach the dead-letter queue."
+  namespace           = "AWS/Lambda"
+  metric_name         = "Errors"
+  dimensions          = { FunctionName = aws_lambda_function.intake[0].function_name }
+  statistic           = "Sum"
+  period              = 900
+  evaluation_periods  = 1
+  threshold           = 3
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
   alarm_actions       = var.alarm_actions
   ok_actions          = var.alarm_actions
   tags                = local.tags

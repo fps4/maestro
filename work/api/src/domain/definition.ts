@@ -76,6 +76,21 @@ const application = z
     /** The human answerable for items about this application. Never moves once on an item. */
     accountable: human,
     environments: z.array(slug).min(1).default(['prod']),
+    /**
+     * The repositories the application is built from, each with the environment a fix must reach
+     * before its advisory is done — what the GitHub adapter reads to turn an alert into an item
+     * about this application, and whose deploy the item waits for.
+     */
+    repositories: z
+      .array(
+        z
+          .object({
+            repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, 'is <owner>/<repo>'),
+            environment: slug,
+          })
+          .strict(),
+      )
+      .default([]),
   })
   .strict();
 
@@ -180,6 +195,18 @@ export function parseWorkspaceDefinition(raw: unknown): WorkspaceDefinition {
     if (ids.has(app.id)) problems.push(`application \`${app.id}\` is declared twice`);
     ids.add(app.id);
   }
+  const repos = new Set<string>();
+  for (const app of d.applications) {
+    for (const r of app.repositories) {
+      if (!app.environments.includes(r.environment)) {
+        problems.push(
+          `application \`${app.id}\`: repository ${r.repository} names environment \`${r.environment}\`, which it does not have`,
+        );
+      }
+      if (repos.has(r.repository)) problems.push(`repository ${r.repository} belongs to two applications`);
+      repos.add(r.repository);
+    }
+  }
   const seats = new Set(Object.keys(d.seats));
   for (const [cls, s] of Object.entries(d.policy.offered_to)) {
     if (!seats.has(s)) problems.push(`policy.offered_to.${cls} names seat \`${s}\`, which is not declared`);
@@ -230,4 +257,16 @@ export function agentCeilingPermits(
   cls: RemediationClass,
 ): boolean {
   return (policy.ceilings[seatId]?.[lvl] ?? []).includes(cls);
+}
+
+/** The application a repository belongs to, and the environment its fixes must reach. */
+export function applicationOfRepository(
+  definition: WorkspaceDefinition,
+  repository: string,
+): { application: Application; environment: string } | undefined {
+  for (const application of definition.applications) {
+    const r = application.repositories.find((x) => x.repository.toLowerCase() === repository.toLowerCase());
+    if (r) return { application, environment: r.environment };
+  }
+  return undefined;
 }

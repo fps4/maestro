@@ -83,6 +83,19 @@ const schema = z.object({
     .regex(/^prn-w-[a-z0-9][a-z0-9._-]{0,62}$/, 'must be a workload principal id (prn-w-…)')
     .optional(),
 
+  /**
+   * The adapters (maestro docs/signals.md). They act as one workload — identity-service's id for the
+   * deployment's intake — admitted to the workspace in the `intake` seat. `INTAKE_WORKSPACE` is where
+   * the queue's signals land; a GitHub webhook names its workspace in its URL and proves itself with
+   * `GITHUB_WEBHOOK_SECRET`, without which the webhook route is not served.
+   */
+  INTAKE_PRINCIPAL: z
+    .string()
+    .regex(/^prn-w-[a-z0-9][a-z0-9._-]{0,62}$/, 'must be a workload principal id (prn-w-…)')
+    .optional(),
+  INTAKE_WORKSPACE: z.string().optional(),
+  GITHUB_WEBHOOK_SECRET: z.string().min(16, 'is at least 16 characters').optional(),
+
   /** How a chase-ladder step reaches a person: a log line, or a Slack incoming webhook. */
   NOTIFIER: z.enum(['log', 'slack']).default('log'),
   SLACK_WEBHOOK_URL: z.string().url().optional(),

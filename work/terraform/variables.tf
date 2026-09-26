@@ -44,6 +44,36 @@ variable "sweep_timeout_seconds" {
   default = 120
 }
 
+variable "intake" {
+  description = <<-EOT
+    The adapters' intake (maestro docs/signals.md). Null: none — no queue, no intake function, no
+    GitHub webhook. Otherwise:
+      principal          identity-service's workload id the adapters act as (prn-w-…), admitted to
+                         the workspace in the `intake` seat with an answerable human
+      workspace          where the queue's signals land (the webhook names its own in its URL)
+      signal_topic_arns  the applications' `<application>-<environment>-ops-signals` topics
+      deploy_sources     EventBridge `source` values on this account's default bus that are deploys
+    The GitHub webhook also needs GITHUB_WEBHOOK_SECRET, through `secrets`.
+  EOT
+  type = object({
+    principal         = string
+    workspace         = string
+    signal_topic_arns = optional(list(string), [])
+    deploy_sources    = optional(list(string), ["maestro.deploy"])
+  })
+  default = null
+  validation {
+    condition     = var.intake == null || can(regex("^prn-w-[a-z0-9][a-z0-9._-]{0,62}$", var.intake.principal))
+    error_message = "intake.principal is a workload principal id: prn-w-…"
+  }
+}
+
+variable "intake_package" {
+  description = "Path to the intake's zip (bundle/intake.zip), when `intake` is set."
+  type        = string
+  default     = null
+}
+
 variable "web_adapter_layer_arn" {
   description = "The AWS Lambda Web Adapter layer for the region and for arm64 (`LambdaAdapterLayerArm64`), published by AWS under its own account — which is why it is an input and not a default: https://github.com/awslabs/aws-lambda-web-adapter#lambda-functions-packaged-as-zip-package-for-aws-managed-runtimes."
   type        = string
@@ -139,4 +169,14 @@ variable "alarm_actions" {
 variable "tags" {
   type    = map(string)
   default = {}
+}
+
+variable "intake_memory_mb" {
+  type    = number
+  default = 512
+}
+
+variable "intake_timeout_seconds" {
+  type    = number
+  default = 60
 }

@@ -83,7 +83,8 @@ that boots.
 | `<name>-api` | the Fastify server behind the Lambda Web Adapter and an HTTP API Gateway; `RECORD_SINK=off` |
 | `<name>-relay` | the spine's relay handler over the outbox, every minute, one at a time |
 | `<name>-sweep` | the clocks: leases, chase-ladder steps through the notifier, breaches, expiry — every minute, one at a time, acting as `sweep_principal` |
-| six alarms | API 5xx; relay errors, silent, refused; sweep errors, silent |
+| `<name>-intake` (when `intake` is set) | the adapters over one SQS queue that the applications' `ops-signals` topics and the `maestro.deploy` EventBridge rule feed; failed records retried alone, then a dead-letter queue. The API serves the GitHub webhook (`/v1/workspaces/<ws>/adapters/github`, HMAC with `GITHUB_WEBHOOK_SECRET`) as the same workload |
+| alarms | API 5xx; relay errors, silent, refused; sweep errors, silent; intake errors, dead letters |
 
 Inputs are specs-service's module's (`name`, `table_name`, `bucket_name`, `api_package`,
 `relay_package`, `web_adapter_layer_arn`, `environment`, `secrets`, `archive`, …) plus
@@ -92,7 +93,7 @@ writer, so two components relaying the same workspace slug into the same prefix 
 second one's `seq 1` is refused. Give this component its own prefix, and a sealer that seals it.
 
 ```bash
-cd api && npm ci && npm run bundle && npm run sbom   # bundle/{api,relay,sweep}.zip, SBOMs beside them
+cd api && npm ci && npm run bundle && npm run sbom   # bundle/{api,relay,sweep,intake}.zip, SBOMs beside them
 ```
 
 ## Status
@@ -101,7 +102,9 @@ M2 in progress: the work item — raise, claim with authority checked, release, 
 frontier, the rates, the rebuild — and its clocks — leases and heartbeats, the chase ladder through
 the notifier (a log line locally, a Slack webhook on AWS), breaches, expiry, the sweep — are in.
 Signals intake (the envelope; dedup by delivery and fingerprint; the weekly fold) and evidence (link,
-facts, closure on evidence) are in. The source adapters and the MCP tracker contract follow. See maestro's [roadmap](https://github.com/fps4/maestro/blob/main/docs/roadmap.md).
+facts, closure on evidence) are in. So are the source adapters: GitHub (Dependabot alerts, its pull requests, merges), CloudWatch alarms
+through the applications' `ops-signals` topics, and deploy events through EventBridge. The MCP tracker
+contract follows. See maestro's [roadmap](https://github.com/fps4/maestro/blob/main/docs/roadmap.md).
 
 ## Licence
 

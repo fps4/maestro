@@ -54,6 +54,19 @@ mock_provider "aws" {
       id = "integ000"
     }
   }
+  mock_resource "aws_sqs_queue" {
+    override_during = plan
+    defaults = {
+      arn = "arn:aws:sqs:eu-west-1::maestro-work-intake"
+      id  = "https://sqs.eu-west-1.amazonaws.com/maestro-work-intake"
+    }
+  }
+  mock_resource "aws_cloudwatch_event_rule" {
+    override_during = plan
+    defaults = {
+      arn = "arn:aws:events:eu-west-1::rule/maestro-work-intake-deploys"
+    }
+  }
   mock_data "aws_secretsmanager_secret_version" {
     defaults = {
       secret_string = "mocked-secret-value"
@@ -395,4 +408,61 @@ run "sweep_principal_is_a_workload" {
     sweep_principal = "prn-h-someone"
   }
   expect_failures = [var.sweep_principal]
+}
+
+run "no_intake_by_default" {
+  command = plan
+  assert {
+    condition     = length(aws_lambda_function.intake) == 0 && length(aws_sqs_queue.signals) == 0 && !contains(keys(aws_lambda_function.api.environment[0].variables), "INTAKE_PRINCIPAL")
+    error_message = "no intake unless the tenant asks for one"
+  }
+}
+
+run "intake" {
+  command = plan
+  variables {
+    intake_package = "./tests/fixtures/app.zip"
+    intake = {
+      principal         = "prn-w-intake-demo"
+      workspace         = "aannemer-x"
+      signal_topic_arns = ["arn:aws:sns:eu-west-1::app1-prod-ops-signals"]
+    }
+  }
+  assert {
+    condition     = aws_lambda_function.intake[0].environment[0].variables["INTAKE_PRINCIPAL"] == "prn-w-intake-demo" && aws_lambda_function.intake[0].environment[0].variables["INTAKE_WORKSPACE"] == "aannemer-x" && aws_lambda_function.intake[0].environment[0].variables["SLACK_WEBHOOK_URL"] == "mocked-secret-value"
+    error_message = "the intake acts as the named workload in the named workspace, with the service's configuration"
+  }
+  assert {
+    condition     = aws_lambda_function.api.environment[0].variables["INTAKE_PRINCIPAL"] == "prn-w-intake-demo"
+    error_message = "the API's GitHub webhook acts as the same workload"
+  }
+  assert {
+    condition     = contains(aws_lambda_event_source_mapping.intake[0].function_response_types, "ReportBatchItemFailures") && aws_sqs_queue.signals[0].visibility_timeout_seconds == 360
+    error_message = "a failed record is retried alone, and never while the function still holds it"
+  }
+  assert {
+    condition     = length(aws_sns_topic_subscription.signals) == 1 && aws_sns_topic_subscription.signals["arn:aws:sns:eu-west-1::app1-prod-ops-signals"].protocol == "sqs"
+    error_message = "one subscription per application topic"
+  }
+  assert {
+    condition     = strcontains(aws_cloudwatch_event_rule.deploys[0].event_pattern, "maestro.deploy")
+    error_message = "deploy events are routed to the queue"
+  }
+  assert {
+    condition     = strcontains(aws_iam_role_policy.intake[0].policy, "sqs:DeleteMessage") && !strcontains(aws_iam_role_policy.intake[0].policy, "dynamodb:Scan")
+    error_message = "the intake reads and deletes its queue and writes the table, never Scan"
+  }
+  assert {
+    condition     = aws_cloudwatch_metric_alarm.intake_dead_letters[0].threshold == 1
+    error_message = "one dead letter is an alarm"
+  }
+}
+
+run "intake_principal_is_a_workload" {
+  command = plan
+  variables {
+    intake_package = "./tests/fixtures/app.zip"
+    intake         = { principal = "prn-h-someone", workspace = "x" }
+  }
+  expect_failures = [var.intake]
 }

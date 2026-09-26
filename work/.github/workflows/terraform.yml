@@ -74,6 +74,7 @@ jobs:
         run: |
           node -e "import('./bundle/relay/index.mjs').then(m => { if (typeof m.handler !== 'function') { console.error('relay: no handler'); process.exit(1) } console.log('relay: handler ok') })"
           node -e "import('./bundle/sweep/index.mjs').then(m => { if (typeof m.handler !== 'function') { console.error('sweep: no handler'); process.exit(1) } console.log('sweep: handler ok') })"
+          node -e "import('./bundle/intake/index.mjs').then(m => { if (typeof m.handler !== 'function') { console.error('intake: no handler'); process.exit(1) } console.log('intake: handler ok') })"
           set +e
           (cd bundle/api && PORT=18080 TABLE_NAME=smoke DYNAMODB_ENDPOINT='http://127.0.0.1:1' AWS_REGION=eu-west-1 RECORD_SINK=off PAYLOAD_STORE=local \
             bash run.sh > ../api-boot.log 2>&1)

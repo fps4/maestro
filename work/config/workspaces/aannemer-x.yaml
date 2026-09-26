@@ -25,6 +25,9 @@ applications:
     onboarding_level: n2
     accountable: prn-h-demo-owner
     environments: [staging, prod]
+    # An advisory against this repository is done when its fix reaches prod.
+    repositories:
+      - { repository: aannemer-x/app1, environment: prod }
   # Operated: maestro commits availability and response, never correctness. A patch here is the
   # owner's act, taken in their own process.
   - id: app2

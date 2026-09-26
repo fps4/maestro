@@ -31,7 +31,7 @@ export interface Harness {
 export async function harness(
   name: string,
   now = '2026-09-25T08:00:00Z',
-  options: { notifier?: Notifier } = {},
+  options: { notifier?: Notifier; env?: Record<string, string> } = {},
 ): Promise<Harness> {
   const dir = await mkdtemp(join(tmpdir(), `work-${name}-`));
   const table = `work-test-${name}-${Math.random().toString(36).slice(2, 8)}`;
@@ -46,6 +46,7 @@ export async function harness(
     RECORD_PAYLOAD_DIR: join(dir, 'payloads'),
     RECORD_SINK_INTERVAL_MS: '3600000',
     SWEEP_MODE: 'off',
+    ...options.env,
   });
   const client = dynamoClientFor(config);
   await createTable(client, table);

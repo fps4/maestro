@@ -19,6 +19,9 @@ import { EVIDENCE_KINDS, ITEM_CLASSES, REMEDIATION_CLASSES, STATES } from '../do
 import type { PayloadStore } from '../record/payload-store.js';
 import { factKeys, type Fact } from '../domain/evidence.js';
 import { signalSchema } from '../domain/intake.js';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { fromGitHub } from '../domain/adapters.js';
+import { AdapterService, intakeScope } from '../services/adapters.js';
 import { IntakeService } from '../services/intake.js';
 import { scopeOf, WorkItemService } from '../services/work-items.js';
 import { WorkspaceRegistry } from '../services/workspaces.js';
@@ -180,6 +183,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
   const workspaces = new WorkspaceRegistry(deps.store);
   const items = new WorkItemService({ store: deps.store, payloads: deps.payloads, workspaces, now });
   const intake = new IntakeService(items);
+  const adapters = new AdapterService(items);
 
   app.get('/health', async () => ({ status: 'ok' }));
 
@@ -239,6 +243,39 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     return intake.fact(scopeOf(ctx), factOf(factSchema.parse(request.body)));
   });
 
+  // The GitHub webhook: served only where a secret is configured. GitHub proves itself with an
+  // HMAC over the exact bytes it sent, so this route keeps the raw body; everything it records is the
+  // intake workload's act.
+  const secret = deps.config.GITHUB_WEBHOOK_SECRET;
+  const intakePrincipal = deps.config.INTAKE_PRINCIPAL;
+  if (secret && intakePrincipal) {
+    await app.register(async (hook) => {
+      hook.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) =>
+        done(null, body),
+      );
+      hook.post<WsParams>('/v1/workspaces/:ws/adapters/github', async (request, reply) => {
+        const raw = typeof request.body === 'string' ? request.body : '';
+        if (!verifyGitHub(secret, raw, request.headers['x-hub-signature-256'])) {
+          return reply.code(401).send({
+            error: 'Unauthenticated',
+            message: 'The signature does not match this webhook’s secret.',
+          });
+        }
+        const event = String(request.headers['x-github-event'] ?? '');
+        const delivery = String(request.headers['x-github-delivery'] ?? '');
+        if (!/^[A-Za-z0-9-]{1,64}$/.test(delivery)) {
+          return reply
+            .code(400)
+            .send({ error: 'invalid', message: 'X-GitHub-Delivery is missing or malformed.' });
+        }
+        const scope = await intakeScope(deps.store, request.params.ws, intakePrincipal);
+        const definition = await workspaces.current(request.params.ws);
+        const result = await adapters.apply(scope, fromGitHub(definition, event, delivery, JSON.parse(raw)));
+        return reply.code(202).send(result);
+      });
+    });
+  }
+
   /** The holder renews its lease. */
   app.post<ItemParams>('/v1/workspaces/:ws/items/:id/heartbeat', async (request) => {
     const ctx = await contextFor(deps, request);
@@ -276,4 +313,12 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     const { application } = z.object({ application: z.string().min(1) }).parse(request.query);
     return items.rates(ctx, application);
   });
+}
+
+/** GitHub's `X-Hub-Signature-256`: `sha256=` and the HMAC of the body, compared in constant time. */
+export function verifyGitHub(secret: string, raw: string, header: unknown): boolean {
+  if (typeof header !== 'string' || !header.startsWith('sha256=')) return false;
+  const expected = Buffer.from(`sha256=${createHmac('sha256', secret).update(raw).digest('hex')}`);
+  const given = Buffer.from(header);
+  return given.length === expected.length && timingSafeEqual(given, expected);
 }

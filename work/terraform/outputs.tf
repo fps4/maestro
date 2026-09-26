@@ -37,3 +37,13 @@ output "relay_function_name" {
 output "sweep_function_name" {
   value = aws_lambda_function.sweep.function_name
 }
+
+output "intake_queue_arn" {
+  description = "The adapters' queue, for a tenant that adds its own sources."
+  value       = local.intake_on ? aws_sqs_queue.signals[0].arn : null
+}
+
+output "github_webhook_url" {
+  description = "Where a repository's webhook points, per workspace: <api_url>/v1/workspaces/<workspace>/adapters/github."
+  value       = local.intake_on ? "${aws_apigatewayv2_api.api.api_endpoint}/v1/workspaces/${var.intake.workspace}/adapters/github" : null
+}

@@ -3,12 +3,13 @@
 // changes when the code does. Output: bundle/<name>/ and bundle/<name>.zip — outside dist/, which
 // is what `npm run build` emits for the container image; the bundle is what terraform/ deploys.
 //
-// Three functions (maestro ADR-0002, ADR-0016):
+// Four functions (maestro ADR-0002, ADR-0016):
 //   api    the Fastify server, unchanged, behind the Lambda Web Adapter. For a zip package on a
 //          managed runtime the adapter is a layer, `AWS_LAMBDA_EXEC_WRAPPER=/opt/bootstrap` starts
 //          it, and the handler is a script that starts the server — `run.sh`, added here.
 //   relay  the spine's relay over this service's outbox, on a schedule: `index.handler`.
 //   sweep  the clocks over every workspace's open items, on a schedule: `index.handler`.
+//   intake the adapters over the signals queue (SNS topics, EventBridge rules): `index.handler`.
 import { build } from 'esbuild';
 import { execFileSync } from 'node:child_process';
 import { chmod, mkdir, rm, utimes, writeFile } from 'node:fs/promises';
@@ -18,6 +19,7 @@ const FUNCTIONS = {
   api: { entry: 'src/index.ts', extra: { 'run.sh': '#!/bin/bash\nexec node index.mjs\n' } },
   relay: { entry: 'src/relay/lambda.ts', extra: {} },
   sweep: { entry: 'src/sweep/lambda.ts', extra: {} },
+  intake: { entry: 'src/intake/lambda.ts', extra: {} },
 };
 const EPOCH = new Date('2020-01-01T00:00:00Z');
 

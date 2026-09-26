@@ -28,7 +28,7 @@ Each scenario is run on the first tenant (fps4's own deployment, [first-deployme
 | **Commitments** | | | |
 | W1 | An item is raised, assigned, closed with an outcome, and read back identically after a rebuild from the archive. | [work-service](components/work-service.md#acceptance) | in code |
 | W2 | A patch-class claim on an N1 application is refused at claim, closes `escalated_out`, and the rate is one call. | [work-service](components/work-service.md#acceptance) | **passed live 2026-09-26**: the test agent's patch claim on the fixture (`wrk-3`) refused by `onboarding`, closed `escalated_out`, counted in `/rates` |
-| W3 | A deadline-bearing item chases, escalates and breaches on schedule; every step's delivery is recorded. | [work-service](components/work-service.md#acceptance) | in code; live run started 2026-09-26 (`wrk-4`, P1 on identity-service: `respond_by` breached on time, the ladder under way, `resolve_by` 19:58Z) |
+| W3 | A deadline-bearing item chases, escalates and breaches on schedule; every step's delivery is recorded. | [work-service](components/work-service.md#acceptance) | **passed live 2026-09-26**: a P1 on identity-service (`wrk-4`, sev1 tier1): `respond_by` breached 16:14Z; reminder 16:47, chase 17:35, escalate_accountable 18:23, escalate_steward 19:11, each `delivered`; `resolve_by` breached 19:59Z — each within the sweep's minute |
 | W4 | An agent's lease expires and the item returns to `open` with a reason; `accountable` never changes. | [work-service](components/work-service.md#acceptance) | **passed live 2026-09-26**: the test agent's lease on `wrk-5` expired at 16:28Z; the sweep released it (`lease_expired`) and the item returned to `open`, `accountable` the same on every event |
 | W5 | **The advisory lane with no agent:** advisory → item → Dependabot's PR → a person's merge → deploy event → re-scan → closed `done` on evidence. Medium and low findings fold into one weekly obligation. | [use-cases.md](use-cases.md#uc1b--the-advisory-lane) | **passed live 2026-09-26** on the fixture: `semver` high → `wrk-2`, Dependabot's #23 linked; merged 12:58:51Z, re-scan clear 12:58:55Z, deploy 12:59:39Z → closed `done`, never claimed. `ms` medium and `debug` low → the week's obligation `wrk-1`, closed `done` when both re-scanned clear |
 | W6 | A skill written against the tracker contract runs its acceptance suite green against the MCP server. | [work-service](components/work-service.md#acceptance) | in code |
@@ -58,7 +58,7 @@ What the first live run found and fixed: two IAM grants DynamoDB Local could not
 
 | Still to build | |
 |---|---|
-| The console deployed: its bundle, the module's Web Adapter shape, the tenant's host name behind its CDN ([ADR-0026](decisions/0026-the-console-behind-the-tenants-edge.md)) | building |
+| The console deployed: its bundle, the module's Web Adapter shape, the tenant's host name behind its CDN ([ADR-0026](decisions/0026-the-console-behind-the-tenants-edge.md)) | deployed on the first tenant 2026-09-26 (its execute-api name); the host name waits on its certificate's DNS record |
 | The Secrets Manager extension in place of secret values in Terraform state | values in state are accepted until then (ADR-0017); the extension lands before the GitHub App's key, with agent runs |
 | identity-service: an enumeration endpoint for a realm's principals, for the registry to reconcile | small |
 

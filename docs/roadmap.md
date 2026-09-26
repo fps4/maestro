@@ -81,7 +81,7 @@ The artifact ledger and the instance register, fed by deploy events ([ADR-0011](
 
 ### The console: to build
 
-One console per deployment, growing from specs-service's (`specs/web`), with every surface in [ux.md](ux.md) ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)). To build: Today (decide, answer, owed, agents at work, with the alert marks), Owed (the frontier), the work item and the board; then the run page and the estate. Its OpenNext bundle, deployed through `console/terraform`, is the foundation item above.
+One console per deployment, `console/web` (grown from specs-service's, moved 2026-09-26), with every surface in [ux.md](ux.md) ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)). To build: Today (decide, answer, owed, agents at work, with the alert marks), Owed (the frontier), the work item and the board; then the run page and the estate. Its OpenNext bundle, deployed through `console/terraform`, is the foundation item above.
 
 ### Agent runs (agent-service and the runner): to build
 

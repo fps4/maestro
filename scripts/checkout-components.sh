@@ -3,7 +3,7 @@
 # $COMPONENTS is a JSON map of component to git ref, e.g. {"maestro":"v0.4.0"}. Each
 # fps4/<component> lands under components/<component>/; every package in it that has a lockfile
 # (build-standards §3), up to two directories down — maestro's spine/, signals/cdk/, specs/api/,
-# specs/web/, work/api/ (ADR-0020) — gets `npm ci`, then `npm run build` and `npm run bundle` where those
+# console/web/, work/api/ (ADR-0020) — gets `npm ci`, then `npm run build` and `npm run bundle` where those
 # scripts exist. The tenant's root modules then reference components/<component>/... by path.
 set -euo pipefail
 

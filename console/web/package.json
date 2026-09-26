@@ -1,8 +1,8 @@
 {
-  "name": "@fps4/maestro-specs-web",
+  "name": "@fps4/maestro-console",
   "version": "0.1.0",
   "private": true,
-  "description": "The maestro-specs console — author, review, decide, and read the standards a record is judged against.",
+  "description": "The maestro-specs console \u2014 author, review, decide, and read the standards a record is judged against.",
   "license": "MIT",
   "scripts": {
     "dev": "next dev -p 8021",

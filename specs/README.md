@@ -75,7 +75,6 @@ And a draft is **one document**: markdown with front-matter, where a table under
 ```
 specs/
  ├── api/              # REST API + MCP server. domain/ is pure; a lint rule keeps it that way
- ├── web/              # The console (Next.js) — author, review, decide, read the standards
  ├── config/workspaces/  # THE domain model, as data: the demo tenant (aannemer-x) and the catalogue
  ├── infra/docker/     # Dockerfiles + compose — the local loop and CI, not a deployment target
  ├── terraform/        # The module a tenant's root deploys: the table, the store, the API, the relay

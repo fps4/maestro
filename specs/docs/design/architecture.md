@@ -557,7 +557,7 @@ tests driving DynamoDB Local, since the meaningful behaviour here is integration
 transaction that half-applies, a pin that resolves against stored state, a prefix that stops a
 query crossing a boundary.
 
-**The repository layout is `api/` and `web/`**, each with its own `package.json`, lockfile and
+**The repository layout is `api/` and `web/`** (the console has since moved to maestro's `console/web`, maestro ADR-0023), each with its own `package.json`, lockfile and
 Dockerfile, plus `infra/docker/`, `config/` and `docs/`. There is deliberately no npm workspace: each
 image's build context is streamed to the Docker daemon on the CI runner, and independent lockfiles
 keep those contexts small and the two builds genuinely independent.

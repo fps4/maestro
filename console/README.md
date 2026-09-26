@@ -4,7 +4,7 @@ A Next.js console on AWS, the way [ADR-0002](../docs/decisions/0002-serverless-a
 put it — OpenNext to Lambda and CloudFront — as the Terraform module
 [ADR-0016](../docs/decisions/0016-terraform-is-the-infrastructure-language.md) left open: maestro's
 own, not the community one. Every component with a console calls it once from the tenant's root:
-identity-service's `console/` and specs-service's `web/` today.
+identity-service's `console/` and maestro's own console, [`web/`](web/) (ADR-0023: one per deployment, grown from specs-service's).
 
 ```
 terraform/            the module; examples/demo is the demo tenant's specs-service console
@@ -122,7 +122,7 @@ module "specs_console" {
   providers = { aws = aws, aws.us_east_1 = aws.us_east_1 }
 
   name               = "maestro-specs-console"
-  open_next_dir      = "${path.module}/../../components/maestro/specs/web/.open-next"
+  open_next_dir      = "${path.module}/../../components/maestro/console/web/.open-next"
   assets_bucket_name = var.specs_console_assets_bucket
   environment        = { API_PROXY_TARGET = module.specs.api_url }
   domain             = "specs.${var.domain}"

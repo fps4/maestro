@@ -1,4 +1,5 @@
-# The console image. Build context is the repository root (compose sets `context: ../..`).
+# The console image (maestro ADR-0023: one console per deployment). Build context is `console/`;
+# specs-service's compose builds it from there for the local loop.
 #
 # As with the api image, the build stage IS the gate — typecheck, lint, tests and the production
 # build. The runtime stage serves the standalone output.

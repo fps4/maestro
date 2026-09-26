@@ -173,7 +173,7 @@ Outside the contract, for the principal holding an item: `heartbeat` (renew the 
 | Port | Local default | AWS |
 |---|---|---|
 | record sink | outbox in DynamoDB | relay → spine |
-| notifier | log line | SES; Slack webhook |
+| notifier | log line | the step on the item, shown on Today ([ADR-0023](../decisions/0023-maestro-alerts-in-its-one-console.md)) |
 | signals intake | HTTP | SQS from SNS / EventBridge / GitHub |
 | authority resolver | policy in the definition | + runtime-service for the instance's level and tier |
 | object storage | MinIO | S3 |

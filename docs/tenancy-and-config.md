@@ -32,8 +32,9 @@ deploy/aws/               the root module for the tenant's account; backend.hcl 
 deploy/local/             the same modules against LocalStack; local state, disposable
 workspaces/*.yaml         workspace definitions in the tenant's vocabulary (types, gates, labels)
 policy.yaml               severity × tier → clocks; agent ceilings; chase ladders; the SEV↔P mapping
-adapters.yaml             notifier targets by name (Slack channel id, SES sender); signal sources (topic ARNs)
+adapters.yaml             notifier targets by name (Slack channel id, SES sender; unused in the MVP, ADR-0023); signal sources (topic ARNs)
 applications/*.yaml       the tenant's applications: name, environments, tier, onboarding level, topic ARN
+apps/<application>/       optional: an application the tenant owns and deploys from here, with its own workflow, e.g. a fixture it observes
 secrets.md                the *names* of secrets in Secrets Manager / SSM — never values
 ```
 

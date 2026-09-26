@@ -9,13 +9,13 @@ Every component depends on **identity-service** at runtime and on nothing else. 
 | Component | Required dependency | Ports (local default → AWS adapter) | References by id |
 |---|---|---|---|
 | [identity-service](components/identity-service.md) | — | database; object storage | — |
-| [specs-service](components/specs-service.md) | identity-service | record sink (outbox → relay); evaluator (facet schema → HTTP); notifier (log → SES/Slack); object storage (MinIO → S3) | — |
+| [specs-service](components/specs-service.md) | identity-service | record sink (outbox → relay); evaluator (facet schema → HTTP); notifier (log → the console); object storage (MinIO → S3) | — |
 | [work-service](components/work-service.md) | identity-service | record sink; notifier; signals intake (HTTP → SQS from SNS/EventBridge/GitHub); authority resolver (built-in → specs-service gates) | the version an item closes on; the instance it is about; the run discharging it |
 | [runtime-service](components/runtime-service.md) | identity-service | record sink; deploy intake (HTTP → EventBridge/SQS); scan intake (ECR/Inspector) | the version an instance realises; the decision that released it |
 | [agent-service](components/agent-service.md) | identity-service | record sink; run-event intake (HTTP → runner); transcript store (MinIO → S3) | the item or draft a run is about |
 | [the spine](components/spine.md) | — | archive (MinIO → S3); delivery (in-process → SNS/SQS) | — |
 
-**Interfaces.** Every component exposes a console, an HTTP API, and an MCP server over its own workspace data. There is no MCP gateway: a gateway would be a shared service seeing every tenant's runtime data. `maestro-skills`, the Claude Code plugin, registers all of them per repository.
+**Interfaces.** Every component exposes an HTTP API and an MCP server over its own workspace data, and its screens in the deployment's one console ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)). There is no MCP gateway: a gateway would be a shared service seeing every tenant's runtime data. `maestro-skills`, the Claude Code plugin, registers all of them per repository.
 
 **What flows where.** Signals arrive at work-service; deploys arrive at runtime-service; run events arrive at agent-service; decisions are made in specs-service. Everything any of them records leaves through its outbox to the spine, and every other component that needs it reads it from there.
 
@@ -81,7 +81,7 @@ Per tenant, one Terraform root module composing the components' modules:
 | Database | DynamoDB, one table per component, the module's own ([ADR-0018](decisions/0018-dynamodb-is-the-mvp-database.md)) |
 | Identity | identity-service on Lambda, one realm |
 | Intake | SQS queues subscribed to tenant applications' `ops-signals` topics; EventBridge bus for deploys and findings |
-| Notification | SES; Slack webhook |
+| Notification | the console's Today ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)); Slack and email after the MVP |
 | Runner | GitHub Actions, GitHub-hosted, under an agent principal |
 
 The root module lives in, and is parameterised by, `fps4/maestro-<tenant>` ([tenancy-and-config.md](tenancy-and-config.md)). Nothing in the public repositories names a tenant.

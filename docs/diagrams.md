@@ -56,7 +56,7 @@ sequenceDiagram
 
     App->>WK: signal (SNS ops-signals)
     WK->>WK: severity from policy → remediation item, clocks
-    WK-->>H: Slack: SEV2 · item link
+    WK-->>H: Today: SEV2 item, marked
     AG->>WK: claim (authority checked)
     AG->>SP: propose cause_analysis
     SP-->>H: decision page
@@ -102,7 +102,7 @@ flowchart LR
         Q --> N[normalise · dedup · correlate]
         N --> POL[severity from policy<br/>clocks · ceilings]
         POL --> ITEM[work item]
-        ITEM --> NOTIFY[Slack / SES with item link]
+        ITEM --> NOTIFY[Today in the console]
         HB[heartbeat clock<br/>silence] --> N
         ADV[GitHub advisories] --> N
     end

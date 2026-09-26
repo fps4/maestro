@@ -1,6 +1,6 @@
 # UX — the surfaces
 
-What a person sees, and the rules every screen obeys. The components have their own consoles (specs-service's exists; work-service's, agent-service's and runtime-service's are to build); one landing page ties them together. This page is the record of the surface decisions; a design canvas outside the repositories renders them and is redrawn when this page changes, not the other way round. The current canvas is the one accepted on 2026-09-19 ([below](#the-redraw--accepted-2026-09-19)).
+What a person sees, and the rules every screen obeys. A deployment has one maestro console holding every component's screens, with Today as its landing ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)); specs-service's screens exist, and it grows from them. This page is the record of the surface decisions; a design canvas outside the repositories renders them and is redrawn when this page changes, not the other way round. The current canvas is the one accepted on 2026-09-19 ([below](#the-redraw--accepted-2026-09-19)).
 
 ## Rules
 
@@ -19,7 +19,7 @@ What a person sees, and the rules every screen obeys. The components have their 
 
 | Screen | Component · milestone | Carries | State |
 |---|---|---|---|
-| **Today** | work-service console | Decide · Answer · Owed · Agents at work | designed 2026-09-19 |
+| **Today** | the console | Decide · Answer · Owed · Agents at work | designed 2026-09-19 |
 | **Register** | specs-service | lineage, type, phase, state, open questions, last decision, version, updated | built; demo content re-seeded to the MVP types |
 | **The document** | specs-service | one text; beside it *what the gate will read*, derived; *ask an assistant* drafts into the document and never proposes | built |
 | **The decision page** | specs-service | rule 5; phone-first | built |

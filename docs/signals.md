@@ -10,7 +10,7 @@
 | DLQ depth, error-rate and latency alarms on its own functions and queues | Dedup by `fingerprint` within a window; correlate a storm into one item |
 | Its own failure monitor, publishing with a severity hint | **Severity from policy**: hint × application tier → SEV1–4; maestro may raise or lower, and records why |
 | **One SNS topic per application per environment, `ops-signals`** — the application's public ops interface. Alarm actions *and OK actions* target it; the subscription policy admits the maestro account; anything else may subscribe too | Clocks, chase ladders, ceilings, evidence plans — the work item |
-| Resource tags `maestro:application`, `maestro:environment`, `maestro:tier` so a signal identifies its instance without a lookup | Routing to people once it is an item, with the item link. **One alert, one owner:** once maestro subscribes, the application's direct Slack alert for the same signal retires |
+| Resource tags `maestro:application`, `maestro:environment`, `maestro:tier` so a signal identifies its instance without a lookup | Routing to people once it is an item: in the MVP, the item on the person's Today in maestro's console ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)). The application keeps its own paging until a push channel exists; then **one alert, one owner** — the application's direct alert for the same signal retires |
 | Deploy events to EventBridge from the pipeline: artifact digest, environment, commit, actor | What the application cannot see about itself: **silence** (heartbeat expired), estate-wide drift, GitHub advisories, ECR/Inspector findings, cross-account patterns |
 | — | Maintenance windows and suppression, declared here because maestro is what pages |
 

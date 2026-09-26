@@ -26,5 +26,6 @@ Architecture decision records, numbered from 0001. Each states context in a few 
 | [0020](0020-maestros-own-services-live-in-one-repository.md) | maestro's own services live in `fps4/maestro`; a repository is earned by a consumer outside maestro | accepted |
 | [0021](0021-a-tenants-repository-is-maestro-tenant.md) | A tenant's repository is `fps4/maestro-<tenant>`; a tenant is never named after a component | proposed |
 | [0022](0022-one-mvp-built-whole.md) | One MVP, built whole: no milestones, one acceptance list | proposed |
+| [0023](0023-maestro-alerts-in-its-one-console.md) | maestro alerts in its console only in the MVP; a deployment has one console | proposed |
 
 specs-service's own decision log moved with it to [`specs/docs/decisions/`](../../specs/docs/decisions/) (ADR-0001–0022 there) and is closed: its records are cited as "specs-service ADR-00NN", and every new decision, whatever it is about, is recorded here ([ADR-0020](0020-maestros-own-services-live-in-one-repository.md)).

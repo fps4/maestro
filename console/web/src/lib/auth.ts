@@ -77,7 +77,7 @@ export async function signIn(email: string, password: string): Promise<void> {
 
   let response: Response;
   try {
-    response = await fetch(`${IDENTITY_BASE_URL}/oauth/token`, {
+    response = await fetch(`${IDENTITY_BASE_URL}/oauth2/token`, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -141,7 +141,7 @@ export async function refreshSession(): Promise<string | null> {
   if (!refresh || !IDENTITY_BASE_URL || !IDENTITY_CLIENT_ID) return null;
 
   try {
-    const response = await fetch(`${IDENTITY_BASE_URL}/oauth/token`, {
+    const response = await fetch(`${IDENTITY_BASE_URL}/oauth2/token`, {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({

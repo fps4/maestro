@@ -120,7 +120,7 @@ jobs:
         run: |
           docker run --rm ms-ci-audit:${{ github.run_id }}-${{ github.run_attempt }} bash -lc '
             set -e
-            for pkg in api web; do
+            for pkg in api; do
               echo "::group::$pkg"
               (cd $pkg && npm audit --omit=dev || true)
               (cd $pkg && npm audit --omit=dev --audit-level=high)

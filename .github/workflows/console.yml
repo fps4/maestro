@@ -17,6 +17,21 @@ jobs:
         if: always()
         run: docker rmi "mc-web:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true
 
+  dependency-scan:
+    # Known vulnerabilities in what the console ships. High and above fails; the report is printed
+    # either way so a moderate finding is visible without blocking.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: console/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm audit --omit=dev || true
+      - run: npm audit --omit=dev --audit-level=high
+
   terraform:
     runs-on: ubuntu-latest
     defaults:

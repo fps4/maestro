@@ -20,7 +20,7 @@ Detect, classify, record, analyse, fix, deploy — with a person at exactly thre
 
 ## UC1b · The advisory lane
 
-Dependabot, code-scanning, Trivy-in-CI and Inspector findings → remediation. Same mechanism as UC1; five things differ, and it is the acceptance gate of M2 and M3.
+Dependabot, code-scanning, Trivy-in-CI and Inspector findings → remediation. Same mechanism as UC1; five things differ, and it carries the MVP's acceptance scenarios W5 and A2.
 
 | Differs in | The lane |
 |---|---|
@@ -29,7 +29,7 @@ Dependabot, code-scanning, Trivy-in-CI and Inspector findings → remediation. S
 | **Clocks and noise** | Patch latency is a commitment: `resolve_by` from advisory severity × reachability × application tier. Critical and high → one item each, now. Medium and low → folded into a weekly `obligation`, or the board is nothing but bumps. Policy rows, not code. |
 | **Authority at claim** | Merging a bump is a patch-class act. On an N2 application an agent with `merge · patch` in its ceiling may merge a green, patch-level bump; on N1 it is refused at claim and escalated to the answerable person. Minor and major bumps are always a person's merge. |
 | **Evidence and the honest no** | `done` needs the merged change, the deploy event, and the advisory no longer reported against the deployed digest — a re-scan event. `refused` with a reason is the VEX case: not affected, unreachable — recorded, so the finding does not return next week. |
-| **Fan-out** | One advisory touches every image carrying the dependency. Per repository Dependabot does this; across the estate it needs the SBOMs runtime-service holds. Until M4 the lane is per repository; after, one parent item with a child per affected instance. |
+| **Fan-out** | One advisory touches every image carrying the dependency. Per repository Dependabot does this; across the estate it needs the SBOMs runtime-service holds. Until runtime-service holds the SBOMs the lane is per repository; after, one parent item with a child per affected instance. |
 
 ## UC2 · Every run visible
 

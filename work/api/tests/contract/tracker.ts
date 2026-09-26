@@ -1,6 +1,6 @@
 /**
  * The tracker contract as a skill sees it, and the skill's acceptance suite (maestro
- * docs/components/work-service.md, "Interfaces"; M2 build gate 6).
+ * docs/components/work-service.md, "Interfaces"; the MVP's acceptance scenario W6).
  *
  * `Tracker` is the six operations and nothing else — publish, fetch, claim, resolve, frontier,
  * blocking — in the contract's own words. The suite is written against it alone: it names no route,

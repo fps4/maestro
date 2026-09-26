@@ -1,7 +1,7 @@
 /**
  * The record sink end to end (ADR-0019): what the service emits is the spine's envelope, the
  * relay carries it unchanged into the archive, and the spine's verifier — with the service off —
- * passes on what was sealed. This is maestro's M1 gate 1 from this side of the seam.
+ * passes on what was sealed. This is maestro's acceptance scenario R1 from this side of the seam.
  */
 
 import { readFile } from 'node:fs/promises';

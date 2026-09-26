@@ -47,7 +47,7 @@ Spine → identity-service → specs-service in one apply; the modules order the
 3. **Apply the workspaces** to specs-service — the catalogue and the tenant's — attributed to the human's `prn-h-…`.
 4. **Admit the human** — `workspace:member -- <workspace> --issuer <issuer> --subject <their user id> --roles …`. A token names who someone is; the membership names what the workspace lets them do; nothing else writes one.
 
-Until specs-service reads the `prn` claim (M2), it mints its own principal id for the same (issuer, subject): two ids for one human across components, one record each.
+Until specs-service read the `prn` claim (specs-service ADR-0022), it minted its own principal id for the same (issuer, subject): two ids for one human across components, one record each.
 
 ## 6. The gate
 

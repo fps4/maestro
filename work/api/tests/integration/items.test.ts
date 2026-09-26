@@ -1,5 +1,5 @@
 /**
- * The work item end to end, against DynamoDB Local: maestro's M2 build gates 1 and 2 as tests.
+ * The work item end to end, against DynamoDB Local: maestro's acceptance scenarios W1 and W2 as tests.
  *
  * 1. An item is raised, assigned, closed with an outcome, and read back identically after the
  *    workspace is dropped and rebuilt from the archive.

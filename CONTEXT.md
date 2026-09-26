@@ -71,7 +71,7 @@ One meaning per word, across every component and document. If a component needs 
 | **Event** | An attributed fact a component emitted: who, under whose accountability, at what oversight level, about what. Structural body only; anything personal is a payload reference with a digest. |
 | **Outbox** | The component's transactional queue of events, drained by the relay. |
 | **Archive** | The S3 store every event lands in, sealed into daily segments with a hash chain computed in code. The system of record. |
-| **Projection** | Any component's table — what it serves reads from. Rebuildable from the archive; a workspace's prefix is deleted and rebuilt as a build gate. |
+| **Projection** | Any component's table — what it serves reads from. Rebuildable from the archive; a workspace's prefix is deleted and rebuilt as an acceptance scenario. |
 | **Export** | The archive, its manifests, and the verifier — readable with every service off. The exit. |
 | **Classification** | A label on every payload and transcript saying what it may contain and how long it is kept. |
 
@@ -86,3 +86,10 @@ One meaning per word, across every component and document. If a component needs 
 | **Board** | The kanban over work-service's state machine, by milestone and application. Two views of one query with the frontier. |
 | **Run page** | One run: plan, timeline, ceiling, refusals, next human touchpoint. |
 | **Estate** | runtime-service's view of every application × environment: digest, level, tier, last deploy, open items. |
+
+## The build
+
+| Term | Meaning |
+|---|---|
+| **MVP** | The one thing being built: every component, use case and seam in `docs/mvp.md`, done when every acceptance scenario passes live on the first tenant. Nothing is released before that. |
+| **Acceptance scenario** | One of the checks that say the MVP is done, listed in `docs/roadmap.md` (R1, W5, …). Not a **gate**, which is where a person decides a version, and not a **milestone**, which is an objective work items roll up to. |

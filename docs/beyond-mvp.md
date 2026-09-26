@@ -18,7 +18,7 @@ Needs: one Terraform module that stands up a tenant as a product; an external re
 
 ## Branch R — the regulated domain
 
-Forks after M4. Adds a pack registry (standards, ceilings, chase ladders and clocks as versioned, effective-dated content), a standards engine behind specs-service's evaluator port, assurance and drift detection, classification enforced on every payload and transcript, a conformance dossier per application, and ceilings derived from consequence class.
+Forks from the finished MVP. Adds a pack registry (standards, ceilings, chase ladders and clocks as versioned, effective-dated content), a standards engine behind specs-service's evaluator port, assurance and drift detection, classification enforced on every payload and transcript, a conformance dossier per application, and ceilings derived from consequence class.
 
 The MVP keeps four seams open for it, and nothing else:
 

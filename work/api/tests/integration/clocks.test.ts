@@ -1,5 +1,5 @@
 /**
- * The clocks, against DynamoDB Local: maestro's M2 build gates 3 and 4 as tests. The sweep is run by
+ * The clocks, against DynamoDB Local: maestro's acceptance scenarios W3 and W4 as tests. The sweep is run by
  * hand at chosen instants, as the schedule would run it once a minute.
  *
  * 3. A deadline-bearing item chases, escalates and breaches on schedule; every step's delivery is

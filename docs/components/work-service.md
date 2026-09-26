@@ -1,6 +1,6 @@
 # work-service
 
-**Repository:** `fps4/maestro`, [`work/`](../../work/) (until 2026-09-26 `fps4/maestro-work`, now archived) · **Status:** building (M2) · **Decisions:** [ADR-0009](../decisions/0009-one-severity-scale.md), [ADR-0012](../decisions/0012-the-application-owns-detection-maestro-owns-response.md), [ADR-0019](../decisions/0019-work-services-table.md) (the table)
+**Repository:** `fps4/maestro`, [`work/`](../../work/) (until 2026-09-26 `fps4/maestro-work`, now archived) · **Status:** building · **Decisions:** [ADR-0009](../decisions/0009-one-severity-scale.md), [ADR-0012](../decisions/0012-the-application-owns-detection-maestro-owns-response.md), [ADR-0019](../decisions/0019-work-services-table.md) (the table)
 
 Who owes what, by when, under whose authority — and whether it happened. The component that turns signals into commitments, checks authority when work is claimed, derives every clock from policy, and records every outcome. Its MCP server is the board agents work from.
 
@@ -135,7 +135,7 @@ A claim runs the [three checks](../governance-model.md#authority-at-claim), and 
 | the remediation class is above what the application's onboarding level permits — a patch on N1 | escalated to the accountable human and closed `escalated_out`: maestro's commitment ends, the owner takes the act in their own process | `escalated_out` for the application, and a refusal by check and class |
 | the principal's seat may not act at this oversight level, or the class is above the agent's ceiling | stays `open` for a principal who may | a refusal against the seat |
 
-The rate the M2 gate asks for — `escalated_out` per application — is one read of the workspace's tallies ([ADR-0019](../decisions/0019-work-services-table.md#3-access-patterns)).
+The rate acceptance scenario W2 asks for — `escalated_out` per application — is one read of the workspace's tallies ([ADR-0019](../decisions/0019-work-services-table.md#3-access-patterns)).
 
 ## Evidence
 
@@ -166,7 +166,7 @@ MCP implements the **tracker contract** — publish / fetch / claim / resolve / 
 | `frontier` | optionally `for` (`me`, or a principal), `application`, `milestone`, `limit` | rows soonest-due first: id, class, about, accountable, acting, state, severity, due, next human touchpoint | — |
 | `blocking` | `item` | `blocked_by` — the open items it waits on — and `blocks` — the items waiting on it | — |
 
-Outside the contract, for the principal holding an item: `heartbeat` (renew the lease), `release`, `link` (a pull request or a specs-service artifact — what arms `merged_change` and `decision_accepted`), `block`. Against the M2 gate: the advisory lane runs through intake and evidence with no agent, and so needs none of these; the refused claim is `claim`'s `refused`; the rate is the tallies. A run that opens a pull request (M3) needs `link`, which is the one addition the contract is likely to want.
+Outside the contract, for the principal holding an item: `heartbeat` (renew the lease), `release`, `link` (a pull request or a specs-service artifact — what arms `merged_change` and `decision_accepted`), `block`. Against the acceptance scenarios: the advisory lane (W5) runs through intake and evidence with no agent, and so needs none of these; the refused claim is `claim`'s `refused`; the rate is the tallies. A run that opens a pull request needs `link`, which is the one addition the contract is likely to want.
 
 ## Ports
 
@@ -178,7 +178,9 @@ Outside the contract, for the principal holding an item: `heartbeat` (renew the 
 | authority resolver | policy in the definition | + runtime-service for the instance's level and tier |
 | object storage | MinIO | S3 |
 
-## Build gates (M2)
+## Acceptance
+
+The MVP's acceptance scenarios W1–W6 ([roadmap](../roadmap.md#acceptance)).
 
 1. An item is raised, assigned, closed with an outcome, and read back identically after the workspace is dropped and rebuilt from the archive.
 2. A patch-class claim on an N1 application is refused at claim, closes `escalated_out`, and the rate is queryable in one call.

@@ -70,7 +70,7 @@ endpoint exists only where `MCP_RESOURCE_URL` is set, which also publishes
 The contract's acceptance suite is [`api/tests/contract/tracker.ts`](api/tests/contract/tracker.ts):
 written against the six operations alone, bound to this server by
 [`api/tests/contract/mcp.ts`](api/tests/contract/mcp.ts), and run by
-`tests/integration/tracker-contract.test.ts` — M2's sixth gate.
+`tests/integration/tracker-contract.test.ts` — the MVP's acceptance scenario W6.
 
 ## The table
 
@@ -112,15 +112,16 @@ cd api && npm ci && npm run bundle && npm run sbom   # bundle/{api,relay,sweep,i
 
 ## Status
 
-M2 in progress: the work item — raise, claim with authority checked, release, resolve, the
+Building. The work item — raise, claim with authority checked, release, resolve, the
 frontier, the rates, the rebuild — and its clocks — leases and heartbeats, the chase ladder through
 the notifier (a log line locally, a Slack webhook on AWS), breaches, expiry, the sweep — are in.
 Signals intake (the envelope; dedup by delivery and fingerprint; the weekly fold) and evidence (link,
 facts, closure on evidence) are in. So are the source adapters: GitHub (Dependabot alerts, its pull requests, merges), CloudWatch alarms
 through the applications' `ops-signals` topics, and deploy events through EventBridge. So are the
 board (the open set by state, and what closed today), Today (what a person owes, and the agents' work
-they answer for), `blocking`, and the MCP server with the tracker contract. What is left for M2's
-gate: SES beside Slack, and the gate run on a tenant. See maestro's [roadmap](../docs/roadmap.md).
+they answer for), `blocking`, and the MCP server with the tracker contract. What is left: how the MVP
+alerts (an open decision), intake switched on for the first tenant, deploy events, and the live
+runs of scenarios W1–W6. See maestro's [roadmap](../docs/roadmap.md).
 
 ## Licence
 

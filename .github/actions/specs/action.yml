@@ -1,0 +1,98 @@
+name: specs
+description: >-
+  Propose a markdown specification (with YAML front-matter) to a specs-service workspace, or read the
+  decider's packet for a proposed version. Runs the `specs` CLI from fps4/maestro (specs/api) against the
+  service you name. It never decides: a decision is a named human's act, taken on the decision page
+  or with `specs decide` under that person's own token.
+
+inputs:
+  command:
+    description: "`propose` or `packet`"
+    required: true
+  url:
+    description: The specs-service base URL, e.g. https://specs.example.com
+    required: true
+  token:
+    description: A bearer token for the principal proposing. A person's, or an agent's — facets are marked accordingly.
+    required: true
+  workspace:
+    description: The workspace id
+    required: true
+  file:
+    description: "`propose`: the markdown file to propose"
+    required: false
+  artifact:
+    description: "`propose`: revise this lineage (overrides `artifact:` in the front-matter). `packet`: the artifact"
+    required: false
+  ordinal:
+    description: "`packet`: the version ordinal"
+    required: false
+  gate:
+    description: "`packet`: the gate to read the packet for"
+    required: false
+  specs-ref:
+    description: The fps4/maestro ref to run the CLI from
+    required: false
+    default: main
+
+outputs:
+  artifact:
+    description: "`propose`: the artifact id"
+    value: ${{ steps.run.outputs.artifact }}
+  ordinal:
+    description: "`propose`: the version ordinal"
+    value: ${{ steps.run.outputs.ordinal }}
+  digest:
+    description: "`propose`: the version digest"
+    value: ${{ steps.run.outputs.digest }}
+  packet:
+    description: "`packet`: the decider's packet as markdown"
+    value: ${{ steps.run.outputs.packet }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check out the specs CLI
+      uses: actions/checkout@v4
+      with:
+        repository: fps4/maestro
+        ref: ${{ inputs.specs-ref }}
+        path: .specs-cli
+
+    - name: Install the CLI's dependencies
+      shell: bash
+      run: cd .specs-cli/specs/api && npm ci --ignore-scripts --no-audit --no-fund
+
+    - name: Run
+      id: run
+      shell: bash
+      env:
+        SPECS_URL: ${{ inputs.url }}
+        SPECS_TOKEN: ${{ inputs.token }}
+      run: |
+        set -euo pipefail
+        cd .specs-cli/specs/api
+        case "${{ inputs.command }}" in
+          propose)
+            args=(propose "${GITHUB_WORKSPACE}/${{ inputs.file }}" --workspace "${{ inputs.workspace }}")
+            [ -n "${{ inputs.artifact }}" ] && args+=(--artifact "${{ inputs.artifact }}")
+            out=$(npx tsx src/cli/specs.ts "${args[@]}")
+            echo "$out"
+            last=$(echo "$out" | tail -n 1)
+            echo "artifact=$(echo "$last" | jq -r .artifact)" >> "$GITHUB_OUTPUT"
+            echo "ordinal=$(echo "$last" | jq -r .ordinal)" >> "$GITHUB_OUTPUT"
+            echo "digest=$(echo "$last" | jq -r .digest)" >> "$GITHUB_OUTPUT"
+            ;;
+          packet)
+            out=$(npx tsx src/cli/specs.ts packet "${{ inputs.gate }}" "${{ inputs.artifact }}@${{ inputs.ordinal }}" --workspace "${{ inputs.workspace }}")
+            echo "$out"
+            {
+              echo "packet<<__SPECS_PACKET__"
+              echo "$out"
+              echo "__SPECS_PACKET__"
+            } >> "$GITHUB_OUTPUT"
+            ;;
+          *)
+            echo "::error::unknown command '${{ inputs.command }}' (propose | packet)"; exit 2
+            ;;
+        esac

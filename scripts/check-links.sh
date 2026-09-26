@@ -11,7 +11,7 @@ slug() {
 out="$(
 git ls-files --cached --others --exclude-standard '*.md' | while IFS= read -r file; do
   grep -oE '\]\([^)]+\)' "$file" | sed -E 's/^\]\((.*)\)$/\1/' | while IFS= read -r target; do
-    case "$target" in http://*|https://*|mailto:*|'#'*) continue ;; esac
+    case "$target" in *://* | mailto:* | attachment:* | '#'*) continue ;; esac
     path="${target%%#*}"; anchor=""
     [[ "$target" == *"#"* ]] && anchor="${target#*#}"
     dir="$(dirname "$file")"

@@ -1,0 +1,178 @@
+# The mstr-specs stack — the local development loop. It is not a deployment target: the service
+# deploys to AWS from the Terraform module in terraform/ (maestro ADR-0002, ADR-0016).
+#
+#   local:  make up
+#
+# Every value comes from ${VAR} interpolation with a local-dev default inline.
+
+name: mstr-specs
+
+services:
+  # DynamoDB Local, in place of the table the Terraform module makes on AWS (maestro ADR-0018;
+  # ADR-0021 here). `-sharedDb` so every client sees one database whatever region or key it
+  # names; a data directory on a volume so `make down` keeps what was written. The api asserts
+  # the table's shape at boot, and `dynamodb-init` makes it from the same schema the module
+  # declares (api/src/db/table.ts).
+  dynamodb:
+    image: amazon/dynamodb-local:latest
+    restart: unless-stopped
+    command: ["-jar", "DynamoDBLocal.jar", "-sharedDb", "-dbPath", "/home/dynamodblocal/data"]
+    user: root
+    networks:
+      default:
+        # A UNIQUE hostname, deliberately not the service name. When the api also joins another
+        # stack's network (identity-service's, for a local SSO loop) a container there may be
+        # aliased `dynamodb` too — and Docker's DNS answers across every attached network, so plain
+        # `dynamodb` can resolve to *their* store.
+        aliases:
+          - mstr-specs-dynamodb
+    ports:
+      # Loopback-bound, and 8030 rather than the default so it collides with neither a developer's
+      # own DynamoDB Local nor identity-service's on 8000.
+      - "${DYNAMODB_BIND:-127.0.0.1}:${DYNAMODB_PORT:-8030}:8000"
+    volumes:
+      - specs-dynamodata:/home/dynamodblocal/data
+    healthcheck:
+      # Any HTTP answer will do: the endpoint returns 400 to a bare GET once it is up.
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8000/ || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  # One-shot. Creates the table on an empty store and exits; on an existing one it is a no-op,
+  # so it is safe on every start rather than only the first.
+  dynamodb-init:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    image: mstr-specs-api:${IMAGE_TAG:-dev}
+    restart: "no"
+    depends_on:
+      dynamodb:
+        condition: service_healthy
+    environment:
+      TABLE_NAME: ${TABLE_NAME:-specs}
+      DYNAMODB_ENDPOINT: http://mstr-specs-dynamodb:8000
+      AWS_REGION: ${AWS_REGION:-local}
+    command: ["node", "dist/cli/create-table.js"]
+
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-specsminio}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-specsminio}
+    ports:
+      - "${MINIO_BIND:-127.0.0.1}:${MINIO_PORT:-9020}:9000"
+      - "${MINIO_BIND:-127.0.0.1}:${MINIO_CONSOLE_PORT:-9021}:9001"
+    volumes:
+      - specs-miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  # One-shot bucket creation. Attachments are content-addressed under a prefix per workspace, so
+  # object storage mirrors the table's isolation rather than being the one place a workspace
+  # boundary is a naming convention.
+  minio-init:
+    image: minio/mc:latest
+    restart: "no"
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-specsminio}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-specsminio}
+      S3_BUCKET: ${S3_BUCKET:-mstr-specs}
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mc alias set local http://minio:9000 "$$S3_ACCESS_KEY" "$$S3_SECRET_KEY"
+        mc mb --ignore-existing "local/$$S3_BUCKET"
+        echo "bucket $$S3_BUCKET ready"
+
+  api:
+    build:
+      context: ../..
+      dockerfile: infra/docker/api.Dockerfile
+    image: mstr-specs-api:${IMAGE_TAG:-dev}
+    container_name: mstr-specs-api
+    restart: unless-stopped
+    depends_on:
+      dynamodb:
+        condition: service_healthy
+      dynamodb-init:
+        condition: service_completed_successfully
+    environment:
+      SPECS_ENV: ${SPECS_ENV:-local}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # No database credential: DynamoDB Local accepts any key pair, and on AWS the function's
+      # role is the grant.
+      TABLE_NAME: ${TABLE_NAME:-specs}
+      DYNAMODB_ENDPOINT: http://mstr-specs-dynamodb:8000
+      AWS_REGION: ${AWS_REGION:-local}
+      # `dev` injects a stub principal so the stack runs with no identity provider. The api refuses
+      # this combination when SPECS_ENV/NODE_ENV say production (src/config.ts).
+      AUTH_MODE: ${AUTH_MODE:-dev}
+      AUTH_JWKS_URL: ${AUTH_JWKS_URL:-}
+      AUTH_ISSUER: ${AUTH_ISSUER:-}
+      AUTH_AUDIENCE: ${AUTH_AUDIENCE:-}
+      MCP_RESOURCE_URL: ${MCP_RESOURCE_URL:-}
+      CATALOGUE_WORKSPACE: ${CATALOGUE_WORKSPACE:-catalogue}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_BUCKET: ${S3_BUCKET:-mstr-specs}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-specsminio}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-specsminio}
+      RECORD_SINK: ${RECORD_SINK:-local}
+      RECORD_SINK_URL: ${RECORD_SINK_URL:-}
+      EVALUATOR_BASE: ${EVALUATOR_BASE:-}
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+    ports:
+      - "${API_BIND:-127.0.0.1}:${API_PORT:-8020}:8000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:8000/health',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 25s
+
+  # The console. Loopback-bound. A reverse proxy in front of it needs no `/api` rule: the Next
+  # server proxies `/api/*` to the api service itself, and that is what can turn the httpOnly
+  # session cookie into an Authorization header.
+  web:
+    build:
+      context: ../..
+      dockerfile: infra/docker/web.Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: ${WEB_API_BASE_URL:-/api}
+        NEXT_PUBLIC_AUTH_MODE: ${WEB_AUTH_MODE:-dev}
+        NEXT_PUBLIC_IDENTITY_BASE_URL: ${WEB_IDENTITY_BASE_URL:-}
+        NEXT_PUBLIC_IDENTITY_CLIENT_ID: ${WEB_IDENTITY_CLIENT_ID:-}
+        NEXT_PUBLIC_DEFAULT_WORKSPACE: ${WEB_DEFAULT_WORKSPACE:-aannemer-x}
+    image: mstr-specs-web:${IMAGE_TAG:-dev}
+    container_name: mstr-specs-web
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      API_PROXY_TARGET: ${API_PROXY_TARGET:-http://api:8000}
+    ports:
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8021}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://127.0.0.1:3000/sign-in',r=>process.exit(r.statusCode<500?0:1)).on('error',()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 25s
+
+volumes:
+  specs-dynamodata:
+  specs-miniodata:

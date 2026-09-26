@@ -1,0 +1,142 @@
+# A workspace definition. This is the whole domain model — the service ships none of it (ADR-0001).
+#
+# Declarations describe STRUCTURE and CONSTRAINTS, never behaviour. There are no expressions, no
+# conditionals and no hooks. Where judgement is needed, declare a required evaluation and let an
+# evaluator answer through the port; the service records the verdict and never computes one.
+#
+# This example models maestro v1's spec-driven SDLC. The maestro mapping for each concept is in
+# ../GLOSSARY.md; it uses the same fields with different names.
+
+workspace: maestro-v1-core
+definition_version: 3            # stamped on every version written under it; history is never rewritten
+
+# How much a thing matters if wrong (maestro: consequence class). Carried on every event this
+# workspace records; a type may override it. Read in full only by the regulated branch.
+consequence_class: c2
+
+# The seat an act is authorised under, and the oversight level the record carries for it
+# (maestro-specs ADR-0019). Defaults: author and reviewer O1 — an agent may act, a human acts on
+# it; decider, workspace_admin and auditor O0 — a human's. `decider` cannot be raised.
+seats:
+  author: { oversight_level: O1 }
+  reviewer: { oversight_level: O1 }
+  decider: { oversight_level: O0 }
+
+# ---------------------------------------------------------------------------
+# Artifact types
+# ---------------------------------------------------------------------------
+# Every `id` below is what the RECORD carries. Every `title`, `label` and `description` is what a
+# PERSON reads. A screen shows the second and never the first; where a definition gives no label the
+# id is humanised (`request_changes` → "Request changes"), so a raw identifier never reaches a reader.
+types:
+  - id: charter
+    title: Charter
+    description: Why this product exists and what it is for.
+    facet_schema: ./schemas/charter.json
+    body_format: markdown/v1
+    links: []
+
+  - id: functional_spec
+    title: Functional specification
+    description: What the software must do, as acceptance criteria a reviewer can check.
+    # AC-N and NFR-N live here, not in the body. A gate may require these; it may never
+    # require anything about the body (ADR-0004).
+    facet_schema: ./schemas/functional-spec.json
+    body_format: markdown/v1                       # declares the renderer and the differ
+    attachments:
+      max_size: 25MB
+      media_types: [image/png, image/jpeg, image/svg+xml, application/pdf]
+    draft_expiry: 90d                              # abandoned drafts are expired and recorded
+    links:
+      - { id: derives_from, to: charter,   label: Derives from the charter }
+      - { id: addresses,    to: work_item, label: Addresses, pinned: true }   # frozen to a version at acceptance
+
+  - id: technical_design
+    facet_schema: ./schemas/technical-design.json
+    body_format: markdown/v1
+    links:
+      # The pin is what keeps the trail honest: this design reads against the spec version that was
+      # accepted when it was approved, however many times the spec is superseded afterwards.
+      - { id: implements, to: functional_spec, pinned: true }
+
+  - id: work_item
+    facet_schema: ./schemas/work-item.json
+    body_format: markdown/v1
+    links: []
+
+# ---------------------------------------------------------------------------
+# Attribution — the only place consumer vocabulary reaches a decision record
+# ---------------------------------------------------------------------------
+attribution_profiles:
+  - id: default
+    required: [accountable, acting]
+    rules:
+      # Enforced at write time. A decision naming an agent here is a rejected write, and the
+      # rejection is itself recorded (ADR-0005).
+      accountable: { must_resolve_to: principal, kind: human }
+      acting:      { must_resolve_to: principal }
+    optional: [risk_tier]        # maestro populates `seat` and `oversight_level` here instead
+    field_labels: { accountable: Answerable for this decision, acting: Who recorded it, risk_tier: Risk tier }
+
+# ---------------------------------------------------------------------------
+# Gates
+# ---------------------------------------------------------------------------
+gates:
+  - id: functional
+    title: Functional review
+    description: Does this say what the software must do, precisely enough to build and test?
+    decides_on: functional_spec
+    owner:    { resolver: routing_table, table: ./reviewers.yaml, key: functional_reviewer }
+    outcomes: [approve, request_changes, reject]
+    outcome_labels: { approve: Approve, request_changes: Ask for changes, reject: Reject }
+    # `approve` accepts by convention. A gate whose accepting outcome is called anything else must
+    # say so — `accepts_on: publish` — because the service does not know what "publish" means.
+    blocking: true
+    requires:
+      confirmed_facets: true     # agent-extracted facets cannot reach a gate unconfirmed
+      evaluations: [ears_lint]
+    separation_of_duties: exclude_creator
+
+  - id: technical_design
+    decides_on: technical_design
+    owner:    { resolver: role, role: architect }
+    outcomes: [approve, request_changes, reject]
+    blocking: true
+    requires:
+      confirmed_facets: true
+
+  - id: technical_merge
+    decides_on: technical_design
+    owner:    { resolver: role, role: architect }
+    outcomes: [approve, request_changes, reject]
+    blocking: true
+    requires:
+      evaluations: [spec_adherence, sast, dependency_scan, sbom]
+    # No `separation_of_duties` here: in a small team the architect who designed it also merges it.
+    # Declaring the omission is the point — the exemption is visible rather than assumed.
+
+# ---------------------------------------------------------------------------
+# Lifecycle — phases and which gate authorises each transition
+# ---------------------------------------------------------------------------
+lifecycle:
+  phases: [drafting, in_review, approved, in_delivery, merged, superseded]
+  phase_labels: { drafting: Drafting, in_review: In review, approved: Approved, in_delivery: In delivery, merged: Merged, superseded: Superseded }
+  transitions:
+    - { from: drafting,    to: in_review,   via: propose }
+    - { from: in_review,   to: approved,    via_gate: functional }
+    - { from: in_review,   to: drafting,    via_gate: functional, on: request_changes }
+    - { from: approved,    to: in_delivery, via_gate: technical_design }
+    - { from: in_delivery, to: merged,      via_gate: technical_merge }
+
+# ---------------------------------------------------------------------------
+# Evaluators — outbound only. The service calls out and records the verdict (architecture §4)
+# ---------------------------------------------------------------------------
+evaluators:
+  # `${VAR}` resolves from the environment when the evaluator is called; unresolved means the gate
+  # honestly says "no verdict has been recorded". `builtin: facet_schema` is the port's floor: the
+  # type's own schema, one finding per required facet, and it needs nothing behind it (ADR-0015).
+  - { id: ears_lint,      endpoint: "${EVALUATOR_BASE}/ears",     reads: facets }
+  - { id: spec_adherence, endpoint: "${EVALUATOR_BASE}/adhere",   reads: facets }
+  - { id: sast,           endpoint: "${EVALUATOR_BASE}/sast",     reads: facets }
+  - { id: dependency_scan, endpoint: "${EVALUATOR_BASE}/deps",    reads: facets }
+  - { id: sbom,           endpoint: "${EVALUATOR_BASE}/sbom",     reads: facets }

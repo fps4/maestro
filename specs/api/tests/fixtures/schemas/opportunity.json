@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "opportunity",
+  "description": "Is there a problem here? Raised by anyone authorised in the workspace.",
+  "type": "object",
+  "required": ["problem_statement", "raised_for", "review_by"],
+  "additionalProperties": false,
+  "properties": {
+    "problem_statement": { "type": "string", "minLength": 10 },
+    "raised_for": { "type": "string", "description": "The role or team that feels the problem." },
+    "frequency": { "enum": ["daily", "weekly", "monthly", "occasional"] },
+    "review_by": {
+      "type": "string",
+      "format": "date",
+      "description": "Opportunities expire by default. A stale register is a defect, and silence is not an outcome."
+    },
+    "existing_solution_checked": {
+      "type": "object",
+      "required": ["at", "result"],
+      "additionalProperties": false,
+      "properties": {
+        "at": { "type": "string", "format": "date" },
+        "result": { "enum": ["none_found", "partial", "already_solved"] },
+        "detail": { "type": "string" }
+      }
+    }
+  }
+}

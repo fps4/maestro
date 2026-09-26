@@ -1,0 +1,142 @@
+name: specs-dod
+
+# specs-service's Definition-of-Done gate. Every item here is blocking. The secret scan and the
+# public guards run once for the whole tree (guards.yml); this is the service's own gate, run when
+# something under specs/ changes. Every image is built with specs/ as its context, as compose does.
+#
+# Runs on GitHub-hosted runners (fps4/maestro ADR-0017: a self-hosted runner on a public repository
+# runs strangers' code). The shape — every job via `docker build` plus sibling containers on a
+# per-run network — dates from the containerised ds1 runner, where `container:` jobs and bind-mounts
+# did not translate across the host socket; it works unchanged here and keeps the gate identical
+# to what a laptop can run. Nothing deploys from it.
+
+on:
+  push:
+    branches: [main]
+    paths: ['specs/**', '.github/workflows/specs-dod.yml']
+  pull_request:
+    paths: ['specs/**', '.github/workflows/specs-dod.yml']
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: specs-dod-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-build:
+    # Building the api image runs typecheck, lint and the compile (see api.Dockerfile). Any failure
+    # fails the gate, and nothing that did not pass can be shipped.
+    #
+    # The tag is per run so parallel runs cannot clobber each other, and it is removed afterwards:
+    # the runner is a shared host, and a tag per run that nobody deletes is a disk that fills at the
+    # rate of the team's commits. Layers stay cached; only the tag goes.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t ms-api:${{ github.run_id }}-${{ github.run_attempt }} -f specs/infra/docker/api.Dockerfile specs
+      - name: Cleanup
+        if: always()
+        run: docker rmi "ms-api:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true
+
+  web-build:
+    # Same shape for the console: typecheck, lint, tests and the production build.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t ms-web:${{ github.run_id }}-${{ github.run_attempt }} -f specs/infra/docker/web.Dockerfile specs
+      - name: Cleanup
+        if: always()
+        run: docker rmi "ms-web:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true
+
+  test:
+    # The full suite against DynamoDB Local (maestro ADR-0018; ADR-0021 here). Unit tests pin the
+    # domain rules; integration tests drive the whole loop through HTTP and include the
+    # adversarial cross-workspace read and the rebuild gate, which are build gates rather than
+    # nice-to-haves.
+    #
+    # Each test file creates its own table from api/src/db/table.ts — the one schema the module
+    # also declares — and drops it afterwards; `-inMemory` means the container holds nothing
+    # once it stops.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the CI image
+        run: docker build -t ms-ci:${{ github.run_id }}-${{ github.run_attempt }} -f specs/infra/docker/ci.Dockerfile specs
+      - name: Test against a sibling DynamoDB Local on a per-run network
+        run: |
+          set -e
+          SUFFIX=${{ github.run_id }}-${{ github.run_attempt }}
+          NET=ms-net-$SUFFIX
+          DYNAMO=ms-dynamodb-$SUFFIX
+
+          docker network create "$NET"
+
+          # No credentials: DynamoDB Local accepts any key pair, the container is on a throwaway
+          # per-run network with no published port, and the thing under test is the store's
+          # shape, not access to it.
+          docker run -d --name "$DYNAMO" --network "$NET" --network-alias dynamodb \
+            --health-cmd "curl -s -o /dev/null http://localhost:8000/ || exit 1" \
+            --health-interval 3s --health-timeout 3s --health-retries 30 \
+            amazon/dynamodb-local:latest -jar DynamoDBLocal.jar -sharedDb -inMemory
+
+          for _ in $(seq 1 40); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' "$DYNAMO" 2>/dev/null)" = healthy ] && break
+            sleep 2
+          done
+          [ "$(docker inspect -f '{{.State.Health.Status}}' "$DYNAMO")" = healthy ] || {
+            echo "::error::DynamoDB Local never became healthy"; docker logs --tail 40 "$DYNAMO"; exit 1; }
+
+          docker run --rm --network "$NET" \
+            -e DYNAMODB_ENDPOINT="http://dynamodb:8000" \
+            ms-ci:$SUFFIX bash -lc "cd api && npm run lint && npm run typecheck && npm test && cd ../web && npm test"
+      - name: Cleanup
+        if: always()
+        run: |
+          SUFFIX=${{ github.run_id }}-${{ github.run_attempt }}
+          docker rm -f -v "ms-dynamodb-$SUFFIX" 2>/dev/null || true
+          docker network rm "ms-net-$SUFFIX" 2>/dev/null || true
+          docker rmi "ms-ci:$SUFFIX" 2>/dev/null || true
+
+  workspace-definitions:
+    # Every committed workspace definition must parse and satisfy its own referential rules — a
+    # gate deciding on a declared type, no type with two pinned links, no profile under which
+    # nobody would be answerable. The definitions ARE the domain model (ADR-0001), so this is the
+    # equivalent of typechecking them.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the CI image
+        run: docker build -t ms-ci-def:${{ github.run_id }}-${{ github.run_attempt }} -f specs/infra/docker/ci.Dockerfile specs
+      - name: Validate every committed definition
+        run: |
+          docker run --rm ms-ci-def:${{ github.run_id }}-${{ github.run_attempt }} \
+            bash -lc "cd api && npm run workspace:validate"
+      - name: Cleanup
+        if: always()
+        run: docker rmi "ms-ci-def:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true
+
+  dependency-scan:
+    # Known vulnerabilities in what we ship. High and above fails; the report is printed either way
+    # so a moderate finding is visible without blocking.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the CI image
+        run: docker build -t ms-ci-audit:${{ github.run_id }}-${{ github.run_attempt }} -f specs/infra/docker/ci.Dockerfile specs
+      - name: npm audit
+        run: |
+          docker run --rm ms-ci-audit:${{ github.run_id }}-${{ github.run_attempt }} bash -lc '
+            set -e
+            for pkg in api web; do
+              echo "::group::$pkg"
+              (cd $pkg && npm audit --omit=dev || true)
+              (cd $pkg && npm audit --omit=dev --audit-level=high)
+              echo "::endgroup::"
+            done
+          '
+      - name: Cleanup
+        if: always()
+        run: docker rmi "ms-ci-audit:${{ github.run_id }}-${{ github.run_attempt }}" 2>/dev/null || true

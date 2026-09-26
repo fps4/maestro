@@ -1,0 +1,28 @@
+# gitleaks configuration for the whole tree. guards.yml runs
+# `gitleaks detect --no-git --source=/repo --config=/repo/.gitleaks.toml`.
+
+title = "maestro"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Paths and values that are documentation or fixtures, never real secrets"
+
+paths = [
+  '''package-lock\.json''',
+  '''(^|/)node_modules/''',
+  '''(^|/)dist/''',
+  '''(^|/)bundle/''',
+  '''(^|/)\.next/''',
+  '''(^|/)\.open-next/''',
+  '''(^|/)\.terraform/''',
+]
+
+regexTarget = "match"
+regexes = [
+  # Placeholder values used in docs, .env.base and tests.
+  '''(?i)(change-?me|replace-?me|your-[a-z-]*-here|example\.com|localhost)''',
+  # specs-service's dev-mode stub principal (specs/api/src/auth) — no credential, just a subject string.
+  '''dev-learner@example\.invalid''',
+]

@@ -31,7 +31,7 @@ What a person sees, and the rules every screen obeys. The components have their 
 | **Signal → item** | work-service · M4 | how a storm became one item; suppression and maintenance windows in force | designed 2026-09-19 as a panel on the work item, not a screen |
 | **Sign in** | identity-service | one card, one action | built |
 
-The specs-service screens follow the console design reference in `fps4/maestro-specs/docs/design/ui/` — tokens, component vocabulary, state treatments. The other consoles adopt the same reference.
+The specs-service screens follow the console design reference in [`specs/docs/design/ui/`](../specs/docs/design/ui/) — tokens, component vocabulary, state treatments. The other consoles adopt the same reference.
 
 ## The redraw · accepted 2026-09-19
 

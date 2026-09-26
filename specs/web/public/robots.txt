@@ -1,0 +1,4 @@
+# A governed record surface. Nothing here should ever be indexed: every page behind the auth gate
+# is a tenant's own chain of record, and the sign-in page is not worth a crawl either.
+User-agent: *
+Disallow: /

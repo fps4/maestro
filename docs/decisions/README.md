@@ -18,11 +18,11 @@ Architecture decision records, numbered from 0001. Each states context in a few 
 | [0012](0012-the-application-owns-detection-maestro-owns-response.md) | The application owns detection; maestro owns response | accepted |
 | [0013](0013-intake-agent-and-customer-tenants-are-post-mvp.md) | Intake agent and customer tenants are post-MVP; the regulated domain is a branch | accepted |
 | [0014](0014-the-mvp-ci-floor.md) | The MVP CI floor: secret scan, dependency audit, SBOM | accepted |
-| [0015](0015-repositories-and-licence.md) | Repositories: one per component with a consumer; public under MIT | accepted |
+| [0015](0015-repositories-and-licence.md) | Repositories: one per component with a consumer; public under MIT | accepted; the first rule amended by 0020 |
 | [0016](0016-terraform-is-the-infrastructure-language.md) | Terraform is the infrastructure language; the tenant repository holds the root module | accepted; the demo-tenant apply withdrawn by 0017; the Atlas clause moot by 0018 |
 | [0017](0017-the-tenant-repository-runs-the-pipeline.md) | The tenant repository runs the pipeline: its runner, its targets, its state, its configuration | accepted |
 | [0018](0018-dynamodb-is-the-mvp-database.md) | DynamoDB is the MVP database; the module creates its table; the pipeline applies it | accepted |
 | [0019](0019-work-services-table.md) | work-service's table: a partition per item, the open set as an index, clocks by a sweep | accepted |
-| [0020](0020-maestros-own-services-live-in-one-repository.md) | maestro's own services live in `fps4/maestro`; a repository is earned by a consumer outside maestro | proposed |
+| [0020](0020-maestros-own-services-live-in-one-repository.md) | maestro's own services live in `fps4/maestro`; a repository is earned by a consumer outside maestro | accepted |
 
-The component-level decisions of specs-service live in `fps4/maestro-specs` (`docs/design/decisions/`, ADR-0001–0018 there) and are not repeated here.
+specs-service's own decision log moved with it to [`specs/docs/decisions/`](../../specs/docs/decisions/) (ADR-0001–0022 there) and is closed: its records are cited as "specs-service ADR-00NN", and every new decision, whatever it is about, is recorded here ([ADR-0020](0020-maestros-own-services-live-in-one-repository.md)).

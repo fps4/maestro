@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Checks out each public component at its tag and builds it, for the tenant pipeline (ADR-0017):
-# $COMPONENTS is a JSON map of component to git ref, e.g. {"maestro":"spine-v0.1.2"}. Each
+# $COMPONENTS is a JSON map of component to git ref, e.g. {"maestro":"v0.4.0"}. Each
 # fps4/<component> lands under components/<component>/; every package in it that has a lockfile
-# (build-standards §3) gets `npm ci`, then `npm run build` and `npm run bundle` where those scripts
-# exist. The tenant's root modules then reference components/<component>/... by path.
+# (build-standards §3), up to two directories down — maestro's spine/, signals/cdk/, specs/api/,
+# specs/web/, work/api/ (ADR-0020) — gets `npm ci`, then `npm run build` and `npm run bundle` where those
+# scripts exist. The tenant's root modules then reference components/<component>/... by path.
 set -euo pipefail
 
 components="${COMPONENTS:-{\}}"
@@ -36,6 +37,6 @@ while IFS=$'\t' read -r name ref; do
     [ -f "$pkg/package.json" ] || { echo "checkout-components: $pkg has a lockfile but no package.json; skipped"; continue; }
     echo "checkout-components: build $pkg"
     (cd "$pkg" && npm ci --no-audit --no-fund --silent && npm run build --if-present && npm run bundle --if-present)
-  done < <(find "$dir" -maxdepth 2 -name package-lock.json -not -path '*/node_modules/*' | sort)
+  done < <(find "$dir" -maxdepth 3 -name package-lock.json -not -path '*/node_modules/*' | sort)
 done < <(jq -r 'to_entries[] | [.key, .value] | @tsv' <<<"$components")
 echo "checkout-components: done"

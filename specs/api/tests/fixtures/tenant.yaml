@@ -1,0 +1,154 @@
+# The integration fixture: a generic three-type chain that exercises every mechanism the service
+# has — a pinned link, a typed block, a gate on the builtin evaluator, a gate on an endpoint
+# evaluator that also requires questions resolved and catalogue acceptances in force, separation
+# of duties, draft expiry, classification.
+#
+#   Opportunity ──▶ Business case ──▶ Specification
+#                        │                  │
+#                        └── pinned ────────┘
+#
+# It is a fixture, not a product definition: the demo tenant the service ships is
+# config/workspaces/aannemer-x.yaml. The harness overrides `workspace` per test file.
+
+workspace: fixture-tenant
+definition_version: 1
+kind: tenant
+title: Fixture tenant
+
+# How much a thing matters if wrong (maestro: consequence class). Carried on every event this
+# workspace records; a type may override it. Read in full only by the regulated branch.
+consequence_class: c2
+
+# The seat an act is authorised under, and the oversight level the record carries for it
+# (maestro-specs ADR-0019). Defaults: author and reviewer O1 — an agent may act, a human acts on
+# it; decider, workspace_admin and auditor O0 — a human's. `decider` cannot be raised.
+seats:
+  author: { oversight_level: O1 }
+  reviewer: { oversight_level: O1 }
+  decider: { oversight_level: O0 }
+
+types:
+  # No gate of its own: raising one is open to anyone authorised in the workspace, and the outcome
+  # is recorded on the business case that addresses it.
+  - id: opportunity
+    title: Opportunity
+    description: Something worth looking at. Raising one commits nobody to anything.
+    facet_schema: ./schemas/opportunity.json
+    body_format: markdown/v1
+    draft_expiry: 90d
+    classification_required: true
+    links: []
+
+  - id: business_case
+    title: Business case
+    description: Is it worth solving, and do we know enough to say so?
+    facet_schema: ./schemas/business-case.json
+    body_format: markdown/v1
+    attachments:
+      max_size: 25MB
+      media_types: [image/png, image/jpeg, image/svg+xml, application/pdf]
+    draft_expiry: 90d
+    classification_required: true
+    catalogue_refs: true
+    links:
+      - { id: addresses, to: opportunity, label: Addresses the opportunity }
+
+  - id: specification
+    title: Specification
+    description: What exactly gets built, and what it must satisfy.
+    facet_schema: ./schemas/specification.json
+    body_format: markdown/v1
+    attachments:
+      max_size: 25MB
+      media_types: [image/png, image/jpeg, image/svg+xml, application/pdf]
+    draft_expiry: 90d
+    classification_required: true
+    catalogue_refs: true
+    links:
+      # The pin is what keeps the trail honest. An auditor reading a five-year-old specification
+      # sees the case as it read when someone accepted it, not as it was rewritten afterwards.
+      - { id: justified_by, to: business_case, pinned: true, label: Justified by the business case }
+      - { id: addresses, to: opportunity, label: Addresses the opportunity }
+    # The acceptance criteria are written as a table in the document, under this heading, and
+    # read by the gate as the facet — one text, two readers, no second form (ADR-0017).
+    body_blocks:
+      - { facet: acceptance_criteria, heading: Acceptance criteria, shape: table }
+
+attribution_profiles:
+  - id: maestro_default
+    required: [accountable, acting, seat, oversight_level]
+    rules:
+      accountable: { must_resolve_to: principal, kind: human }
+      acting: { must_resolve_to: principal }
+    optional: [consequence_class]
+    field_labels:
+      accountable: Answerable for this decision
+      acting: Who recorded it
+      seat: Seat
+      oversight_level: Oversight level
+      consequence_class: Consequence class
+
+gates:
+  - id: explore
+    title: Explore
+    description: Is this worth taking further, and does the case say enough to know?
+    decides_on: business_case
+    owner: { resolver: role, role: sponsor }
+    outcomes: [approve, request_changes, decline]
+    outcome_labels: { approve: Approve, request_changes: Ask for changes, decline: Decline }
+    reopens_on: request_changes
+    blocking: true
+    requires:
+      confirmed_facets: true
+      evaluations: [sufficiency]
+    separation_of_duties: exclude_creator
+    attribution_profile: maestro_default
+
+  - id: specification_gate
+    title: Specification
+    description: Is this exactly what should be built? Approving it is what gets built.
+    decides_on: specification
+    owner: { resolver: role, role: owner }
+    outcomes: [approve, request_changes, decline]
+    outcome_labels: { approve: Approve for build, request_changes: Ask for changes, decline: Decline }
+    reopens_on: request_changes
+    blocking: true
+    requires:
+      confirmed_facets: true
+      evaluations: [conformance]
+      # A specification is what gets built, so a lapsed acceptance under it blocks here — unlike at
+      # Explore, where it is recorded and advisory.
+      catalogue_acceptances: true
+      # And nothing gets built with a reviewer's question still open. Explore does not declare this:
+      # an open question on a business case is a reason to ask for changes, not to hold the gate.
+      questions_resolved: true
+    separation_of_duties: exclude_creator
+    attribution_profile: maestro_default
+
+lifecycle:
+  phases: [explore, prove, build, run, retired, closed]
+  phase_labels:
+    explore: Exploring
+    prove: Proving
+    build: Building
+    run: Running
+    retired: Retired
+    closed: Closed
+  initial: explore
+  transitions:
+    - { from: explore, to: prove, via_gate: explore, on: approve }
+    - { from: explore, to: closed, via_gate: explore, on: decline }
+    - { from: explore, to: explore, via_gate: explore, on: request_changes }
+    - { from: prove, to: build, via_gate: specification_gate, on: approve }
+    - { from: prove, to: prove, via_gate: specification_gate, on: request_changes }
+    - { from: build, to: run, via: propose }
+    - { from: run, to: retired, via: system }
+    # A descriptive specification rots the moment it is written, and expiry is set by a consumer's
+    # clock rather than by a person — so it needs a transition kind that is neither propose nor gate.
+    - { from: run, to: run, via: system }
+
+# Sufficiency is the facet schema, reported as findings — the port's local default (ADR-0015).
+# Conformance is an endpoint, so the tests can exercise `unavailable` and a recorded verdict.
+evaluators:
+  - { id: sufficiency, builtin: facet_schema }
+  - { id: conformance, endpoint: '${EVALUATOR_BASE}/conformance', reads: facets }

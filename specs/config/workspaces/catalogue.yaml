@@ -1,0 +1,158 @@
+# The catalogue workspace — standards, packs and constructs (ADR-0008).
+#
+# Shared across tenants and readable from every one of them; writable only by its own members.
+# A standard is an artifact: a lineage, immutable versions, a publication gate an accountable human
+# passes, a diff between 3.1.0 and 3.2.0, a body someone reads and facets a machine evaluates. So
+# this is not a second system — it is the same service with a different definition.
+#
+# Two kinds of standard, and they are distinct TYPES rather than one type with a flag, because the
+# licence disposition differs and so does what the body means. An auditor is entitled to know
+# whether they are reading the obligation or our reading of it, and a flag is settable.
+
+workspace: catalogue
+definition_version: 1
+kind: catalogue
+title: Standards catalogue
+
+# How much a thing matters if wrong (maestro: consequence class). Carried on every event this
+# workspace records; a type may override it. Read in full only by the regulated branch.
+consequence_class: c1
+
+# The seat an act is authorised under, and the oversight level the record carries for it
+# (maestro-specs ADR-0019). Defaults: author and reviewer O1 — an agent may act, a human acts on
+# it; decider, workspace_admin and auditor O0 — a human's. `decider` cannot be raised.
+seats:
+  author: { oversight_level: O1 }
+  reviewer: { oversight_level: O1 }
+  decider: { oversight_level: O0 }
+
+types:
+  # Ours. The body IS the standard, and it carries the know-how — why we hold it, what counts as
+  # satisfying it, how to satisfy it cheaply. That is the part an agent needs and a citation cannot
+  # give.
+  - id: platform_standard
+    title: Platform standard
+    description: A standard we hold. The text is the obligation and carries the know-how.
+    facet_schema: ./schemas/platform-standard.json
+    body_format: markdown/v1
+    effective_dating: true
+    classification_required: false
+    links: []
+
+  # ISO, NIST, a regulator. The body is our SUMMARY and our READING; `licence_disposition` records
+  # what we are permitted to hold. ISO forbids redistribution; the Dutch Bbl and NIST SP 800-53 do
+  # not. The field is a human's determination, recorded — this service cannot adjudicate a licence.
+  - id: external_standard
+    title: External standard
+    description: Our summary and reading of a standard someone else owns. Never the obligation itself.
+    facet_schema: ./schemas/external-standard.json
+    body_format: markdown/v1
+    effective_dating: true
+    classification_required: false
+    links:
+      - { id: interprets, to: external_standard, label: Interprets }
+
+  # Prompts and elicitation patterns. Versioned and gated here for the same reason standards are:
+  # a prompt carrying domain knowledge is governed content that happens to be prose.
+  - id: construct
+    title: Construct
+    description: A prompt or elicitation pattern that carries domain knowledge, versioned like a standard.
+    facet_schema: ./schemas/construct.json
+    body_format: markdown/v1
+    effective_dating: false
+    classification_required: false
+    links:
+      - { id: supports, to: platform_standard, label: Supports }
+
+attribution_profiles:
+  - id: default
+    required: [accountable, acting]
+    rules:
+      accountable: { must_resolve_to: principal, kind: human }
+      acting: { must_resolve_to: principal }
+    optional: [seat, oversight_level]
+    field_labels:
+      accountable: Answerable for this decision
+      acting: Who recorded it
+      seat: Seat
+      oversight_level: Oversight level
+
+gates:
+  # The publication gate classifies its own change as material or immaterial, and a material one
+  # lapses every tenant acceptance resting on the previous version. Inferring materiality from the
+  # fact that something changed would lapse acceptances on a corrected typo, which is why it is a
+  # decision a person records rather than a diff the service reads.
+  - id: publication
+    description: Does this standard say what we hold everyone to, and is this change material?
+    title: Publish a standard
+    decides_on: platform_standard
+    owner: { resolver: role, role: standards_owner }
+    outcomes: [publish, request_changes, withdraw]
+    outcome_labels: { publish: Publish, request_changes: Ask for changes, withdraw: Withdraw }
+    accepts_on: publish
+    reopens_on: request_changes
+    blocking: true
+    requires:
+      confirmed_facets: true
+    separation_of_duties: exclude_creator
+    attribution_profile: default
+    records_materiality: true
+
+  - id: external_publication
+    description: Is this an honest summary of the external standard, and is the change material?
+    title: Publish an external standard summary
+    decides_on: external_standard
+    owner: { resolver: role, role: standards_owner }
+    outcomes: [publish, request_changes, withdraw]
+    outcome_labels: { publish: Publish, request_changes: Ask for changes, withdraw: Withdraw }
+    accepts_on: publish
+    reopens_on: request_changes
+    blocking: true
+    requires:
+      confirmed_facets: true
+    separation_of_duties: exclude_creator
+    attribution_profile: default
+    records_materiality: true
+
+  - id: construct_publication
+    description: Is this construct fit to be used?
+    title: Publish a construct
+    decides_on: construct
+    owner: { resolver: role, role: standards_owner }
+    outcomes: [publish, request_changes, withdraw]
+    outcome_labels: { publish: Publish, request_changes: Ask for changes, withdraw: Withdraw }
+    accepts_on: publish
+    reopens_on: request_changes
+    blocking: true
+    requires:
+      confirmed_facets: true
+    # No separation of duties. In a small standards team the person who wrote a prompt is the person
+    # who reviews it — declaring the omission is the point, so the exemption is visible rather than
+    # assumed.
+    attribution_profile: default
+    records_materiality: false
+
+lifecycle:
+  phases: [drafting, in_review, published, superseded, withdrawn]
+  phase_labels:
+    drafting: Drafting
+    in_review: In review
+    published: Published
+    superseded: Superseded
+    withdrawn: Withdrawn
+  initial: drafting
+  transitions:
+    - { from: drafting, to: in_review, via: propose }
+    - { from: in_review, to: published, via_gate: publication, on: publish }
+    - { from: in_review, to: drafting, via_gate: publication, on: request_changes }
+    - { from: in_review, to: withdrawn, via_gate: publication, on: withdraw }
+    - { from: in_review, to: published, via_gate: external_publication, on: publish }
+    - { from: in_review, to: drafting, via_gate: external_publication, on: request_changes }
+    - { from: in_review, to: published, via_gate: construct_publication, on: publish }
+    - { from: in_review, to: drafting, via_gate: construct_publication, on: request_changes }
+    - { from: published, to: in_review, via: propose }
+    # A standard that lapses with no successor is moved by a consumer's clock, not by a person and
+    # not by a gate — so it needs a transition kind that is neither.
+    - { from: published, to: superseded, via: system }
+
+evaluators: []

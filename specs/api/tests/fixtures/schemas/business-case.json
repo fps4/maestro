@@ -1,0 +1,40 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "business_case",
+  "description": "Is it worth solving, and do we know enough? The facets a sufficiency evaluation reads.",
+  "type": "object",
+  "required": ["declared_outcome", "beneficiary", "personal_data_in_scope", "consequence_class", "decider"],
+  "additionalProperties": false,
+  "properties": {
+    "declared_outcome": {
+      "type": "object",
+      "required": ["statement", "baseline", "target", "unit", "baseline_source"],
+      "additionalProperties": false,
+      "properties": {
+        "statement": { "type": "string", "minLength": 10 },
+        "baseline": { "type": "number" },
+        "target": { "type": "number" },
+        "unit": { "type": "string" },
+        "baseline_source": {
+          "enum": ["measured", "estimated"],
+          "description": "An estimated baseline cannot be falsified, so no later conformance assessment can say whether the outcome was achieved."
+        },
+        "method": { "type": "string" }
+      }
+    },
+    "beneficiary": {
+      "type": "object",
+      "required": ["role", "count_estimate"],
+      "additionalProperties": false,
+      "properties": {
+        "role": { "type": "string" },
+        "count_estimate": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "personal_data_in_scope": { "type": "boolean" },
+    "regulatory_regime": { "type": "array", "items": { "type": "string" } },
+    "consequence_class": { "enum": ["c1", "c2", "c3", "c4"] },
+    "affected_roles": { "type": "array", "items": { "type": "string" } },
+    "decider": { "type": "string", "description": "The principal accountable for the Explore decision." }
+  }
+}

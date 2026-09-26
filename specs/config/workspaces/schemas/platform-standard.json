@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "platform_standard",
+  "description": "A standard we author. The body carries the full text and the know-how; these facets are what a gate and an evaluator read.",
+  "type": "object",
+  "required": ["standard_id", "pack", "pack_version", "tier", "kind", "assertion", "severity"],
+  "additionalProperties": false,
+  "properties": {
+    "standard_id": {
+      "type": "string",
+      "pattern": "^[A-Z0-9]+(-[A-Z0-9]+)+$",
+      "description": "The stable, quotable id: FPS4-SUFF-BASELINE-002. Constant across versions."
+    },
+    "pack": { "type": "string" },
+    "pack_version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "tier": {
+      "enum": ["invariant", "product", "guidance"],
+      "description": "invariant is never overridable; product may be overridden with a justification and an expiry; guidance is advisory."
+    },
+    "kind": { "enum": ["sufficiency", "conformance", "build", "operational"] },
+    "assertion": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The machine-evaluable claim. An evaluator answers it; this service records the verdict and never computes one."
+    },
+    "applies_when": {
+      "type": "string",
+      "description": "Predicate over an artifact's facets. Absent means it applies to everything the kind covers."
+    },
+    "severity": { "enum": ["blocking", "advisory"] },
+    "evidence_required": { "type": "array", "items": { "type": "string" } },
+    "remediation": { "type": "string" },
+    "supports_construct": {
+      "type": "string",
+      "description": "A construct that helps satisfy this cheaply. What makes the standard actionable rather than only enforceable."
+    },
+    "review_due": { "type": "string", "format": "date" },
+    "obligated_party": { "type": "string" },
+    "assurance_kind": { "enum": ["determines", "evidences", "records"] }
+  }
+}

@@ -26,7 +26,7 @@ on:
         type: string
         default: production
       components:
-        description: 'JSON map of component to git tag, e.g. {"maestro":"spine-v0.1.2"}: each fps4/<component> is checked out under components/<component>/ and built. maestro is required.'
+        description: 'JSON map of component to git tag, e.g. {"maestro":"v0.4.0"}: each fps4/<component> is checked out under components/<component>/ and built. maestro is required.'
         type: string
         required: true
       region:

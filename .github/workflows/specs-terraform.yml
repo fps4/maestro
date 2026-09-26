@@ -1,0 +1,97 @@
+name: specs-terraform
+
+# specs-service's module and the bundles it deploys (ADR-0016, ADR-0017, build-standards §4). Runs
+# on GitHub-hosted runners and ends at the gate: fmt, validate, the mocked-provider tests, the example
+# root, and a bundle that boots. Nothing here deploys to an account; a tenant's pipeline does.
+
+on:
+  pull_request:
+    paths:
+      - 'specs/terraform/**'
+      - 'specs/api/scripts/**'
+      - 'specs/api/package.json'
+      - 'specs/api/package-lock.json'
+      - 'spine/terraform/**'
+      - '.github/workflows/specs-terraform.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'specs/terraform/**'
+      - 'specs/api/scripts/**'
+      - 'specs/api/package.json'
+      - 'specs/api/package-lock.json'
+      - 'spine/terraform/**'
+      - '.github/workflows/specs-terraform.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: specs-terraform-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: specs/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive -diff
+      - run: terraform init -backend=false -input=false
+      - run: terraform validate
+      - name: Module tests (mocked provider)
+        run: terraform test
+      - name: Example root validates (the spine's module from spine/terraform, at this commit)
+        working-directory: specs/terraform/examples/demo
+        run: terraform init -backend=false -input=false && terraform validate
+
+  bundle:
+    # Green once @fps4/maestro-spine at the version api/package.json names is on npm; until then
+    # `npm ci` fails on the lockfile, which is the expected state, not a defect in this job.
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: specs/api
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: specs/api/package-lock.json
+      - run: npm ci
+      - name: Lambda bundles
+        run: npm run bundle
+      - name: The bundles resolve every module on their own
+        # The relay exports its handler. The API is started the way the adapter starts it and must
+        # get as far as the database: it describes its table at boot, so a connection refused on
+        # the DynamoDB endpoint is the expected end, and a module it cannot find is not. There is
+        # no S3 here, so the payload store is `local` (under `RECORD_SINK=off` it would default to
+        # `s3` and ask for a bucket before reaching the database).
+        run: |
+          node -e "import('./bundle/relay/index.mjs').then(m => { if (typeof m.handler !== 'function') { console.error('relay: no handler'); process.exit(1) } console.log('relay: handler ok') })"
+          set +e
+          (cd bundle/api && PORT=18080 TABLE_NAME=smoke DYNAMODB_ENDPOINT='http://127.0.0.1:1' AWS_REGION=eu-west-1 RECORD_SINK=off PAYLOAD_STORE=local \
+            bash run.sh > ../api-boot.log 2>&1)
+          set -e
+          if grep -q 'ECONNREFUSED' bundle/api-boot.log; then
+            echo 'api: booted as far as the database'
+          else
+            echo '::error::the API bundle did not reach the database'; cat bundle/api-boot.log; exit 1
+          fi
+      - name: SBOM (build-standards §4)
+        run: npm run sbom
+      - uses: actions/upload-artifact@v4
+        with:
+          name: specs-lambda-bundles
+          path: |
+            specs/api/bundle/api.zip
+            specs/api/bundle/relay.zip
+            specs/api/bundle/api.cdx.json
+            specs/api/bundle/relay.cdx.json
+          if-no-files-found: error

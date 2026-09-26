@@ -124,8 +124,8 @@ N1 — *operated* — is the module applied and maestro subscribed, and nothing 
 ([signals.md](../docs/signals.md), [governance-model.md](../docs/governance-model.md)). From the
 application's side: apply the module in each environment, put the outputs on its alarms, and record
 the topic ARN in the tenant's `applications/<application>.yaml`. maestro then subscribes its
-signals intake to the topic, observes, and the application's direct alert for the same signal
-retires — one alert, one owner. Anything maestro does *to* the application waits for N2.
+signals intake to the topic, observes. The application keeps its own alert for the same signal: maestro alerts only in its
+console in the MVP ([ADR-0023](../docs/decisions/0023-maestro-alerts-in-its-one-console.md)). Anything maestro does *to* the application waits for N2.
 
 ## Status
 

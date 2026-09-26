@@ -69,9 +69,10 @@ What the first live run found and fixed: two IAM grants DynamoDB Local could not
 | The item: six classes, the state machine, authority at claim, policy clocks, ceilings, chase ladders, leases, the sweep | built |
 | Evidence plans; signals intake (dedup, the weekly fold); the GitHub, SNS and EventBridge adapters | in code; deployed with intake switched off |
 | The frontier, the board, Today (API); `blocking`; MCP with the tracker contract | in code (maestro #32), not yet deployed |
-| Notifier adapters | the log notifier and a Slack webhook are in code; how the MVP alerts is an open decision |
-| Intake switched on for the first tenant: its workload principal, the webhook secret, the observed repositories | to build |
-| Deploy events from whatever deploys an application | to build |
+| Alerts: each chase step, escalation and breach marked on the person's Today ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)) | the steps are recorded; Today's marks to build |
+| Intake switched on for the first tenant: its workload principal, the webhook secret, a GitHub webhook per observed repository, Dependabot security updates on | to build |
+| A fixture application the first tenant owns and observes, in its tenant repository: a pinned dependency with a published high advisory, and its own deploy workflow | to build |
+| Deploy events from each application's own pipeline: a role the tenant grants per repository (`events:PutEvents`, source `maestro.deploy`) | to build |
 | [work-service.md](components/work-service.md) brought level with what was built (the policy's shape, `steward`, ladder timing, streams) | to build |
 
 ### Deploys and instances (runtime-service): to build
@@ -80,7 +81,7 @@ The artifact ledger and the instance register, fed by deploy events ([ADR-0011](
 
 ### The console: to build
 
-Today, Owed (the frontier), the work item and the board, as designed in [ux.md](ux.md). Whether it is one maestro console or one per component is an open decision.
+One console per deployment, growing from specs-service's (`specs/web`), with every surface in [ux.md](ux.md) ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)). To build: Today (decide, answer, owed, agents at work, with the alert marks), Owed (the frontier), the work item and the board; then the run page and the estate. Its OpenNext bundle, deployed through `console/terraform`, is the foundation item above.
 
 ### Agent runs (agent-service and the runner): to build
 
@@ -90,13 +91,23 @@ The record half first ([ADR-0008](decisions/0008-agent-service-record-half-first
 
 CloudWatch, EventBridge and app1's own monitor as signal sources. The `cause_analysis` type and its gate in specs-service. The RCA and fix run kinds. Evidence resolved from events. app1 onboarded at N2.
 
+## Decided on the way
+
+| Decision | Where |
+|---|---|
+| maestro alerts in its console only; applications keep their own paging; one console per deployment | [ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md) |
+| The advisory lane's fix is Dependabot's pull request; a `bump` run only when it goes red (A1) | [use-cases.md](use-cases.md#uc1b--the-advisory-lane), confirmed 2026-09-26 |
+| The live advisory lane (W5) runs on a fixture application the first tenant owns, kept in its tenant repository | 2026-09-26 |
+| A deploy event is put by the application's own pipeline | [signals.md](signals.md), confirmed 2026-09-26 |
+
 ## Open decisions
 
-| Decision | Where it is argued |
+| Decision | Recommendation |
 |---|---|
-| How the MVP alerts: in the console only, or also Slack and email | proposed in conversation 2026-09-26; an ADR to follow |
-| One maestro console, or one per component | as above |
-| For the advisory lane: who opens the fix PR; where the live run's high advisory comes from (a fixture application?); who emits deploy events | the advisory-lane design brainstorm, 2026-09-26 |
+| Whether a GitHub issue mirrors each work item | no: the item is the record, and GitHub is not ([use-cases.md](use-cases.md#uc1--human-gated-ops-on-a-serverless-application)); a mirror would be a notifier adapter after the MVP |
+| Where the console and MCP are reached: the platform's hostnames, or a domain of the tenant's | platform hostnames for the build; a domain before app1 is onboarded |
+| Secret values in Terraform state until the Secrets Manager extension | accepted for the build; the extension before the GitHub App's key arrives (agent runs) |
+| The confirmations asked in work-service's pull requests (ladder timing, `steward`, evidence arming, `blocked_by`, Today's split) | taken as accepted at merge; written into work-service.md with the docs alignment |
 
 ## After the MVP
 

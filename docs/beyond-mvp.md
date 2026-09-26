@@ -16,6 +16,12 @@ A customer signs in to their own deployment, sees exactly which documents are at
 
 Needs: one Terraform module that stands up a tenant as a product; an external reader role and population in identity-service, honoured by every console and MCP tool, with drafts, transcripts and internal annotations excluded by construction; customer-safe run summaries; the board and Today for a customer. Tenant configuration then splits from `maestro-<tenant>` into a repository the customer can be given.
 
+### Push alerts
+
+maestro alerts only in its console in the MVP ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)). A push channel — Slack, email, a mobile push — lets maestro reach a person who is not looking, and lets an application retire its own alert for a signal maestro handles (one alert, one owner).
+
+Needs: a principal's contact from identity-service, given to the notifier and to nothing else; the Slack↔principal link for Slack; an on-call rota in the workspace definition.
+
 ## Branch R — the regulated domain
 
 Forks from the finished MVP. Adds a pack registry (standards, ceilings, chase ladders and clocks as versioned, effective-dated content), a standards engine behind specs-service's evaluator port, assurance and drift detection, classification enforced on every payload and transcript, a conformance dossier per application, and ceilings derived from consequence class.

@@ -30,6 +30,7 @@ README.md                 who, contacts, which components at which tag; who hold
 deploy/aws/               the root module for the tenant's account; backend.hcl names the state bucket,
                           terraform.tfvars carries account, region, domain, contacts
 deploy/local/             the same modules against LocalStack; local state, disposable
+deploy/aws/deploy-events.json  optional: application → the module that deploys it; after an apply, each application whose functions changed gets a `maestro.deploy` event (scripts/deploy.sh)
 workspaces/*.yaml         workspace definitions in the tenant's vocabulary (types, gates, labels)
 policy.yaml               severity × tier → clocks; agent ceilings; chase ladders; the SEV↔P mapping
 adapters.yaml             notifier targets by name (Slack channel id, SES sender; unused in the MVP, ADR-0023); signal sources (topic ARNs)

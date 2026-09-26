@@ -87,6 +87,15 @@ const application = z
           .object({
             repository: z.string().regex(/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/, 'is <owner>/<repo>'),
             environment: slug,
+            /**
+             * The directory the application is built from, when a repository builds more than one
+             * (`work/`): an alert or a pull request whose manifest lies under it is this application's.
+             * The longest match wins; an entry without one takes what no path claims.
+             */
+            path: z
+              .string()
+              .regex(/^([A-Za-z0-9_.-]+\/)+$/, 'is a directory relative to the repository root, ending in /')
+              .optional(),
           })
           .strict(),
       )
@@ -203,8 +212,12 @@ export function parseWorkspaceDefinition(raw: unknown): WorkspaceDefinition {
           `application \`${app.id}\`: repository ${r.repository} names environment \`${r.environment}\`, which it does not have`,
         );
       }
-      if (repos.has(r.repository)) problems.push(`repository ${r.repository} belongs to two applications`);
-      repos.add(r.repository);
+      const where = `${r.repository.toLowerCase()}/${r.path ?? ''}`;
+      if (repos.has(where))
+        problems.push(
+          `repository ${r.repository}${r.path ? ` at ${r.path}` : ''} belongs to two applications; give each its own path`,
+        );
+      repos.add(where);
     }
   }
   const seats = new Set(Object.keys(d.seats));
@@ -259,14 +272,25 @@ export function agentCeilingPermits(
   return (policy.ceilings[seatId]?.[lvl] ?? []).includes(cls);
 }
 
-/** The application a repository belongs to, and the environment its fixes must reach. */
+/**
+ * The application a repository belongs to, and the environment its fixes must reach. `file` is the
+ * manifest or directory the fact is about, relative to the repository root: the entry whose `path` is
+ * its longest prefix wins, and an entry with no path takes what none claims.
+ */
 export function applicationOfRepository(
   definition: WorkspaceDefinition,
   repository: string,
+  file = '',
 ): { application: Application; environment: string } | undefined {
+  let best: { application: Application; environment: string; length: number } | undefined;
   for (const application of definition.applications) {
-    const r = application.repositories.find((x) => x.repository.toLowerCase() === repository.toLowerCase());
-    if (r) return { application, environment: r.environment };
+    for (const r of application.repositories) {
+      if (r.repository.toLowerCase() !== repository.toLowerCase()) continue;
+      const path = r.path ?? '';
+      if (!file.startsWith(path)) continue;
+      if (!best || path.length > best.length)
+        best = { application, environment: r.environment, length: path.length };
+    }
   }
-  return undefined;
+  return best && { application: best.application, environment: best.environment };
 }

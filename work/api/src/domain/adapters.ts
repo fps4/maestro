@@ -17,15 +17,22 @@ import { signalSchema, type Signal } from './intake.js';
 export type Translation =
   | { kind: 'signal'; signal: Signal }
   | { kind: 'fact'; fact: Fact }
+  /** `repository` is where the manifest is — `<owner>/<repo>[/<dir>]` — as the fingerprint names it. */
   | { kind: 'link'; repository: string; application: string; package: string; pull_request: string }
   | { kind: 'ignored'; reason: string };
 
 const ignored = (reason: string): Translation => ({ kind: 'ignored', reason });
 const toSecond = (t: string): string => new Date(t).toISOString().replace(/\.\d{3}Z$/, 'Z');
 
-/** The fingerprint of an advisory against an artifact: one CVE from two scanners is one item. */
-export const advisoryFingerprint = (ghsa: string, repository: string, pkg: string): string =>
-  `${ghsa}:${repository}:${pkg}`;
+/**
+ * The fingerprint of an advisory against an artifact — the manifest's directory in a repository —
+ * so one CVE from two scanners is one item, and one CVE in two services' manifests is two.
+ */
+export const advisoryFingerprint = (ghsa: string, repository: string, pkg: string, dir = ''): string =>
+  `${ghsa}:${repository}${dir ? `/${dir}` : ''}:${pkg}`;
+
+/** `work/api/package-lock.json` → `work/api`; a manifest at the root → ''. */
+const dirOf = (file: string): string => (file.includes('/') ? file.slice(0, file.lastIndexOf('/')) : '');
 
 interface GitHubAlert {
   action?: string;
@@ -36,7 +43,7 @@ interface GitHubAlert {
     updated_at?: string;
     created_at?: string;
     html_url?: string;
-    dependency?: { package?: { name?: string } };
+    dependency?: { package?: { name?: string }; manifest_path?: string };
     security_advisory?: { ghsa_id?: string; severity?: string };
   };
   repository?: { full_name?: string };
@@ -56,7 +63,13 @@ interface GitHubPullRequest {
 
 /** Dependabot titles its bumps "Bump <package> from <old> to <new>[ in /dir]". Groups are not linked. */
 export function bumpedPackage(title: string): string | undefined {
-  return /^Bump (\S+) from \S+ to \S+/.exec(title)?.[1];
+  return bump(title)?.package;
+}
+
+/** The package and the manifest's directory ('' at the root) a Dependabot bump names. */
+export function bump(title: string): { package: string; dir: string } | undefined {
+  const m = /^Bump (\S+) from \S+ to \S+(?: in \/(\S*))?$/.exec(title.trim());
+  return m ? { package: m[1]!, dir: (m[2] ?? '').replace(/\/+$/, '') } : undefined;
 }
 
 export function fromGitHub(
@@ -75,8 +88,12 @@ export function fromGitHub(
     const severity = p.alert?.security_advisory?.severity;
     if (!repository || !ghsa || !pkg || !severity)
       return ignored('a dependabot_alert without its repository, advisory, package or severity');
-    const home = applicationOfRepository(definition, repository);
-    if (!home) return ignored(`${repository} belongs to no application in this workspace`);
+    const manifest = p.alert?.dependency?.manifest_path ?? '';
+    const home = applicationOfRepository(definition, repository, manifest);
+    if (!home)
+      return ignored(
+        `${repository}${manifest ? `/${manifest}` : ''} belongs to no application in this workspace`,
+      );
     const base = {
       signal_version: 1 as const,
       source: 'github' as const,
@@ -84,7 +101,7 @@ export function fromGitHub(
       application: home.application.id,
       environment: home.environment,
       kind: 'advisory' as const,
-      fingerprint: advisoryFingerprint(ghsa, repository, pkg),
+      fingerprint: advisoryFingerprint(ghsa, repository, pkg, dirOf(manifest)),
       ...(p.alert?.html_url ? { link: p.alert.html_url } : {}),
       detail: {
         severity: severity === 'moderate' ? 'medium' : severity,
@@ -140,15 +157,15 @@ export function fromGitHub(
       (p.action === 'opened' || p.action === 'reopened') &&
       p.pull_request?.user?.login === 'dependabot[bot]'
     ) {
-      const home = applicationOfRepository(definition, repository);
-      const pkg = bumpedPackage(p.pull_request.title ?? '');
-      if (!home || !pkg)
+      const b = bump(p.pull_request.title ?? '');
+      const home = b && applicationOfRepository(definition, repository, b.dir ? `${b.dir}/` : '');
+      if (!home || !b)
         return ignored('a Dependabot pull request that names no single package of a known application');
       return {
         kind: 'link',
-        repository,
+        repository: b.dir ? `${repository}/${b.dir}` : repository,
         application: home.application.id,
-        package: pkg,
+        package: b.package,
         pull_request: `${repository}#${number}`,
       };
     }

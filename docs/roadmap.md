@@ -88,7 +88,7 @@ Built and deployed on the first tenant 2026-09-27 ([ADR-0027](decisions/0027-run
 
 ### The console: building
 
-One console per deployment, `console/web` (grown from specs-service's, moved 2026-09-26, #45), with every surface in [ux.md](ux.md) ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)). Built: Today as the landing, with work-service's half (owed, agents at work, what a chase step brought, each row marked); Owed (the frontier, with the escalated-out rate per application); the work item (its acts, evidence plan, clocks with their derivation, edges) and the board; and Today's Decide and Answer, from specs-service's read of what waits on the person. The item's timeline, from work-service's `history`. To build: filters remembered per person; then the run page and the estate. Its OpenNext bundle, deployed through `console/terraform`, is the foundation item above.
+One console per deployment, `console/web` (grown from specs-service's, moved 2026-09-26, #45), with every surface in [ux.md](ux.md) ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)). Built: Today as the landing, with work-service's half (owed, agents at work, what a chase step brought, each row marked); Owed (the frontier, with the escalated-out rate per application); the work item (its acts, evidence plan, clocks with their derivation, edges), the board and the estate; and Today's Decide and Answer, from specs-service's read of what waits on the person. The item's timeline, from work-service's `history`. To build: filters remembered per person; then the run page. Its OpenNext bundle, deployed through `console/terraform`, is the foundation item above.
 
 ### Agent runs (agent-service and the runner): to build
 

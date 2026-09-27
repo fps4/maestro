@@ -142,11 +142,17 @@ export function FrontierTable({ rows, me, empty }: { rows: FrontierRow[]; me?: s
   );
 }
 
-/** What a work page shows when work-service cannot answer: the reason, not a crash. */
-export function WorkUnavailable({ error }: { error: unknown }) {
-  const message = error instanceof WorkError ? error.message : 'work-service could not be read.';
+/** What a page shows when the service it reads cannot answer: the reason, not a crash. */
+export function WorkUnavailable({
+  error,
+  title = 'Work items are not available',
+}: {
+  error: unknown;
+  title?: string;
+}) {
+  const message = error instanceof WorkError ? error.message : 'The service could not be read.';
   return (
-    <Notice tone="warn" title="Work items are not available">
+    <Notice tone="warn" title={title}>
       {message}
     </Notice>
   );

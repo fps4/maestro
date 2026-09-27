@@ -3,8 +3,8 @@
 maestro's one console per deployment ([ADR-0023](../../docs/decisions/0023-maestro-alerts-in-its-one-console.md)):
 Next.js, its standalone server packaged by `npm run bundle` and deployed through [`../terraform`](../terraform/) ([ADR-0026](../../docs/decisions/0026-the-console-behind-the-tenants-edge.md)). It grew from
 specs-service's console. It holds work-service's screens — Today (its landing), Owed, the work item and
-the board — and specs-service's: the register, the document, the decision page. The run page and the
-estate join it next ([ux.md](../../docs/ux.md)).
+the board, the estate — and specs-service's: the register, the document, the decision page. The run
+page joins it next ([ux.md](../../docs/ux.md)).
 
 It reads each component's HTTP API with the signed-in person's token and holds no data of its own.
 
@@ -26,6 +26,7 @@ NEXT_PUBLIC_IDENTITY_CLIENT_ID=maestro-web
 NEXT_PUBLIC_DEFAULT_WORKSPACE=<workspace>
 API_PROXY_TARGET=<specs-service's API>                      # terraform output specs_api_url
 WORK_API_PROXY_TARGET=<work-service's API>                  # work-service module output api_url
+RUNTIME_API_PROXY_TARGET=<runtime-service's API>            # runtime-service module output api_url
 ```
 
 Without `WORK_API_PROXY_TARGET` (outside dev mode) the work pages say work-service is not connected. In

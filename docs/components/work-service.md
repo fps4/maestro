@@ -143,7 +143,7 @@ Each `evidence_plan` entry names a fact and the event that satisfies it: `merged
 
 ## The board
 
-The frontier (what is owed now, by whom, with the next human touchpoint) and a kanban over the state machine, filtered by **milestone** and **application**. Two views of one query. "Today" for a person: decisions waiting on them in specs-service, questions, items they owe, runs they are accountable for.
+The frontier (what is owed now, by whom, with the next human touchpoint) and a kanban over the state machine, filtered by **milestone** and **application**. Two views of one query. "Today" for a person: decisions waiting on them in specs-service, questions, items they owe, runs they are accountable for, and items a chase step reached them on though they neither hold nor answer for them (a steward's). Every row carries its **marks**: the ladder step last fired (its name, its place — step 3 of 5 — and whom it reached) and the clocks breached. They are how maestro alerts in the MVP ([ADR-0023](../decisions/0023-maestro-alerts-in-its-one-console.md)).
 
 ## Interfaces
 

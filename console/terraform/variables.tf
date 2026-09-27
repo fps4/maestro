@@ -23,7 +23,8 @@ variable "web_adapter_layer_arn" {
 
 variable "environment" {
   description = <<-EOT
-    What the console's server reads at request time: the APIs it proxies to (API_PROXY_TARGET), switches.
+    What the console's server reads at request time: the APIs it calls (API_PROXY_TARGET for specs-service,
+    WORK_API_PROXY_TARGET for work-service), switches.
     NEXT_PUBLIC_* values are not read here — Next bakes them in at the build (the tenant pipeline's
     build_env). The module sets what it owns on top: the adapter, the port, NODE_ENV.
   EOT

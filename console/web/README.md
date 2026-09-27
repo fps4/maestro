@@ -2,15 +2,15 @@
 
 maestro's one console per deployment ([ADR-0023](../../docs/decisions/0023-maestro-alerts-in-its-one-console.md)):
 Next.js, its standalone server packaged by `npm run bundle` and deployed through [`../terraform`](../terraform/) ([ADR-0026](../../docs/decisions/0026-the-console-behind-the-tenants-edge.md)). It grew from
-specs-service's console and holds specs-service's screens today (the register, the document, the
-decision page); work-service's (Today, Owed, the work item, the board) join it next, then the run page
-and the estate ([ux.md](../../docs/ux.md)).
+specs-service's console. It holds work-service's screens — Today (its landing), Owed, the work item and
+the board — and specs-service's: the register, the document, the decision page. The run page and the
+estate join it next ([ux.md](../../docs/ux.md)).
 
 It reads each component's HTTP API with the signed-in person's token and holds no data of its own.
 
 ```bash
 npm ci
-npm run dev        # :8021, against specs-service's local loop (specs/: make up)
+npm run dev        # :8021, against specs-service's local loop (specs/: make up) and work-service's (work/: make up, :8041)
 npm test && npm run lint && npm run typecheck
 ```
 
@@ -25,7 +25,12 @@ NEXT_PUBLIC_IDENTITY_BASE_URL=<identity-service's issuer>   # terraform output i
 NEXT_PUBLIC_IDENTITY_CLIENT_ID=maestro-web
 NEXT_PUBLIC_DEFAULT_WORKSPACE=<workspace>
 API_PROXY_TARGET=<specs-service's API>                      # terraform output specs_api_url
+WORK_API_PROXY_TARGET=<work-service's API>                  # work-service module output api_url
 ```
+
+Without `WORK_API_PROXY_TARGET` (outside dev mode) the work pages say work-service is not connected. In
+dev mode they call `http://127.0.0.1:8041` with `WORK_DEV_TOKEN` (default
+`dev:prn-h-demo-owner:owner,operations`), the shape work-service's development verifier reads.
 
 then `set -a; source ~/.config/maestro/console-<tenant>.env; set +a; npm run dev` and open
 http://127.0.0.1:8021. Sign-in and every API call go through the console's own server, so the

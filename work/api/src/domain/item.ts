@@ -87,6 +87,8 @@ export interface Chase {
   ladder: string;
   steps: Exclude<ChaseStep, 'breach'>[];
   next: number;
+  /** Whom the last step fired reached: the person whose Today it stands on (ADR-0023). */
+  to?: string;
 }
 
 export interface EvidenceEntry {

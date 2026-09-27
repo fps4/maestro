@@ -6,7 +6,7 @@
 flowchart LR
     F["Foundation<br/>spine · identity · specs · pipeline<br/>built"] --> W["Commitments<br/>work-service<br/>building"]
     F --> RT["Deploys and instances<br/>runtime-service<br/>to build"]
-    W --> C["The console<br/>Today · Owed · item · board<br/>to build"]
+    W --> C["The console<br/>Today · Owed · item · board<br/>building"]
     W --> A["Agent runs<br/>agent-service + runner<br/>to build"]
     RT --> A
     A --> U["Use case 1 on app1<br/>analysis · fix · three gates<br/>to build"]
@@ -69,7 +69,7 @@ What the first live run found and fixed: two IAM grants DynamoDB Local could not
 | The item: six classes, the state machine, authority at claim, policy clocks, ceilings, chase ladders, leases, the sweep | built |
 | Evidence plans; signals intake (dedup, the weekly fold); the GitHub, SNS and EventBridge adapters | built; intake on for the first tenant since 2026-09-26 |
 | The frontier, the board, Today (API); `blocking`; MCP with the tracker contract | built (v0.5.0); the MCP endpoint is live, and its contract suite has run only locally |
-| Alerts: each chase step, escalation and breach marked on the person's Today ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)) | the steps are recorded; Today's marks to build |
+| Alerts: each chase step, escalation and breach marked on the person's Today ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)) | built: rows carry their marks, and a step that reaches a steward puts the item on the steward's Today |
 | Intake switched on for the first tenant: its workload principal, the webhook secret, a GitHub webhook per observed repository, Dependabot security updates on | built: the fixture's repository, `fps4/maestro` (specs-service and work-service by directory) and `fps4/identity-service`; alerts that predate a webhook are sent by the tenant's backfill script |
 | A fixture application the first tenant owns and observes, in its tenant repository: pinned dependencies with published advisories, and its own deploy workflow | built |
 | Deploy events from each application's own pipeline: a role the tenant grants per repository (`events:PutEvents`, source `maestro.deploy`) | built: the fixture's own pipeline, and the tenant pipeline for maestro's own services (`scripts/deploy.sh`) |
@@ -79,9 +79,9 @@ What the first live run found and fixed: two IAM grants DynamoDB Local could not
 
 The artifact ledger and the instance register, fed by deploy events ([ADR-0011](decisions/0011-the-instance-register-is-one-deployable.md)). Scan intake from ECR and Inspector. `carries(dependency)` over the SBOMs. Tier and onboarding level move here from work-service's workspace definition. `deploy_event` evidence is then matched by digest rather than by time.
 
-### The console: to build
+### The console: building
 
-One console per deployment, `console/web` (grown from specs-service's, moved 2026-09-26, #45), with every surface in [ux.md](ux.md) ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)). To build: Today (decide, answer, owed, agents at work, with the alert marks), Owed (the frontier), the work item and the board; then the run page and the estate. Its OpenNext bundle, deployed through `console/terraform`, is the foundation item above.
+One console per deployment, `console/web` (grown from specs-service's, moved 2026-09-26, #45), with every surface in [ux.md](ux.md) ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)). Built: Today as the landing, with work-service's half (owed, agents at work, what a chase step brought, each row marked), Owed (the frontier, with the escalated-out rate per application), the work item (its acts, evidence plan, clocks with their derivation, edges) and the board. To build: Today's Decide and Answer, from a specs-service read of what waits on the person; the item's timeline, from a read of its events; filters remembered per person; then the run page and the estate. Its OpenNext bundle, deployed through `console/terraform`, is the foundation item above.
 
 ### Agent runs (agent-service and the runner): to build
 

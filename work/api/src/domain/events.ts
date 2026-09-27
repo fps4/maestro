@@ -230,7 +230,11 @@ export function evolve(head: WorkItem | null, event: ItemEvent): WorkItem {
           `${event.item} is chased at step ${event.body.index}, out of its ladder's order.`,
         );
       }
-      return { ...next, chase: { ...head.chase, next: head.chase.next + 1 } };
+      const { to: _was, ...chase } = head.chase;
+      return {
+        ...next,
+        chase: { ...chase, next: head.chase.next + 1, ...(event.body.to ? { to: event.body.to } : {}) },
+      };
     }
     case 'WorkItemLinked':
       return { ...next, links: { ...head.links, [event.body.link]: event.body.ref } };

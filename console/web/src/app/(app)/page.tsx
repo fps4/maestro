@@ -1,132 +1,76 @@
-import Link from 'next/link';
-import { fetchAcceptances, fetchLabels, fetchRegister } from '@/lib/api';
-import { phaseLabel, stateLabel, typeLabel } from '@/lib/labels';
-import {
-  Button,
-  Chip,
-  Empty,
-  Mono,
-  PageTitle,
-  Scroller,
-  Td,
-  Th,
-  Tile,
-  relativeDate,
-} from '@/components/atoms';
-import type { Acceptance, Labels, RegisterRow } from '@/lib/types';
+import { PageTitle, SectionTitle } from '@/components/atoms';
+import { FrontierTable, NothingOwed, WorkUnavailable } from '@/components/work';
+import { fetchToday } from '@/lib/work';
+import type { Today } from '@/lib/work-types';
 
 export const dynamic = 'force-dynamic';
 
 /**
- * The register: everything in flight, with the lifecycle phase it sits in.
+ * Today: only what needs this person, in order of who can do it (ux.md rule 1), and the landing of
+ * the console (ADR-0023). Nothing on it is a feed.
  *
- * The summary reads before the list. Expiry and a lapsed acceptance are the two things a stale
- * register hides, so they are tiles rather than rows you have to find — §6 of the conceptual design
- * calls a stale register a defect, and a defect you have to scan for is one nobody finds.
- *
- * A superseded version never appears here: the register lists lineages, and version history belongs
- * to the artifact.
+ * work-service's half is here: what a chase step brought to them, what they owe, and the agents'
+ * work they answer for. Each row carries why it is here — "escalated to you, step 3 of 5",
+ * "breached resolve by" — because in the MVP this page is how maestro alerts: there is no other
+ * channel. specs-service's half, the decisions only this person can take and the questions on what
+ * they wrote, joins it from specs-service's own read.
  */
-export default async function RegisterPage() {
-  const [register, acceptances, labels] = await Promise.all([
-    fetchRegister(),
-    fetchAcceptances().catch((): Acceptance[] => []),
-    fetchLabels(),
-  ]);
-
-  const inFlight = register.filter((r) => !['closed', 'retired'].includes(r.phase));
-  const awaiting = register.filter((r) => r.latest_state === 'proposed');
-  const expired = register.filter((r) => r.latest_state === 'expired');
-  const lapsed = acceptances.filter((a) => a.status === 'lapsed');
+export default async function TodayPage() {
+  let today: Today;
+  try {
+    today = await fetchToday();
+  } catch (error) {
+    return (
+      <>
+        <PageTitle>Today</PageTitle>
+        <WorkUnavailable error={error} />
+      </>
+    );
+  }
+  const me = today.principal;
 
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex flex-col gap-1">
-          <PageTitle>Register</PageTitle>
-          <p className="text-sm text-muted">
-            Everything in flight in this workspace, with the lifecycle phase it sits in.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button href="/search" size="sm">
-            Search
-          </Button>
-          <Button href="/drafts/new" variant="primary" size="sm">
-            New draft
-          </Button>
-        </div>
+      <div className="flex flex-col gap-1">
+        <PageTitle>Today</PageTitle>
+        <p className="text-sm text-muted">What needs you, in order of who can do it. Nothing else.</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
-        <Tile value={inFlight.length} label="In flight" />
-        <Tile value={awaiting.length} label="Awaiting a decision" />
-        <Tile value={expired.length} label="Expired" alert={expired.length > 0} />
-        <Tile value={lapsed.length} label="Standards acceptance lapsed" alert={lapsed.length > 0} />
-      </div>
+      {today.escalated.length > 0 ? (
+        <Section
+          title="Brought to you"
+          note="A chase step reached you on these. You neither hold them nor answer for them; the answerable person has not changed."
+        >
+          <FrontierTable rows={today.escalated} me={me} empty={null} />
+        </Section>
+      ) : null}
 
-      {register.length === 0 ? (
-        <Empty title="Nothing has been raised yet.">
-          A register with nothing in it is either a new workspace or a defect. Start a draft, and the lineage
-          appears here the moment a version is proposed.
-        </Empty>
-      ) : (
-        <Scroller>
-          <table className="w-full border-collapse text-sm">
-            <thead>
-              <tr>
-                <Th>Artifact</Th>
-                <Th>Type</Th>
-                <Th>Phase</Th>
-                <Th>State</Th>
-                <Th right>Latest</Th>
-                <Th right>Updated</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {register.map((row) => (
-                <Row key={row.id} row={row} labels={labels} />
-              ))}
-            </tbody>
-          </table>
-        </Scroller>
-      )}
+      <Section title="Owed" note="Items you hold, or answer for with nobody holding them. Soonest first.">
+        <FrontierTable rows={today.owes} me={me} empty={<NothingOwed title="You owe nothing right now." />} />
+      </Section>
 
-      <p className="text-2xs text-faint">
-        {register.length} {register.length === 1 ? 'lineage' : 'lineages'} · a superseded version never
-        appears here, only its lineage
-      </p>
+      <Section
+        title="Agents at work"
+        note="Items an agent holds that you answer for. You are the next person on each, and the answerable one whatever the agent does."
+      >
+        <FrontierTable
+          rows={today.oversees}
+          me={me}
+          empty={<NothingOwed title="No agent is acting on anything you answer for." />}
+        />
+      </Section>
     </>
   );
 }
 
-function Row({ row, labels }: { row: RegisterRow; labels: Labels }) {
+function Section({ title, note, children }: { title: string; note: string; children: React.ReactNode }) {
   return (
-    <tr className="hover:bg-surface-2">
-      <Td>
-        <Link href={`/artifacts/${row.id}`} className="font-medium underline-offset-2 hover:underline">
-          {row.title}
-        </Link>
-        <span className="block font-mono text-2xs text-faint">{row.id}</span>
-      </Td>
-      <Td className="text-sm text-muted">{typeLabel(labels, row.type)}</Td>
-      <Td className="text-sm">{phaseLabel(labels, row.phase)}</Td>
-      <Td>
-        <div className="flex flex-wrap items-center gap-1.5">
-          {row.latest_state ? <Chip state={row.latest_state}>{stateLabel(row.latest_state)}</Chip> : null}
-          {row.open_draft ? (
-            <Link href={`/drafts/${row.open_draft}`}>
-              <Chip state="draft">Draft open</Chip>
-            </Link>
-          ) : null}
-        </div>
-      </Td>
-      <Td right>
-        <Mono>@{row.latest_ordinal}</Mono>
-      </Td>
-      <Td right className="text-sm text-muted">
-        {relativeDate(row.updated_at)}
-      </Td>
-    </tr>
+    <section className="flex flex-col gap-2">
+      <div className="flex flex-col gap-0.5">
+        <SectionTitle>{title}</SectionTitle>
+        <p className="text-xs text-muted">{note}</p>
+      </div>
+      {children}
+    </section>
   );
 }

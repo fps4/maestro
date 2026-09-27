@@ -23,7 +23,15 @@ import type { WorkspaceHandle } from '../db/handle.js';
 import type { Notifier } from '../notify/notifier.js';
 import { evolve, talliesOf, type ItemEvent } from '../domain/events.js';
 import { itemId, type PrincipalKind } from '../domain/ids.js';
-import { isClosed, isHeld, nextAt, type State, type WorkItem } from '../domain/item.js';
+import {
+  isClosed,
+  isHeld,
+  nextAt,
+  type ChaseStep,
+  type Clock,
+  type State,
+  type WorkItem,
+} from '../domain/item.js';
 import { armed } from '../domain/evidence.js';
 import { NotFound } from '../http/errors.js';
 import { itemPayloadKey, writePayload, type PayloadStore } from '../record/payload-store.js';
@@ -61,6 +69,14 @@ export interface FrontierRow {
   severity: WorkItem['severity'];
   due: string;
   next_human_touchpoint: string;
+  /** Why it stands where it stands (ADR-0023): the ladder step last fired, and the clocks breached. */
+  marks?: Marks;
+}
+
+export interface Marks {
+  /** The last step fired: its name, its place, and how many the ladder has with its breach. */
+  chased?: { step: ChaseStep; n: number; of: number; to?: string };
+  breached?: Clock[];
 }
 
 /** An item another one waits on, or one waiting on it: enough to say who moves it and by when. */
@@ -97,6 +113,8 @@ export interface Today {
   owes: FrontierRow[];
   /** Items the person answers for while an agent acts on them: the runs they are accountable for. */
   oversees: FrontierRow[];
+  /** Items a chase step reached the person on, which they neither hold nor answer for: a steward's. */
+  escalated: FrontierRow[];
 }
 
 export interface Rates {
@@ -130,7 +148,31 @@ export function nextHumanTouchpoint(item: WorkItem): string {
   return item.assigned_to?.startsWith('prn-h-') && isHeld(item) ? item.assigned_to : item.accountable;
 }
 
+/** Whether an item is the principal's to move: they hold it, or answer for it with no person holding it. */
+const owedBy = (i: WorkItem, principal: string): boolean =>
+  (isHeld(i) && i.assigned_to === principal) ||
+  (i.accountable === principal && (!isHeld(i) || !i.assigned_to?.startsWith('prn-h-')));
+
+export function marksOf(i: WorkItem): Marks | undefined {
+  const c = i.chase;
+  const marks: Marks = {
+    ...(c && c.next > 0
+      ? {
+          chased: {
+            step: c.steps[c.next - 1]!,
+            n: c.next,
+            of: c.steps.length + 1,
+            ...(c.to ? { to: c.to } : {}),
+          },
+        }
+      : {}),
+    ...(i.breached?.length ? { breached: i.breached } : {}),
+  };
+  return marks.chased || marks.breached ? marks : undefined;
+}
+
 export function frontierRow(i: WorkItem): FrontierRow {
+  const marks = marksOf(i);
   return {
     item_id: i.item_id,
     class: i.class,
@@ -142,6 +184,7 @@ export function frontierRow(i: WorkItem): FrontierRow {
     severity: i.severity,
     due: isClosed(i) ? i.closed_at! : nextAt(i),
     next_human_touchpoint: nextHumanTouchpoint(i),
+    ...(marks ? { marks } : {}),
   };
 }
 
@@ -400,16 +443,18 @@ export class WorkItemService {
     return result;
   }
 
-  /** fetch: the item with its evidence and clocks, its edges, and who a person reaches next about it. */
+  /** fetch: the item with its evidence and clocks, its edges, who a person reaches next about it, and its marks. */
   async get(
     ctx: RequestContext,
     id: string,
-  ): Promise<{ item: WorkItem; edges: Edge[]; next_human_touchpoint: string }> {
+  ): Promise<{ item: WorkItem; edges: Edge[]; next_human_touchpoint: string; marks?: Marks }> {
     const item = await this.head(ctx, id);
+    const marks = marksOf(item);
     return {
       item,
       edges: await ctx.handle.items.edges(id),
       next_human_touchpoint: nextHumanTouchpoint(item),
+      ...(marks ? { marks } : {}),
     };
   }
 
@@ -433,12 +478,7 @@ export class WorkItemService {
     const rows = (await ctx.handle.items.open())
       .filter((i) => !q.application || i.about.application === q.application)
       .filter((i) => !q.milestone || i.milestone === q.milestone)
-      .filter(
-        (i) =>
-          !me ||
-          (isHeld(i) && i.assigned_to === me) ||
-          (i.accountable === me && (!isHeld(i) || !i.assigned_to?.startsWith('prn-h-'))),
-      )
+      .filter((i) => !me || owedBy(i, me))
       .map(frontierRow);
     return q.limit ? rows.slice(0, q.limit) : rows;
   }
@@ -466,12 +506,14 @@ export class WorkItemService {
   /** Today for the caller: what they owe, and the agents' work they answer for. */
   async today(ctx: RequestContext): Promise<Today> {
     const principal = ctx.caller.principal;
-    const rows = await this.frontier(ctx, { for: principal });
+    const open = await ctx.handle.items.open();
+    const rows = open.filter((i) => owedBy(i, principal)).map(frontierRow);
     const byAgent = (r: FrontierRow) => !!r.acting && !r.acting.startsWith('prn-h-');
     return {
       principal,
       owes: rows.filter((r) => !byAgent(r)),
       oversees: rows.filter(byAgent),
+      escalated: open.filter((i) => !owedBy(i, principal) && i.chase?.to === principal).map(frontierRow),
     };
   }
 

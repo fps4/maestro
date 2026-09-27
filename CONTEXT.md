@@ -41,6 +41,8 @@ One meaning per word, across every component and document. If a component needs 
 | **Outcome** | Write-once at closure: done, superseded, escalated_out, refused, expired. |
 | **Milestone** | A dated objective several items roll up to; the board groups by it. |
 | **Fold** | A policy row that gathers low-weight findings — medium and low advisories — into one recurring `obligation` per period instead of an item each. |
+| **Failure domain** | What several applications' reachability rests on together — a host, a tunnel — declared in work-service's definition, with the **detector** that watches its members from outside, if one does. |
+| **Outage** | One failure in a failure domain, as one item: the domain's first alarm raises it, later alarms in the domain attach to it inside the correlation window — or to the detector's item while its own alarm is open — and it closes when every application in it is reachable again. |
 | **Tracker contract** | The six operations an agent works a board through — publish, fetch, claim, resolve, frontier, blocking — as work-service's MCP server implements them. A skill written against it works unchanged. |
 
 ## What runs

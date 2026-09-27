@@ -53,6 +53,8 @@ const bodies: Record<ItemEventType, z.ZodTypeAny> = {
       fingerprint: id.optional(),
       fingerprint_until: instant.optional(),
       fold: id.optional(),
+      failure_domain: id.optional(),
+      detects: z.array(id).min(1).optional(),
       chase_steps: z.array(z.enum(CHASE_STEPS).exclude(['breach'])).optional(),
     })
     .strict(),
@@ -93,6 +95,7 @@ const bodies: Record<ItemEventType, z.ZodTypeAny> = {
       signal_kind: id,
       fingerprint_until: instant.optional(),
       adds_rescan_clear: z.boolean().optional(),
+      adds_signal_ok: z.boolean().optional(),
     })
     .strict(),
   WorkItemClosed: z.object({ outcome: z.enum(OUTCOMES) }).strict(),

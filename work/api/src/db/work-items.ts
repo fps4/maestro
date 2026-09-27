@@ -7,7 +7,7 @@
 import type { WorkItem } from '../domain/item.js';
 import { isClosed, nextAt } from '../domain/item.js';
 import type { Bound } from './handle.js';
-import { strip, type Item, type Transaction } from './items.js';
+import { Conflict, strip, type Item, type Transaction } from './items.js';
 import { KINDS, type EdgeRel, type WorkspaceKeys } from './keys.js';
 import { PK } from './table.js';
 
@@ -339,5 +339,87 @@ export class DeliveryRepository {
   /** After the facts it carried were applied — each of those was idempotent on its own. */
   async put(d: DeliveryRecord, now: string): Promise<void> {
     await this.b.items.put(this.row(d, now));
+  }
+}
+
+/**
+ * A failure domain's outage (ADR-0028 §2): the item that is the domain's while it is open. `site` is
+ * the item its first alarm raised, which later alarms in the domain attach to inside the correlation
+ * window; `detector` is the item the domain's detector's own alarm raised, which every alarm in the
+ * domain attaches to while it is open. Derived from the raises, so a rebuild writes it back.
+ */
+export interface OutageRecord {
+  role: 'site' | 'detector';
+  domain: string;
+  item_id: string;
+  opened_at: string;
+}
+
+export class OutageRepository {
+  constructor(private readonly b: Bound) {}
+
+  async get(role: OutageRecord['role'], domain: string): Promise<OutageRecord | null> {
+    const row = await this.b.items.get(this.b.keys.outage(role, domain));
+    return row ? strip<OutageRecord>(row) : null;
+  }
+
+  /** On the condition it still names the item that was read: two first alarms raise one outage. */
+  stage(tx: Transaction, next: OutageRecord, read: OutageRecord | null): void {
+    tx.put(
+      { ...this.b.keys.outage(next.role, next.domain), kind: KINDS.outage, ...next },
+      {
+        condition: (e) =>
+          read ? `${e.n('item_id')} = ${e.v(read.item_id)}` : `attribute_not_exists(${e.n(PK)})`,
+        onConflict: `The \`${next.domain}\` outage moved while this signal was decided.`,
+        retry: true,
+      },
+    );
+  }
+
+  async putMany(all: OutageRecord[]): Promise<void> {
+    await this.b.items.batchWrite(
+      all.map((o) => ({ ...this.b.keys.outage(o.role, o.domain), kind: KINDS.outage, ...o })),
+    );
+  }
+}
+
+/**
+ * A fingerprint's latest all-clear, by the alarm's own `occurred_at` (ADR-0028 §3): an alarm older
+ * than it is stale. Not record — an OK that closed nothing is no event — so a cache with a TTL, like
+ * deliveries: a rebuild forgets it, and forgets only the protection against alarms older than it.
+ */
+export interface AllClear {
+  fingerprint: string;
+  last_ok: string;
+}
+
+export const ALL_CLEAR_TTL_SECONDS = 14 * 86_400;
+
+export class AllClearRepository {
+  constructor(private readonly b: Bound) {}
+
+  async get(fp: string): Promise<AllClear | null> {
+    const row = await this.b.items.get(this.b.keys.allClear(fp));
+    return row ? strip<AllClear>(row) : null;
+  }
+
+  /** Kept only if newer than the one held: an OK delivered late does not move it back. */
+  async record(c: AllClear, now: string): Promise<void> {
+    await this.b.items
+      .put(
+        {
+          ...this.b.keys.allClear(c.fingerprint),
+          kind: KINDS.all_clear,
+          ...c,
+          expires_at: Math.floor(Date.parse(now) / 1000) + ALL_CLEAR_TTL_SECONDS,
+        },
+        {
+          condition: (e) => `attribute_not_exists(${e.n(PK)}) OR ${e.n('last_ok')} < ${e.v(c.last_ok)}`,
+          onConflict: `A newer all-clear is held for \`${c.fingerprint}\`.`,
+        },
+      )
+      .catch((error: unknown) => {
+        if (!(error instanceof Conflict)) throw error;
+      });
   }
 }

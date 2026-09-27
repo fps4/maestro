@@ -102,6 +102,19 @@ any open state ──▶ closed (superseded · refused · escalated_out, with a 
 
 A signal that matches no policy row raises a low-severity `review` item, never nothing.
 
+**Outages** ([ADR-0028](../decisions/0028-external-detection-and-correlated-outages.md)). An application may name a `failure_domain` it shares with others (a host, a tunnel), declared in `policy.failure_domains` with the `detector` that watches its members from outside, if one does. An alarm on an application in a domain, raising a remediation, becomes one **outage**:
+
+- **The detector's alarm.** While the detector's own alarm is open, an alarm in any domain it detects attaches to the detector's item. A site is not down because the probe that watches it is.
+- **The domain's first alarm.** Otherwise the domain's first alarm raises its item, titled with the domain. A later alarm in the domain within `correlation_window` (PT15M) attaches to it.
+- **What an attached alarm owes.** It adds a `signal_ok` entry for its own fingerprint, armed with the others, as a fold's findings are.
+- **Closing.** The item closes `done` when every application in it is reachable again. The detector's `OK` satisfies only its own entry.
+- **The record.** The raise records the domain it opened, or the domains its detector detects, so a rebuild restores each domain's outage.
+
+**Order** (ADR-0028 §3). An alarm's own `occurred_at` orders it, not its arrival.
+
+- **The last all-clear is kept.** Each fingerprint's last `OK`, matched or not, is held for fourteen days. It is a cache, not record: an `OK` that closed nothing is no event.
+- **An older alarm is stale.** An alarm older than the fingerprint's last `OK` is taken in as `stale` and raises nothing, so an `OK` that arrives before its `ALARM` leaves nothing open.
+
 ## Policy
 
 The workspace's definition: seats, the steward, applications and policy, applied from the tenant's configuration repository (`workspaces/<workspace>.work.yaml`) by its pipeline; the demo's is [`work/config/workspaces/aannemer-x.yaml`](../../work/config/workspaces/aannemer-x.yaml), the schema `work/api/src/domain/definition.ts`. Each apply is a new `definition_version`, and every item records the version it was resolved under.
@@ -120,6 +133,7 @@ applications:                         # tier and onboarding level: until runtime
     environments: [staging, prod]
     repositories:                     # what the GitHub adapter reads; the environment a fix must reach
       - { repository: acme/app1, environment: prod, path: services/app1/ }   # path: when one repository builds several
+    failure_domain: host1-tunnel      # optional: what its reachability shares with others (ADR-0028)
 
 policy:
   severity_map: { P1: sev1, P2: sev2, P3: sev3, P4: sev4 }
@@ -147,6 +161,9 @@ policy:
   chase_ladders:
     standard: [reminder, chase, escalate_accountable, escalate_steward, breach]
   chase_ladder: standard              # the ladder every item with a resolve_by is chased on
+  failure_domains:                    # ADR-0028: each with the detector watching it from outside, if any
+    host1-tunnel: { detector: probe }
+  correlation_window: PT15M
 ```
 
 **An application's tier and onboarding level are runtime-service's to set** ([ADR-0027](../decisions/0027-runtime-services-table-and-feeds.md) §4). A person sets them there; work-service projects each `InstanceTierSet` and `InstanceLevelSet` from the spine's events topic (a FIFO queue its intake function reads, `intake.runtime_events_topic_arn`), records the projection as its own `ApplicationAuthorityProjected`, and reads the projected value in place of the definition's from then on. An application nobody has set keeps the definition's. Items keep what they were raised under.

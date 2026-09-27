@@ -70,6 +70,10 @@ export type Raised = Base<
     fingerprint_until?: string;
     /** Raised as a weekly obligation: `<fold>#<ISO week>`. */
     fold?: string;
+    /** The first alarm of an outage in this failure domain: the domain's item (ADR-0028 §2). */
+    failure_domain?: string;
+    /** Raised by a detector's own alarm: the domains whose alarms are its while it is open. */
+    detects?: string[];
   },
   { title: string }
 >;
@@ -111,7 +115,14 @@ export type EvidenceSatisfied = Base<
  */
 export type SignalAttached = Base<
   'WorkItemSignalAttached',
-  { fingerprint: string; signal_kind: string; fingerprint_until?: string; adds_rescan_clear?: boolean }
+  {
+    fingerprint: string;
+    signal_kind: string;
+    fingerprint_until?: string;
+    adds_rescan_clear?: boolean;
+    /** Another application's alarm in the outage (ADR-0028 §2): its own all-clear is now owed. */
+    adds_signal_ok?: boolean;
+  }
 >;
 /** A clock passed with its commitment unmet. Recorded, never a closure. */
 export type Breached = Base<'WorkItemBreached', { clock: Clock; due: string }>;
@@ -256,11 +267,14 @@ export function evolve(head: WorkItem | null, event: ItemEvent): WorkItem {
       return {
         ...next,
         signals: (head.signals ?? 0) + 1,
-        ...(event.body.adds_rescan_clear
+        ...(event.body.adds_rescan_clear || event.body.adds_signal_ok
           ? {
               evidence_plan: [
                 ...head.evidence_plan,
-                { kind: 'rescan_clear' as const, fingerprint: event.body.fingerprint },
+                {
+                  kind: event.body.adds_signal_ok ? ('signal_ok' as const) : ('rescan_clear' as const),
+                  fingerprint: event.body.fingerprint,
+                },
               ],
             }
           : {}),

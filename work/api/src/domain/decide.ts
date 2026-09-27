@@ -114,6 +114,10 @@ export interface Origin {
   resolve_by?: string;
   /** For an item about nothing the definition declares: the workspace's steward answers for it. */
   accountable?: string;
+  /** The failure domain whose outage this item opens (ADR-0028 §2). */
+  failure_domain?: string;
+  /** A detector's own alarm: the domains it detects, whose alarms are this item's while it is open. */
+  detects?: string[];
 }
 
 export function raise(env: Env, id: string, input: RaiseInput, origin: Origin = {}): ItemEvent[] {
@@ -191,6 +195,8 @@ export function raise(env: Env, id: string, input: RaiseInput, origin: Origin = 
         ...(origin.fingerprint ? { fingerprint: origin.fingerprint } : {}),
         ...(origin.fingerprint_until ? { fingerprint_until: origin.fingerprint_until } : {}),
         ...(origin.fold ? { fold: origin.fold } : {}),
+        ...(origin.failure_domain ? { failure_domain: origin.failure_domain } : {}),
+        ...(origin.detects?.length ? { detects: origin.detects } : {}),
         ...((clocks || origin.resolve_by) && policy.chase_ladder
           ? {
               chase_ladder: policy.chase_ladder,
@@ -613,13 +619,22 @@ export function satisfy(env: Env, item: WorkItem, fact: Fact): ItemEvent[] {
 export function attachSignal(
   env: Env,
   item: WorkItem,
-  signal: { fingerprint: string; kind: string; fingerprint_until?: string; fold?: boolean },
+  signal: {
+    fingerprint: string;
+    kind: string;
+    fingerprint_until?: string;
+    fold?: boolean;
+    /** Another application's alarm, correlated onto this outage: its all-clear is owed too. */
+    outage?: boolean;
+  },
 ): ItemEvent[] {
   if (item.state === 'closed')
     throw new Refusal(`\`${item.item_id}\` is closed; a signal raises a new item.`);
-  const already = item.evidence_plan.some(
-    (e) => e.kind === 'rescan_clear' && e.fingerprint === signal.fingerprint,
-  );
+  const owedKind = signal.fold ? 'rescan_clear' : 'signal_ok';
+  // An outage already owes the all-clear of its own first alarm (the entry with no fingerprint of its own).
+  const already =
+    (signal.outage && item.fingerprint === signal.fingerprint) ||
+    item.evidence_plan.some((e) => e.kind === owedKind && e.fingerprint === signal.fingerprint);
   return [
     {
       type: 'WorkItemSignalAttached',
@@ -631,6 +646,7 @@ export function attachSignal(
         signal_kind: signal.kind,
         ...(signal.fingerprint_until ? { fingerprint_until: signal.fingerprint_until } : {}),
         ...(signal.fold && !already ? { adds_rescan_clear: true } : {}),
+        ...(signal.outage && !already ? { adds_signal_ok: true } : {}),
       },
     },
   ];

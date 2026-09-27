@@ -62,6 +62,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           <RailLink href="/">Today</RailLink>
           <RailLink href="/owed">Owed</RailLink>
           <RailLink href="/board">Board</RailLink>
+          <RailLink href="/estate">Estate</RailLink>
         </RailGroup>
 
         <RailGroup label="Specifications">

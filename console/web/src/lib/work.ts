@@ -1,62 +1,20 @@
 import 'server-only';
 
-/**
- * Reads and writes against work-service, server-side, with the signed-in person's token.
- *
- * Its own base URL: the console reaches each component's API directly and no component reads
- * another's data through it (ADR-0023). One token serves both, because identity-service mints one
- * audience for the deployment. A console with no work-service configured renders its work pages as
- * "not connected" rather than failing, since a deployment may run specs-service alone.
- */
+/** Reads and writes against work-service (its client: `service.ts`). */
 
 import { AUTH_MODE } from './session';
-import { currentToken, currentWorkspace } from './auth';
+import { query, serviceCaller, ServiceError } from './service';
 import type { Blocking, Board, FrontierRow, HistoryEntry, ItemView, Rates, Today } from './work-types';
 
-const BASE = process.env.WORK_API_PROXY_TARGET ?? (AUTH_MODE === 'dev' ? 'http://127.0.0.1:8041' : '');
+/** A work-service error: the service's own, by name, for the pages that catch it. */
+export { ServiceError as WorkError };
 
-/** work-service's development verifier reads `dev:<prn>[:roles]`; specs-service's dev token is another shape. */
-const DEV_TOKEN = process.env.WORK_DEV_TOKEN ?? 'dev:prn-h-demo-owner:owner,operations';
-
-export class WorkError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'WorkError';
-  }
-}
-
-export const workConfigured = (): boolean => BASE !== '';
-
-async function call<T>(method: 'GET' | 'POST', path: string, body?: unknown): Promise<T> {
-  if (!BASE) throw new WorkError(503, 'work-service is not connected to this console.');
-  const token = AUTH_MODE === 'dev' ? DEV_TOKEN : await currentToken();
-  let response: Response;
-  try {
-    response = await fetch(`${BASE}/v1/workspaces/${await currentWorkspace()}${path}`, {
-      method,
-      headers: {
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-      cache: 'no-store',
-    });
-  } catch {
-    throw new WorkError(502, 'work-service is not reachable right now.');
-  }
-  const payload = (await response.json().catch(() => ({}))) as { message?: string };
-  if (!response.ok)
-    throw new WorkError(response.status, payload.message ?? `${response.status} from ${path}`);
-  return payload as T;
-}
-
-const query = (params: Record<string, string | undefined>): string => {
-  const q = new URLSearchParams(Object.entries(params).filter((e): e is [string, string] => !!e[1]));
-  return q.size ? `?${q}` : '';
-};
+const call = serviceCaller({
+  name: 'work-service',
+  base: process.env.WORK_API_PROXY_TARGET ?? (AUTH_MODE === 'dev' ? 'http://127.0.0.1:8041' : ''),
+  // work-service's development verifier reads `dev:<prn>[:roles]`; specs-service's dev token is another shape.
+  devToken: process.env.WORK_DEV_TOKEN ?? 'dev:prn-h-demo-owner:owner,operations',
+});
 
 export const fetchToday = (): Promise<Today> => call('GET', '/today');
 

@@ -73,7 +73,7 @@ What the first live run found and fixed: two IAM grants DynamoDB Local could not
 | Intake switched on for the first tenant: its workload principal, the webhook secret, a GitHub webhook per observed repository, Dependabot security updates on | built: the fixture's repository, `fps4/maestro` (specs-service and work-service by directory) and `fps4/identity-service`; alerts that predate a webhook are sent by the tenant's backfill script |
 | A fixture application the first tenant owns and observes, in its tenant repository: pinned dependencies with published advisories, and its own deploy workflow | built |
 | Deploy events from each application's own pipeline: a role the tenant grants per repository (`events:PutEvents`, source `maestro.deploy`) | built: the fixture's own pipeline, and the tenant pipeline for maestro's own services (`scripts/deploy.sh`) |
-| [work-service.md](components/work-service.md) brought level with what was built: the policy's shape, `steward`, ladder timing, streams, and the interpretations confirmed at merge (evidence arming, `blocked_by`, Today's split) | to build |
+| [work-service.md](components/work-service.md) brought level with what was built: the policy's shape, `steward`, ladder timing, streams, and the interpretations confirmed at merge (evidence arming, `blocked_by`, Today's split) | built 2026-09-27 |
 
 ### Deploys and instances (runtime-service): to build
 

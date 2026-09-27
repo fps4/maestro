@@ -36,7 +36,9 @@ while IFS=$'\t' read -r name ref; do
     # A lockfile is a package only beside its package.json; a stray one is not built.
     [ -f "$pkg/package.json" ] || { echo "checkout-components: $pkg has a lockfile but no package.json; skipped"; continue; }
     echo "checkout-components: build $pkg"
-    (cd "$pkg" && npm ci --no-audit --no-fund --silent && npm run build --if-present && npm run bundle --if-present)
+    # The SBOM beside the bundle: what deploy.sh names in the build record (ADR-0027 §2).
+    (cd "$pkg" && npm ci --no-audit --no-fund --silent && npm run build --if-present && npm run bundle --if-present &&
+      npm run sbom --if-present)
   done < <(find "$dir" -maxdepth 3 -name package-lock.json -not -path '*/node_modules/*' | sort)
 done < <(jq -r 'to_entries[] | [.key, .value] | @tsv' <<<"$components")
 echo "checkout-components: done"

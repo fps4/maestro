@@ -109,12 +109,18 @@ do_apply() {
 # --- deploy events (docs/signals.md) -------------------------------------------------------------
 
 # A root that deploys applications names them in deploy-events.json:
-#   { "<application>": { "module": "module.specs", "environment": "production" }, … }
+#   { "<application>": { "module": "module.specs", "environment": "production",
+#                        "sbom": "../../components/maestro/specs/api/bundle/api.cdx.json" }, … }
 # The plan deploys an application when it creates or changes one of the Lambda functions under its
 # module. Each such application gets one `maestro.deploy` event on the account's default bus after
 # the apply — its application, environment, a digest over its functions' code hashes, and the commit
 # that was deployed — which is what work-service's evidence waits for. No map, no events; an apply
 # that changes no function puts none.
+#
+# Before each deploy event, its build record (ADR-0027 §2): `maestro.build` with the same digest, so
+# runtime-service's ledger holds what is about to be named running. Where the entry names an `sbom`
+# (relative to the root) and the root outputs `sbom_bucket`, the SBOM goes first, to
+# sbom/<application>/<digest>.cdx.json in that bucket, and the build record names it.
 deploys_of_plan() {
   local map="$root/deploy-events.json"
   [ -f "$map" ] || return 0
@@ -129,27 +135,44 @@ deploys_of_plan() {
         | select(any(.change.actions[]; . == "create" or . == "update"))
         | "\(.address)=\(.change.after.source_code_hash)" ]
     | select(length > 0)
-    | { application: $app, environment: $at.environment, code: (sort | join("\n")) }'
+    | { application: $app, environment: $at.environment, sbom: ($at.sbom // ""), code: (sort | join("\n")) }'
 }
 
 sha256() {
   if command -v sha256sum >/dev/null; then sha256sum | cut -d' ' -f1; else shasum -a 256 | cut -d' ' -f1; fi
 }
 
+put_event() {
+  local source="$1" detail="$2"
+  aws events put-events --query FailedEntryCount --output text \
+    --entries "$(jq -cn --arg s "$source" --arg t "${source#maestro.}" --arg detail "$detail" \
+      '[{Source: $s, DetailType: $t, Detail: $detail}]')" | grep -qx 0
+}
+
 put_deploy_events() {
-  local deploys="$1" commit line app env digest detail
+  local deploys="$1" commit line app env digest detail sbom key bucket
   [ -n "$deploys" ] || return 0
   command -v aws >/dev/null || die "aws is not on PATH; the deploy events were not put"
   commit="${GITHUB_SHA:-$(git rev-parse HEAD 2>/dev/null || echo unknown)}"
+  bucket="$(tf output -raw sbom_bucket 2>/dev/null || true)"
   while IFS= read -r line; do
     app="$(jq -r .application <<<"$line")"
     env="$(jq -r .environment <<<"$line")"
     digest="sha256:$(jq -r .code <<<"$line" | sha256)"
+    sbom="$(jq -r .sbom <<<"$line")"
+    key=""
+    if [ -n "$sbom" ] && [ -n "$bucket" ] && [ -f "$root/$sbom" ]; then
+      key="sbom/$app/$digest.cdx.json"
+      aws s3 cp "$root/$sbom" "s3://$bucket/$key" --content-type application/json --only-show-errors ||
+        die "the SBOM for $app was not uploaded"
+    fi
+    detail="$(jq -cn --arg a "$app" --arg d "$digest" --arg c "$commit" --arg k "$key" \
+      '{application: $a, digest: $d, commit: $c} + (if $k == "" then {} else {sbom: $k} end)')"
+    put_event maestro.build "$detail" || die "the build record for $app was not put"
+    echo "deploy: put maestro.build $app $digest${key:+ ($key)}"
     detail="$(jq -cn --arg a "$app" --arg e "$env" --arg d "$digest" --arg c "$commit" \
       '{application: $a, environment: $e, digest: $d, commit: $c}')"
-    aws events put-events --query FailedEntryCount --output text \
-      --entries "$(jq -cn --arg detail "$detail" '[{Source: "maestro.deploy", DetailType: "deploy", Detail: $detail}]')" |
-      grep -qx 0 || die "the deploy event for $app/$env was not put"
+    put_event maestro.deploy "$detail" || die "the deploy event for $app/$env was not put"
     echo "deploy: put maestro.deploy $app/$env $digest"
   done <<<"$deploys"
 }

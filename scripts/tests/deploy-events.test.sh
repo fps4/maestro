@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Deploy events (docs/signals.md): after an apply, one `maestro.deploy` per application whose Lambda
 # functions the plan created or changed — none for a function the plan left alone, none for an
-# application it did not touch, none without a map. Against a fake terraform and a fake aws.
+# application it did not touch, none without a map — each after its build record, `maestro.build`
+# with the same digest and the SBOM it names (ADR-0027 §2). Against a fake terraform and a fake aws.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 command -v jq >/dev/null || { echo "skip: jq is not installed"; exit 0; }
@@ -24,17 +25,20 @@ case "$*" in
 ]}
 JSON
   ;;
+  *"output -raw sbom_bucket"*) echo demo-sboms ;;
   *) exit 0 ;;
 esac
 TF
 cat >"$tmp/bin/aws" <<'AWS'
 #!/usr/bin/env bash
+[ "$1 $2" = "s3 cp" ] && { printf '%s %s\n' "$3" "$4" >> "$S3_LOG"; exit 0; }
 while [ $# -gt 0 ]; do [ "$1" = "--entries" ] && { printf '%s\n' "$2" >> "$AWS_LOG"; }; shift; done
 echo 0
 AWS
 chmod +x "$tmp/bin/terraform" "$tmp/bin/aws"
-export PATH="$tmp/bin:$PATH" AWS_LOG="$tmp/aws.log" GITHUB_SHA=abc123
+export PATH="$tmp/bin:$PATH" AWS_LOG="$tmp/aws.log" S3_LOG="$tmp/s3.log" GITHUB_SHA=abc123
 : >"$AWS_LOG"
+: >"$S3_LOG"
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
@@ -43,16 +47,25 @@ scripts/deploy.sh apply --root "$tmp/root" >/dev/null
 [ ! -s "$AWS_LOG" ] || fail "an apply with no deploy-events.json put events"
 
 cat >"$tmp/root/deploy-events.json" <<'JSON'
-{ "specs-service": { "module": "module.specs", "environment": "production" },
+{ "specs-service": { "module": "module.specs", "environment": "production", "sbom": "specs.cdx.json" },
   "work-service": { "module": "module.work", "environment": "production" },
   "identity-service": { "module": "module.identity", "environment": "production" } }
 JSON
 touch "$tmp/root/tfplan"
+echo '{"bomFormat":"CycloneDX"}' >"$tmp/root/specs.cdx.json"
 out="$(scripts/deploy.sh apply --root "$tmp/root")"
 
-[ "$(wc -l <"$AWS_LOG" | tr -d ' ')" = 2 ] || fail "expected two events, got: $(cat "$AWS_LOG")"
-detail() { jq -r --arg a "$1" '.[0].Detail | fromjson | select(.application == $a)' "$AWS_LOG"; }
-[ "$(jq -rs '[.[][0].Source] | unique | join(",")' "$AWS_LOG")" = "maestro.deploy" ] || fail "wrong source"
+[ "$(wc -l <"$AWS_LOG" | tr -d ' ')" = 4 ] || fail "expected a build record and a deploy each for two, got: $(cat "$AWS_LOG")"
+[ "$(jq -rs '[.[][0].Source] | join(",")' "$AWS_LOG")" = "maestro.build,maestro.deploy,maestro.build,maestro.deploy" ] ||
+  fail "each deploy must follow its build record"
+of() { jq -r --arg s "$1" --arg a "$2" '.[0] | select(.Source == $s) | .Detail | fromjson | select(.application == $a)' "$AWS_LOG"; }
+detail() { of maestro.deploy "$1"; }
+[ "$(of maestro.build specs-service | jq -r .digest)" = "$(detail specs-service | jq -r .digest)" ] ||
+  fail "the build record names another digest than the deploy"
+key="sbom/specs-service/$(detail specs-service | jq -r .digest).cdx.json"
+[ "$(of maestro.build specs-service | jq -r .sbom)" = "$key" ] || fail "the build record does not name its SBOM"
+grep -qx "$tmp/root/specs.cdx.json s3://demo-sboms/$key" "$S3_LOG" || fail "the SBOM was not uploaded: $(cat "$S3_LOG")"
+[ "$(of maestro.build work-service | jq -r '.sbom // "none"')" = none ] || fail "an entry naming no SBOM names one"
 [ "$(detail specs-service | jq -r .environment)" = production ] || fail "specs-service not deployed"
 [ "$(detail specs-service | jq -r .commit)" = abc123 ] || fail "the commit is not carried"
 [ -n "$(detail work-service)" ] || fail "a created function is a deploy"
@@ -61,4 +74,5 @@ hash() { if command -v sha256sum >/dev/null; then sha256sum; else shasum -a 256;
 expected="sha256:$(printf 'module.specs.aws_lambda_function.api=AAA=\n' | hash | cut -d' ' -f1)"
 [ "$(detail specs-service | jq -r .digest)" = "$expected" ] || fail "digest $(detail specs-service | jq -r .digest) != $expected"
 grep -q "put maestro.deploy specs-service/production" <<<"$out" || fail "the put is not reported"
+grep -q "put maestro.build specs-service" <<<"$out" || fail "the build record is not reported"
 echo "deploy events: ok"

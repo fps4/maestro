@@ -12,6 +12,7 @@ import type { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import type { SpineEvent } from '@fps4/maestro-spine';
 import { Conflict, Items, strip, type Item, type Transaction } from './items.js';
 import { KINDS, workspaceKeys, type WorkspaceKeys } from './keys.js';
+import type { Authority } from '../domain/authority.js';
 import { PK } from './table.js';
 import {
   DeliveryRepository,
@@ -197,6 +198,41 @@ export class MetaRepository {
   }
 }
 
+/** Each application's projected tier and onboarding level (maestro ADR-0027 §4). */
+export class AuthorityRepository {
+  constructor(private readonly b: Bound) {}
+
+  async list(): Promise<Authority[]> {
+    const items = await this.b.items.query(this.b.keys.authorities);
+    return items.map((i) => strip<Authority>(i));
+  }
+
+  async get(application: string): Promise<Authority | null> {
+    const item = await this.b.items.get(this.b.keys.authority(application));
+    return item ? strip<Authority>(item) : null;
+  }
+
+  /** Staged on the condition that the application's revision is the one read. */
+  stage(tx: Transaction, before: Authority | null, after: Authority): void {
+    tx.put(
+      { ...this.b.keys.authority(after.application), kind: KINDS.authority, ...after },
+      {
+        condition: (e) =>
+          before ? `${e.n('revision')} = ${e.v(before.revision)}` : `attribute_not_exists(${e.n(PK)})`,
+        onConflict: `\`${after.application}\`'s authority moved while this was projected.`,
+        retry: true,
+      },
+    );
+  }
+
+  /** A rebuild's. */
+  async putMany(all: Authority[]): Promise<void> {
+    await this.b.items.batchWrite(
+      all.map((a) => ({ ...this.b.keys.authority(a.application), kind: KINDS.authority, ...a })),
+    );
+  }
+}
+
 /** Reads and writes, bound to exactly one workspace's key prefix. */
 export interface WorkspaceHandle {
   readonly workspace: string;
@@ -211,6 +247,7 @@ export interface WorkspaceHandle {
   readonly fingerprints: FingerprintRepository;
   readonly folds: FoldRepository;
   readonly deliveries: DeliveryRepository;
+  readonly authorities: AuthorityRepository;
   /**
    * One transaction over this workspace's items: `work` reads what it needs and stages its writes
    * on `tx`, each with the condition that makes its reads still true; the commit is all or nothing.
@@ -244,6 +281,7 @@ export function workspaceHandle(
     fingerprints: new FingerprintRepository(b),
     folds: new FoldRepository(b),
     deliveries: new DeliveryRepository(b),
+    authorities: new AuthorityRepository(b),
     async transaction<T>(work: (tx: Transaction) => Promise<T>): Promise<T> {
       for (let attempt = 1; ; attempt += 1) {
         const tx = b.items.transaction();

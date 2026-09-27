@@ -53,13 +53,18 @@ variable "intake" {
       workspace          where the queue's signals land (the webhook names its own in its URL)
       signal_topic_arns  the applications' `<application>-<environment>-ops-signals` topics
       deploy_sources     EventBridge `source` values on this account's default bus that are deploys
+      runtime_events_topic_arn
+                         the spine's events topic (FIFO), where runtime-service records each
+                         application's tier and onboarding level (maestro ADR-0027 §4); null until
+                         runtime-service is deployed, and the definition's values stand
     The GitHub webhook also needs GITHUB_WEBHOOK_SECRET, through `secrets`.
   EOT
   type = object({
-    principal         = string
-    workspace         = string
-    signal_topic_arns = optional(list(string), [])
-    deploy_sources    = optional(list(string), ["maestro.deploy"])
+    principal                = string
+    workspace                = string
+    signal_topic_arns        = optional(list(string), [])
+    deploy_sources           = optional(list(string), ["maestro.deploy"])
+    runtime_events_topic_arn = optional(string)
   })
   default = null
   validation {

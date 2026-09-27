@@ -458,6 +458,42 @@ run "intake" {
   }
 }
 
+run "authority_events" {
+  command = plan
+  variables {
+    intake_package = "./tests/fixtures/app.zip"
+    intake = {
+      principal                = "prn-w-intake-demo"
+      workspace                = "aannemer-x"
+      runtime_events_topic_arn = "arn:aws:sns:eu-west-1::demo-spine-events.fifo"
+    }
+  }
+  assert {
+    condition     = aws_sqs_queue.authority[0].fifo_queue && endswith(aws_sqs_queue.authority[0].name, ".fifo")
+    error_message = "runtime-service's events arrive on a FIFO queue, a workspace's in order"
+  }
+  assert {
+    condition     = aws_sns_topic_subscription.authority[0].raw_message_delivery && jsondecode(aws_sns_topic_subscription.authority[0].filter_policy).type == ["InstanceLevelSet", "InstanceTierSet"]
+    error_message = "only the level and tier events, each as its canonical line"
+  }
+  assert {
+    condition     = aws_lambda_event_source_mapping.authority[0].function_name == aws_lambda_function.intake[0].arn
+    error_message = "the intake function projects them"
+  }
+}
+
+run "no_authority_events_without_the_topic" {
+  command = plan
+  variables {
+    intake_package = "./tests/fixtures/app.zip"
+    intake         = { principal = "prn-w-intake-demo", workspace = "aannemer-x" }
+  }
+  assert {
+    condition     = length(aws_sqs_queue.authority) == 0 && length(aws_sns_topic_subscription.authority) == 0
+    error_message = "no subscription until runtime-service's events exist; the definition's values stand"
+  }
+}
+
 run "intake_principal_is_a_workload" {
   command = plan
   variables {

@@ -112,7 +112,7 @@ seats:
   owner:      { oversight_level: O0 }
 steward: prn-h-…                      # the ladder's escalate_steward reaches them; answers for items about nothing declared
 
-applications:                         # tier and onboarding level move to runtime-service's register later
+applications:                         # tier and onboarding level: until runtime-service sets them (below)
   - id: app1
     tier: tier2
     onboarding_level: n2
@@ -146,6 +146,8 @@ policy:
     standard: [reminder, chase, escalate_accountable, escalate_steward, breach]
   chase_ladder: standard              # the ladder every item with a resolve_by is chased on
 ```
+
+**An application's tier and onboarding level are runtime-service's to set** ([ADR-0027](../decisions/0027-runtime-services-table-and-feeds.md) §4). A person sets them there; work-service projects each `InstanceTierSet` and `InstanceLevelSet` from the spine's events topic (a FIFO queue its intake function reads, `intake.runtime_events_topic_arn`), records the projection as its own `ApplicationAuthorityProjected`, and reads the projected value in place of the definition's from then on. An application nobody has set keeps the definition's. Items keep what they were raised under.
 
 `onboarding` is the application's limit for anyone and is checked first; `ceilings` is an agent's, per seat. A person in the seat may act up to the onboarding level; an agent only up to its ceiling. `alerts` is declared and read by nothing: maestro alerts on Today only ([ADR-0023](../decisions/0023-maestro-alerts-in-its-one-console.md)).
 
@@ -215,7 +217,7 @@ Outside the contract, for the principal holding an item: `heartbeat` (renew the 
 | record sink | outbox in DynamoDB | relay → spine |
 | notifier | log line | the step on the item, shown on Today ([ADR-0023](../decisions/0023-maestro-alerts-in-its-one-console.md)) |
 | signals intake | HTTP | SQS from SNS / EventBridge / GitHub |
-| authority resolver | policy in the definition | + runtime-service for the instance's level and tier |
+| authority resolver | policy in the definition | + each application's tier and level projected from runtime-service's events |
 | object storage | MinIO | S3 |
 
 ## Acceptance

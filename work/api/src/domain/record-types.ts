@@ -98,8 +98,21 @@ const bodies: Record<ItemEventType, z.ZodTypeAny> = {
   WorkItemClosed: z.object({ outcome: z.enum(OUTCOMES) }).strict(),
 };
 
+/** An application's event: its tier or onboarding level, projected from runtime-service (ADR-0027 §4). */
+const applicationBodies = {
+  ApplicationAuthorityProjected: z
+    .object({
+      field: z.enum(['tier', 'onboarding_level']),
+      value: id,
+      source_workspace: id,
+      source_seq: z.number().int().positive(),
+      source_event: id,
+    })
+    .strict(),
+};
+
 export const RECORD_TYPES: TypeSchemas = new Map(
-  Object.entries(bodies).map(([type, schema]) => [typeKey(type, 1), schema]),
+  Object.entries({ ...bodies, ...applicationBodies }).map(([type, schema]) => [typeKey(type, 1), schema]),
 );
 
 export const RECORD_TYPE_NAMES = Object.keys(bodies) as ItemEventType[];

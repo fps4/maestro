@@ -10,6 +10,7 @@
 import type { Store } from '../db/client.js';
 import { parseWorkspaceDefinition, type WorkspaceDefinition } from '../domain/definition.js';
 import { Refusal } from '../domain/decide.js';
+import { withAuthority } from '../domain/authority.js';
 
 export interface ApplyResult {
   workspace: string;
@@ -57,8 +58,19 @@ export class WorkspaceRegistry {
     };
   }
 
-  /** The definition in force for a workspace. */
+  /**
+   * The definition in force for a workspace, as raise, intake and claim read it: the applied
+   * definition with each application's projected tier and onboarding level in place of its declared
+   * ones (ADR-0027 §4). Read on every call — a projection lands between two requests.
+   */
   async current(workspace: string): Promise<WorkspaceDefinition> {
+    const definition = await this.declared(workspace);
+    const handle = await this.store.handle(workspace);
+    return withAuthority(definition, await handle.authorities.list());
+  }
+
+  /** The definition as applied, before any projection. */
+  async declared(workspace: string): Promise<WorkspaceDefinition> {
     const record = await this.store.control.workspaces.get(workspace);
     if (!record || record.definition_version === 0) {
       throw new Refusal(

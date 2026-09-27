@@ -6,6 +6,8 @@
  * reference and checking it against the event's digest before anything reads it. Heads, edges and
  * tallies are all derived from the events, so what comes out reads identically to what was dropped.
  *
+ * Heads, edges, tallies and each application's projected tier and level all come from the events.
+ *
  * Not rebuilt: memberships (grants, re-applied from the tenant's configuration), deliveries and
  * requests (idempotency caches with a TTL).
  */
@@ -20,6 +22,7 @@ import {
 import type { Store } from '../db/client.js';
 import { PROJECTION_VERSION, type OutboxRow } from '../db/handle.js';
 import type { Edge, FingerprintWindow, FoldRecord } from '../db/work-items.js';
+import { evolveAuthority, type Authority, type AuthorityProjected } from '../domain/authority.js';
 import { armed } from '../domain/evidence.js';
 import { evolve, talliesOf, type ItemEvent } from '../domain/events.js';
 import { spineWorkspaceId } from '../domain/ids.js';
@@ -85,6 +88,8 @@ export class RebuildService {
     const windows = new Map<string, FingerprintWindow>();
     const folds = new Map<string, FoldRecord>();
     const tallies = new Map<string, number>();
+    // Each application's tier and level as runtime-service set them (ADR-0027 §4).
+    const authorities = new Map<string, Authority>();
     const rows: OutboxRow[] = [];
     let expected = 1;
     let last = 0;
@@ -99,37 +104,49 @@ export class RebuildService {
             `The archive for \`${ws}\` skips from seq ${expected - 1} to ${event.seq}.`,
           );
         }
-        const item = await this.itemEvent(event, input.payloads);
-        let head: WorkItem;
-        try {
-          head = evolve(heads.get(item.item) ?? null, item);
-        } catch (error) {
-          throw refuse(event, (error as Error).message);
-        }
-        if (head.revision !== event.subject_seq) {
-          throw refuse(
-            event,
-            `the item is at revision ${head.revision}, but the event says ${event.subject_seq}`,
-          );
-        }
-        heads.set(item.item, head);
-        for (const t of talliesOf(head, item)) tallies.set(t, (tallies.get(t) ?? 0) + 1);
-        if (item.type === 'WorkItemRaised') {
-          if (item.body.parent) edges.push({ from: item.body.parent, rel: 'child', to: item.item });
-          if (item.body.milestone) edges.push({ from: item.body.milestone, rel: 'member', to: item.item });
-          for (const blocker of item.body.blocked_by ?? []) {
-            edges.push({ from: blocker, rel: 'blocks', to: item.item });
+        if (event.subject_type === 'application') {
+          const projected = authorityEvent(event);
+          const after = evolveAuthority(authorities.get(projected.application) ?? null, projected);
+          if (after.revision !== event.subject_seq) {
+            throw refuse(
+              event,
+              `the application is at revision ${after.revision}, but the event says ${event.subject_seq}`,
+            );
           }
-          highest = Math.max(highest, Number(item.item.slice('wrk-'.length)));
-          const { fingerprint, fingerprint_until, fold } = item.body;
-          if (fingerprint && fingerprint_until) {
-            windows.set(fingerprint, { fingerprint, item_id: item.item, window_until: fingerprint_until });
+          authorities.set(projected.application, after);
+        } else {
+          const item = await this.itemEvent(event, input.payloads);
+          let head: WorkItem;
+          try {
+            head = evolve(heads.get(item.item) ?? null, item);
+          } catch (error) {
+            throw refuse(event, (error as Error).message);
           }
-          if (fold) folds.set(fold, { fold, item_id: item.item });
-        }
-        if (item.type === 'WorkItemSignalAttached' && item.body.fingerprint_until) {
-          const w = windows.get(item.body.fingerprint);
-          if (w && w.item_id === item.item) w.window_until = item.body.fingerprint_until;
+          if (head.revision !== event.subject_seq) {
+            throw refuse(
+              event,
+              `the item is at revision ${head.revision}, but the event says ${event.subject_seq}`,
+            );
+          }
+          heads.set(item.item, head);
+          for (const t of talliesOf(head, item)) tallies.set(t, (tallies.get(t) ?? 0) + 1);
+          if (item.type === 'WorkItemRaised') {
+            if (item.body.parent) edges.push({ from: item.body.parent, rel: 'child', to: item.item });
+            if (item.body.milestone) edges.push({ from: item.body.milestone, rel: 'member', to: item.item });
+            for (const blocker of item.body.blocked_by ?? []) {
+              edges.push({ from: blocker, rel: 'blocks', to: item.item });
+            }
+            highest = Math.max(highest, Number(item.item.slice('wrk-'.length)));
+            const { fingerprint, fingerprint_until, fold } = item.body;
+            if (fingerprint && fingerprint_until) {
+              windows.set(fingerprint, { fingerprint, item_id: item.item, window_until: fingerprint_until });
+            }
+            if (fold) folds.set(fold, { fold, item_id: item.item });
+          }
+          if (item.type === 'WorkItemSignalAttached' && item.body.fingerprint_until) {
+            const w = windows.get(item.body.fingerprint);
+            if (w && w.item_id === item.item) w.window_until = item.body.fingerprint_until;
+          }
         }
         rows.push({
           ...event,
@@ -154,6 +171,7 @@ export class RebuildService {
       ),
     );
     await handle.tallies.putMany(tallies);
+    await handle.authorities.putMany([...authorities.values()]);
     const counters = [
       ...(last > 0 ? [{ name: 'outbox', value: last }] : []),
       ...(highest > 0 ? [{ name: 'item', value: highest }] : []),
@@ -191,6 +209,20 @@ export class RebuildService {
       ...(payload !== undefined ? { payload } : {}),
     } as ItemEvent;
   }
+}
+
+/** An application's event as its fold reads it. */
+function authorityEvent(event: SpineEvent): AuthorityProjected {
+  return {
+    type: 'ApplicationAuthorityProjected',
+    application: event.subject_id,
+    at: event.occurred_at,
+    accountable: event.accountable,
+    acting: event.acting,
+    seat: event.seat,
+    oversight_level: event.oversight_level,
+    body: event.body as AuthorityProjected['body'],
+  };
 }
 
 function refuse(event: SpineEvent, why: string): RebuildRefused {

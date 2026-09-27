@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { Mono, PageTitle } from '@/components/atoms';
 import { FilterGroup, FilterLink, MarkList, WorkUnavailable, Who } from '@/components/work';
+import { consolePreferences, rememberChoice } from '@/lib/preferences';
 import { fetchBoard, fetchFrontier, fetchMe } from '@/lib/work';
 import { CLASS_LABELS, ITEM_STATE_LABELS, OUTCOME_LABELS, dueIn } from '@/lib/work-labels';
 import type { Board, BoardColumn, FrontierRow } from '@/lib/work-types';
@@ -17,9 +18,14 @@ const COLUMNS: BoardColumn[] = ['open', 'assigned', 'in_progress', 'blocked', 'e
 export default async function BoardPage({
   searchParams,
 }: {
-  searchParams: Promise<{ application?: string }>;
+  searchParams: Promise<{ application?: string; set?: string }>;
 }) {
-  const application = (await searchParams).application || undefined;
+  // As on Owed: a filter link carries `set` and is remembered (ADR-0029); a bare URL opens on the last.
+  const url = await searchParams;
+  const params =
+    url.set !== undefined || url.application !== undefined ? url : ((await consolePreferences()).board ?? {});
+  const application = params.application || undefined;
+  if (url.set !== undefined) await rememberChoice('board', application ? { application } : {});
 
   let board: Board;
   let applications: string[];
@@ -47,11 +53,15 @@ export default async function BoardPage({
 
       {applications.length > 0 ? (
         <FilterGroup label="Application">
-          <FilterLink href="/board" on={!application}>
+          <FilterLink href="/board?set=1" on={!application}>
             All
           </FilterLink>
           {applications.map((a) => (
-            <FilterLink key={a} href={`/board?application=${encodeURIComponent(a)}`} on={a === application}>
+            <FilterLink
+              key={a}
+              href={`/board?set=1&application=${encodeURIComponent(a)}`}
+              on={a === application}
+            >
               <Mono>{a}</Mono>
             </FilterLink>
           ))}

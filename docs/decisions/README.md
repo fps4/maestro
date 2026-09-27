@@ -29,7 +29,7 @@ Architecture decision records, numbered from 0001. Each states context in a few 
 | [0023](0023-maestro-alerts-in-its-one-console.md) | maestro alerts in its console only in the MVP; a deployment has one console | proposed |
 | [0024](0024-a-repositorys-rescan-follows-the-merge.md) | A repository's re-scan follows the merge, not the deploy | proposed |
 | [0025](0025-the-weekly-fold-is-per-application.md) | The weekly fold is one obligation per application | proposed |
-| [0026](0026-the-console-behind-the-tenants-edge.md) | The console runs like an API, behind the tenant's own edge | proposed |
-| [0027](0027-runtime-services-table-and-feeds.md) | runtime-service: a partition per instance, the build record before the deploy, level and tier as events | proposed |
+| [0026](0026-the-console-behind-the-tenants-edge.md) | The console runs like an API, behind the tenant's own edge | accepted |
+| [0027](0027-runtime-services-table-and-feeds.md) | runtime-service: a partition per instance, the build record before the deploy, level and tier as events | accepted |
 
 specs-service's own decision log moved with it to [`specs/docs/decisions/`](../../specs/docs/decisions/) (ADR-0001–0022 there) and is closed: its records are cited as "specs-service ADR-00NN", and every new decision, whatever it is about, is recorded here ([ADR-0020](0020-maestros-own-services-live-in-one-repository.md)).

@@ -1,6 +1,6 @@
 # ADR-0027 · runtime-service: a partition per instance, the build record before the deploy, level and tier as events
 
-**Status:** proposed · 2026-09-27 · applies [ADR-0018](0018-dynamodb-is-the-mvp-database.md) and [ADR-0011](0011-the-instance-register-is-one-deployable.md) to [runtime-service](../components/runtime-service.md); follows [ADR-0019](0019-work-services-table.md) (work-service's table)
+**Status:** accepted · 2026-09-27 · applies [ADR-0018](0018-dynamodb-is-the-mvp-database.md) and [ADR-0011](0011-the-instance-register-is-one-deployable.md) to [runtime-service](../components/runtime-service.md); follows [ADR-0019](0019-work-services-table.md) (work-service's table)
 
 ## Context
 
@@ -86,6 +86,10 @@ The scan feed from ECR and Inspector: Dependabot's alerts already carry the advi
 - A deploy that skips the build step is a mismatch by construction. That is the check ADR-0011 put both collections in one deployable for.
 - work-service gains its first subscription to another component's events, through the topic R1 proved.
 - runtime-service.md is brought level with this ADR when it is accepted.
+
+## Decided at acceptance
+
+The three questions asked, answered as recommended (#59, 2026-09-27): the build record is a `maestro.build` event with the SBOM in runtime-service's bucket (§2); runtime-service writes tier and onboarding level and work-service projects them from the events topic (§4); runtime-service has its own definition file (§7).
 
 ## What would reopen it
 

@@ -1,6 +1,6 @@
 # runtime-service — the instance register
 
-**Repository:** `fps4/maestro`, `runtime/` ([ADR-0020](../decisions/0020-maestros-own-services-live-in-one-repository.md): no consumer outside maestro) · **Status:** building ([`runtime/`](../../runtime/)) · **Decisions:** [ADR-0011](../decisions/0011-the-instance-register-is-one-deployable.md), [ADR-0027](../decisions/0027-runtime-services-table-and-feeds.md) (the table and feeds)
+**Repository:** `fps4/maestro`, `runtime/` ([ADR-0020](../decisions/0020-maestros-own-services-live-in-one-repository.md): no consumer outside maestro) · **Status:** building ([`runtime/`](../../runtime/); its Terraform module, [`runtime/terraform`](../../runtime/terraform/)) · **Decisions:** [ADR-0011](../decisions/0011-the-instance-register-is-one-deployable.md), [ADR-0027](../decisions/0027-runtime-services-table-and-feeds.md) (the table and feeds)
 
 What was built and what is running where. One deployable, two collections: the **artifact ledger** and the **instance register**, fed by one deploy event. It records; it never deploys, restarts or rolls anything back.
 
@@ -87,7 +87,7 @@ The deploy-event step is a small addition to the application's own pipeline (par
 | record sink | outbox | relay → spine |
 | deploy intake | HTTP | EventBridge → SQS |
 | scan intake | HTTP | EventBridge → SQS |
-| object storage (SBOMs) | MinIO | S3 |
+| object storage (SBOMs) | a local directory | the module's bucket, under `sbom/<application>/`; each pipeline role may put its own application's, the functions only read |
 
 ## Acceptance
 

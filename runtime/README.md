@@ -38,10 +38,9 @@ runtime/
  │    ├── src/signals/    the digest mismatch, sent to work-service's signals intake
  │    └── src/relay/      the spine's relay over this service's outbox
  ├── config/workspaces/   the demo tenant (aannemer-x)
- └── infra/docker/        compose and the CI images — the local loop, not a deployment target
+ ├── infra/docker/        compose and the CI images — the local loop, not a deployment target
+ └── terraform/           the module a tenant's root deploys: the table, the SBOM bucket, the API, the relay, the intake
 ```
-
-The Terraform module a tenant's root deploys comes next.
 
 ## Quick start
 
@@ -80,3 +79,35 @@ client-credentials token); `log` writes a line.
 | `GET /v1/workspaces/<ws>/carries?dependency=<purl without version>` | every running instance whose SBOM names it |
 | `POST /v1/workspaces/<ws>/applications/<application>/level` · `/tier` | a person holding `owner` |
 | `GET /v1/workspaces/<ws>/me`, `GET /health` | |
+
+## On AWS
+
+[`terraform/`](terraform/) is the module a tenant's root calls beside the spine's (ADR-0017); its
+example root is [`terraform/examples/demo`](terraform/examples/demo/main.tf). It makes the table, a
+bucket for the SBOMs, the API behind an HTTP API through the Lambda Web Adapter, the relay on a
+schedule, and — with `intake` set — a rule on the account's default bus for `maestro.build` and
+`maestro.deploy`, the queue it feeds and the intake function.
+
+| Input | |
+|---|---|
+| `name`, `table_name`, `bucket_name` | names; the bucket is globally unique, the tenant's to choose |
+| `api_package`, `relay_package`, `intake_package` | `api/bundle/*.zip` from `npm run bundle` |
+| `web_adapter_layer_arn` | the region's `LambdaAdapterLayerArm64` |
+| `environment`, `secrets` | the service's configuration; secrets as Secrets Manager ARNs |
+| `archive`, `archive_prefix` | the spine module's `relay_environment` and `relay_policy_json`; the prefix this component relays under, e.g. `runtime/`, which the sealer must seal |
+| `intake` | `{ principal = "prn-w-…", workspace, sources? }` — the workload the intake acts as, admitted with `intake` |
+| `signals` | `{ work_api_url, token_url, client_id }`, with `SIGNALS_CLIENT_SECRET` in `secrets`: where a digest mismatch goes |
+
+Outputs: `api_url`, `api_id`, `table_name`, `table_arn`, `bucket_name`, `bucket_arn`,
+`api_function_name`, `relay_function_name`, `intake_function_name`, `intake_queue_arn`.
+
+What the tenant adds around it:
+
+- **Each application's pipeline role** may put its SBOM, and nothing else: `s3:PutObject` on
+  `<bucket_arn>/sbom/<application>/*`, beside the `events:PutEvents` it has for `maestro.deploy`.
+  The functions only read that prefix.
+- **Two workload principals** in identity-service: the intake's, admitted to the workspace here with
+  `intake`; and, with `signals`, a client-credentials client whose workload is admitted to
+  work-service's workspace with `intake` — its secret in Secrets Manager, named in `secrets`.
+- **The sealer** seals `archive_prefix` with the other components' prefixes.
+

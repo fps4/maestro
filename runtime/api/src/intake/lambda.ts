@@ -17,7 +17,7 @@ import { DefinitionError } from '../domain/definition.js';
 import { fromQueue } from '../domain/intake.js';
 import { SbomRefused } from '../record/sbom-store.js';
 import { sbomStoreFor } from '../relay/relay.js';
-import { intakeScope, RuntimeService } from '../services/runtime.js';
+import { BuildPending, intakeScope, RuntimeService } from '../services/runtime.js';
 import { WorkspaceRegistry } from '../services/workspaces.js';
 import { signalSinkFor } from '../signals/from-config.js';
 
@@ -41,6 +41,7 @@ async function connect() {
     sboms: sbomStoreFor(config),
     signals: signalSinkFor(config),
     workspaces: new WorkspaceRegistry(store),
+    buildGraceSeconds: config.BUILD_GRACE_SECONDS,
     now: () => new Date().toISOString().replace(/\.\d{3}Z$/, 'Z'),
   });
   ready = { store, runtime, workspace: config.INTAKE_WORKSPACE, principal: config.INTAKE_PRINCIPAL };
@@ -56,6 +57,15 @@ export async function handler(event: SqsEvent) {
       const result = await runtime.intake(scope, fromQueue(record.body));
       console.log(JSON.stringify({ msg: 'intake', message: record.messageId, ...result }));
     } catch (error) {
+      // Its build record may still be on its way: retried after the queue's visibility timeout, which
+      // outlasts the grace, so the retry records it — built, or a mismatch.
+      if (error instanceof BuildPending) {
+        console.log(
+          JSON.stringify({ msg: 'intake pending', message: record.messageId, reason: error.message }),
+        );
+        batchItemFailures.push({ itemIdentifier: record.messageId });
+        continue;
+      }
       if (
         error instanceof Refusal ||
         error instanceof ZodError ||

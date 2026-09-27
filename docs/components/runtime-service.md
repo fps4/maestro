@@ -46,7 +46,7 @@ instance:
 
 Rules enforced at write:
 
-1. `artifact` is a digest into the ledger. A deploy event naming a digest the ledger does not hold records the artifact first and raises `DigestMismatchDetected` if the pipeline's SBOM/build record is absent — a hard stop for that instance, surfaced as a SEV item, never repaired in place.
+1. `artifact` is a digest into the ledger. A deploy event naming a digest the ledger does not hold records the artifact first and raises `DigestMismatchDetected` if the pipeline's SBOM/build record is absent — a hard stop for that instance, surfaced as a SEV item, never repaired in place. A pipeline puts its build record before its deploy event, but the queue between them does not keep the order: a deploy of a digest the ledger has never seen waits `BUILD_GRACE_SECONDS` (300) for its build record, retried by the queue, before it is a mismatch.
 2. `onboarding_level` and `criticality_tier` are set by a person (the intake decision) and read by work-service at claim. They are never accepted from a deploy event.
 3. `rollback_target` is copied from the previous instance state, never computed.
 4. `hosted_by: maestro` is a rejected write in the MVP.

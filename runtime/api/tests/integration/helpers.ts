@@ -30,7 +30,11 @@ export interface Harness {
   close(): Promise<void>;
 }
 
-export async function harness(name: string, now = '2026-09-27T08:00:00Z'): Promise<Harness> {
+export async function harness(
+  name: string,
+  now = '2026-09-27T08:00:00Z',
+  env: Record<string, string> = {},
+): Promise<Harness> {
   const dir = await mkdtemp(join(tmpdir(), `runtime-${name}-`));
   const table = `runtime-test-${name}-${Math.random().toString(36).slice(2, 8)}`;
   const config = loadConfig({
@@ -43,6 +47,9 @@ export async function harness(name: string, now = '2026-09-27T08:00:00Z'): Promi
     RECORD_ARCHIVE_DIR: join(dir, 'archive'),
     SBOM_DIR: join(dir, 'sboms'),
     RECORD_SINK_INTERVAL_MS: '3600000',
+    // The tests' events carry their own times, not the clock's: no grace unless a test asks for one.
+    BUILD_GRACE_SECONDS: '0',
+    ...env,
   });
   const client = dynamoClientFor(config);
   await createTable(client, table);

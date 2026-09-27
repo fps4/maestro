@@ -18,6 +18,11 @@ export interface MismatchSignal {
   at: string;
   /** The deploy's EventBridge id: work-service's dedup of this delivery. */
   delivery: string;
+  /**
+   * `alarm` when the deploy is the mismatch; `ok` when a built digest is deployed over it — the
+   * fact work-service's item waits on (`signal_ok` on the mismatch's fingerprint). Default `alarm`.
+   */
+  state?: 'alarm' | 'ok';
 }
 
 export interface SignalSink {
@@ -29,11 +34,11 @@ export function signalOf(s: MismatchSignal) {
   return {
     signal_version: 1,
     source: 'maestro-runtime',
-    delivery_id: s.delivery,
+    delivery_id: s.state === 'ok' ? `${s.delivery}-ok` : s.delivery,
     application: s.application,
     environment: s.environment,
     kind: 'digest_mismatch',
-    state: 'alarm',
+    state: s.state ?? 'alarm',
     severity_hint: 'P2',
     fingerprint: `${s.application}#${s.environment}#${s.digest}`,
     occurred_at: s.at,

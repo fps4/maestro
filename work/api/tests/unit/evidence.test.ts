@@ -140,6 +140,23 @@ describe('what a signal becomes', () => {
     expect(route(definition, s({ kind: 'drift' }), NOW)).toMatchObject({ input: { class: 'objective' } });
   });
 
+  it('raises a digest mismatch as a remediation closed by its all-clear (ADR-0027 §5)', () => {
+    const mismatch = s({
+      source: 'maestro-runtime',
+      kind: 'digest_mismatch',
+      severity_hint: 'P2',
+      fingerprint: 'app1#prod#sha256:ff',
+    });
+    expect(route(definition, mismatch, NOW)).toMatchObject({
+      action: 'raise',
+      input: { class: 'remediation', severity_hint: 'P2', evidence_plan: ['signal_ok'] },
+    });
+    expect(route(definition, { ...mismatch, state: 'ok' }, NOW)).toMatchObject({
+      action: 'fact',
+      fact: { kind: 'signal_ok', key: 'signal_ok#app1#prod#sha256:ff' },
+    });
+  });
+
   it('refuses prose where a token belongs', () => {
     expect(() => s({ fingerprint: 'an error rate' })).toThrow();
   });

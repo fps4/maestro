@@ -154,6 +154,7 @@ const policy = z
       latency: 'remediation',
       silence: 'remediation',
       drift: 'objective',
+      digest_mismatch: 'remediation',
     }),
     /**
      * Named ladders of steps (reminder, chase, escalate_accountable, escalate_steward, breach). The

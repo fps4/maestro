@@ -92,7 +92,14 @@ describe('a digest with no build record (T2)', () => {
     const after = (await call(OWNER, 'GET', '/instances/app1/prod')).body;
     expect(after.instance).toMatchObject({ digest: good, state: 'running', rollback_target: rogue });
     expect(after.deploys.map((d: { mismatch: boolean }) => d.mismatch)).toEqual([false, true, false]);
-    expect(h.signals.sent).toHaveLength(1);
+    // The clearing deploy is the mismatch's all-clear: work-service's item waits on it.
+    expect(h.signals.sent).toHaveLength(2);
+    expect(h.signals.sent[1]).toMatchObject({ digest: rogue, state: 'ok' });
+    expect(signalOf(h.signals.sent[1]!)).toMatchObject({
+      state: 'ok',
+      fingerprint: `app1#prod#${rogue}`,
+      delivery_id: expect.stringMatching(/-ok$/),
+    });
   });
 
   it('marks a first deploy with no build record, with no rollback target to offer', async () => {

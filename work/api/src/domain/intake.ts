@@ -31,6 +31,8 @@ export const SIGNAL_SOURCES = [
   'github',
   'maestro-drift',
   'maestro-heartbeat',
+  // runtime-service: a deploy of a digest with no build record (ADR-0027 §5).
+  'maestro-runtime',
 ] as const;
 export const SIGNAL_KINDS = [
   'alarm_state',
@@ -42,6 +44,7 @@ export const SIGNAL_KINDS = [
   'finding',
   'drift',
   'silence',
+  'digest_mismatch',
 ] as const;
 
 /** The envelope (maestro docs/signals.md), plus the adapter's delivery id — what makes intake idempotent. */
@@ -67,7 +70,7 @@ export const signalSchema = z
 
 export type Signal = z.infer<typeof signalSchema>;
 
-const ALARM_LIKE = ['alarm_state', 'dlq', 'error_rate', 'latency', 'silence', 'drift'];
+const ALARM_LIKE = ['alarm_state', 'dlq', 'error_rate', 'latency', 'silence', 'drift', 'digest_mismatch'];
 const ADVISORY = ['advisory', 'finding'];
 const ADVISORY_SEVERITIES = ['critical', 'high', 'medium', 'low'] as const;
 

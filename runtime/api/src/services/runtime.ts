@@ -268,19 +268,28 @@ export class RuntimeService {
         env.now,
       );
       await this.record(tx, scope, env, recordables);
-      return { events: recordables.map(([e]) => e.type), mismatch: decided.mismatch };
+      return {
+        events: recordables.map(([e]) => e.type),
+        mismatch: decided.mismatch,
+        // A built digest deployed over a marked instance clears it: the mismatched digest's all-clear.
+        cleared: !decided.mismatch && instance?.state === 'mismatched' ? instance.digest : undefined,
+      };
     });
 
     if ('ignored' in result) return this.unrecorded(scope, arrival.delivery, 'ignored', result.ignored);
-    if (!result.mismatch) return { outcome: 'recorded', events: result.events, mismatch: false };
-    const signal = await this.deps.signals.mismatch({
+    const about = {
       workspace: scope.workspace,
       application: detail.application,
       environment: detail.environment,
-      digest: detail.digest,
       at: arrival.at,
       delivery: arrival.delivery,
-    });
+    };
+    if (result.cleared) {
+      const signal = await this.deps.signals.mismatch({ ...about, digest: result.cleared, state: 'ok' });
+      return { outcome: 'recorded', events: result.events, mismatch: false, signal };
+    }
+    if (!result.mismatch) return { outcome: 'recorded', events: result.events, mismatch: false };
+    const signal = await this.deps.signals.mismatch({ ...about, digest: detail.digest });
     return { outcome: 'recorded', events: result.events, mismatch: true, signal };
   }
 

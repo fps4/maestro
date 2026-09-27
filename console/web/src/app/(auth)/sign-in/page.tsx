@@ -39,12 +39,7 @@ export default async function SignInPage({
   return (
     <main className="grid min-h-screen place-items-center px-6 py-16">
       <div className="flex w-full max-w-[372px] flex-col gap-4">
-        <div className="flex flex-col gap-1">
-          <div className="font-mono text-base font-semibold tracking-[-0.01em]">
-            maestro<span className="text-faint">-</span>specs
-          </div>
-          <p className="text-sm text-muted">Specification records, and the standards they answer to.</p>
-        </div>
+        <div className="font-mono text-base font-semibold tracking-[-0.01em]">maestro</div>
 
         {message ? (
           <Notice tone="hard" title="Sign-in failed">
@@ -76,17 +71,6 @@ export default async function SignInPage({
             Sign in
           </Button>
         </form>
-
-        <p className="text-xs text-faint">
-          Authentication is identity-service&rsquo;s. This console holds no credentials and stores the token
-          in an httpOnly cookie the browser cannot read.
-        </p>
-
-        <Notice title="Roles are stamped into the token.">
-          <span className="font-mono text-2xs">author · reviewer · workspace_admin · auditor</span>
-          <br />
-          What you may author, and which gates you may decide, is resolved server-side — never by the browser.
-        </Notice>
       </div>
     </main>
   );

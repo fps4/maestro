@@ -48,9 +48,7 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div className="grid min-h-screen grid-cols-1 md:grid-cols-[216px,1fr]">
       <aside className="flex flex-col gap-5 border-b border-rule bg-surface-2 p-4 md:border-b-0 md:border-r">
-        <div className="px-2 pt-0.5 font-mono text-sm font-semibold tracking-[-0.01em]">
-          maestro<span className="text-faint">-</span>specs
-        </div>
+        <div className="px-2 pt-0.5 font-mono text-sm font-semibold tracking-[-0.01em]">maestro</div>
 
         <div className="mx-1 flex flex-col gap-px rounded border border-rule bg-surface px-2.5 py-2">
           <b className="font-mono text-xs font-medium">{workspace}</b>

@@ -151,7 +151,7 @@ The frontier (what is owed now, by whom, with the next human touchpoint) and a k
 |---|---|
 | `raise`, `claim`, `release`, `transition(state, outcome?)`, `annotate` | console, API, MCP |
 | `signals` | API (adapters) |
-| `get`, `list`, `query`, `frontier`, `board`, `blocking`, `rates` | console, API, MCP |
+| `get`, `list`, `query`, `frontier`, `board`, `blocking`, `rates`, `history` (an item's events on the record, oldest first: the timeline; read from the workspace's outbox rows, which a rebuild restores; an index by subject waits for the next projection version) | console, API, MCP |
 | `export(workspace)` | API |
 | *accept anything*, *set an authority field* | **not exposed** |
 

@@ -106,7 +106,7 @@ describe('the board, Today and blocking', () => {
     expect(owner.owes.map((r: { item_id: string }) => r.item_id)).not.toContain(agents.item_id);
   });
 
-  it('records blocked_by at raise, refuses a closed or missing blocker, and restores the edges on a rebuild', async () => {
+  it('records blocked_by at raise, refuses a closed or missing blocker, and restores the edges and the timeline on a rebuild', async () => {
     const a = await raise({ class: 'support', title: 'A' });
     const b = await raise({ class: 'support', title: 'B' });
     const c = await raise({
@@ -119,6 +119,7 @@ describe('the board, Today and blocking', () => {
     const read = async () => ({
       c: (await call(ALICE, 'GET', `/items/${c.item_id}/blocking`)).body,
       a: (await call(ALICE, 'GET', `/items/${a.item_id}/blocking`)).body,
+      history: (await call(ALICE, 'GET', `/items/${b.item_id}/history`)).body,
     });
     const before = await read();
     expect(before.c.blocked_by.map((r: { item_id: string }) => r.item_id).sort()).toEqual(
@@ -146,6 +147,17 @@ describe('the board, Today and blocking', () => {
     });
     const afterClose = await read();
     expect(afterClose.c.blocked_by.map((r: { item_id: string }) => r.item_id)).toEqual([a.item_id]);
+    // The timeline: the item's own events, in its order, each with who acted and who answered.
+    expect(
+      afterClose.history.events.map((e: { subject_seq: number; type: string }) => [e.subject_seq, e.type]),
+    ).toEqual([
+      [1, 'WorkItemRaised'],
+      [2, 'WorkItemAssigned'],
+      [3, 'WorkItemStateChanged'],
+      [4, 'WorkItemClosed'],
+    ]);
+    expect(afterClose.history.events[1]).toMatchObject({ acting: ALICE, body: { assigned_to: ALICE } });
+    expect((await call(ALICE, 'GET', '/items/wrk-9999/history')).status).toBe(404);
 
     await h.app.relay!.drain();
     await sealBefore(h.app.relay!.archive, '2099-01-01');

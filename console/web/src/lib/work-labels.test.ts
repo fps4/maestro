@@ -3,6 +3,7 @@ import {
   aboutLabel,
   derivation,
   dueIn,
+  historySentence,
   markSentences,
   principalLabel,
   pullRequestUrl,
@@ -62,5 +63,56 @@ describe('words for identifiers', () => {
     expect(aboutLabel({})).toBe('—');
     expect(pullRequestUrl('fps4/maestro#12')).toBe('https://github.com/fps4/maestro/pull/12');
     expect(pullRequestUrl('not a ref')).toBeNull();
+  });
+});
+
+describe('the timeline', () => {
+  const at = (type: string, acting: string, body: Record<string, unknown>) => ({
+    seq: 1,
+    subject_seq: 1,
+    type,
+    at: '2026-09-27T09:00:00Z',
+    recorded_at: '2026-09-27T09:00:00Z',
+    acting,
+    accountable: ME,
+    seat: 'operations',
+    oversight_level: 'O2',
+    body,
+    has_payload: false,
+  });
+
+  it('says each fact as a sentence, and marks a person’s own acts as their gates', () => {
+    expect(historySentence(at('WorkItemAssigned', ME, { assigned_to: ME }), ME)).toEqual({
+      text: 'Claimed by you',
+      gate: true,
+    });
+    expect(historySentence(at('WorkItemAssigned', 'prn-a-bump', { assigned_to: 'prn-a-bump' }), ME)).toEqual({
+      text: 'Claimed by prn-a-bump',
+      gate: false,
+    });
+    expect(
+      historySentence(
+        at('WorkItemClaimRefused', 'prn-a-bump', { principal: 'prn-a-bump', check: 'onboarding' }),
+        ME,
+      ).text,
+    ).toBe('A claim by prn-a-bump refused: the application’s onboarding level');
+    expect(
+      historySentence(
+        at('WorkItemChased', 'prn-w-sweep', {
+          step: 'escalate_steward',
+          to: 'prn-h-s',
+          delivery: 'no_recipient',
+        }),
+        ME,
+      ).text,
+    ).toBe('escalated to the steward — prn-h-s · no recipient');
+    expect(historySentence(at('WorkItemClosed', ME, { outcome: 'escalated_out' }), ME)).toEqual({
+      text: 'Closed escalated out',
+      gate: true,
+    });
+    expect(historySentence(at('WorkItemRaised', 'prn-w-intake', { raised_by: 'signal' }), ME).text).toBe(
+      'Raised from a signal',
+    );
+    expect(historySentence(at('WorkItemSomethingNew', ME, {}), ME).text).toBe('Something New');
   });
 });

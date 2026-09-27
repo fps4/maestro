@@ -410,3 +410,31 @@ export interface Labels {
   links: Record<string, string>;
   attribution: Record<string, string>;
 }
+
+/** specs-service's half of Today: the decisions only this person can take, and questions on what they wrote. */
+export interface SpecsToday {
+  principal: string;
+  decide: Array<{
+    gate: string;
+    gate_title: string;
+    artifact: string;
+    ordinal: number;
+    title: string;
+    type: string;
+    type_title: string;
+    proposed_by: string;
+    proposed_at: string;
+    open: boolean;
+    waiting_on: string[];
+  }>;
+  answer: Array<{
+    question: string;
+    artifact: string;
+    ordinal: number;
+    title: string;
+    text: string;
+    asked_by: string;
+    asked_kind: 'human' | 'agent' | 'service';
+    asked_at: string;
+  }>;
+}

@@ -22,6 +22,7 @@ import type {
   Question,
   Readiness,
   RegisterRow,
+  SpecsToday,
   StandardSummary,
   Version,
   VersionDiff,
@@ -185,4 +186,9 @@ export async function search(query: string): Promise<Version[]> {
     `/v1/workspaces/${await ws()}/search?q=${encodeURIComponent(query)}`,
   );
   return results;
+}
+
+/** Today's specs-service half: what waits on the signed-in person's decision or answer. */
+export async function fetchSpecsToday(): Promise<SpecsToday> {
+  return get(`/v1/workspaces/${await ws()}/today`);
 }

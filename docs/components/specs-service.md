@@ -50,7 +50,7 @@ Configuration comes from `fps4/maestro-<tenant>/workspaces/*.yaml`, and the tena
 | Terraform module; the relay as a scheduled Lambda | done — fps4/maestro-specs#20 |
 | The outbox holds the spine's envelope; seats and the answerable human (ADR-0019) | done — fps4/maestro-specs#18 |
 | The payload store and the rebuild (ADR-0020): free text as payloads, `EvaluationRecorded`, a rebuilder that replays a verified archive — acceptance scenario R2 in code | done — fps4/maestro-specs#21 |
-| Today reads work-service and agent-service alongside its own decisions and questions | to build (small, in the console) |
+| Today reads work-service and agent-service alongside its own decisions and questions | built for its own half and work-service's: `GET today` lists the versions the caller may decide on (the gate view's own `may_decide`, so the list never offers what the page refuses) and the unanswered questions on versions they proposed; agent-service's joins with the runner |
 | Move the DoD gate to GitHub-hosted runners | done — fps4/maestro-specs#16 |
 | Read the `prn` claim identity-service now mints instead of minting a principal id on first sight; `principal:adopt` for an identity first seen under a self-minted id — moves the grants and records the supersession forward, no record rewritten | done — fps4/maestro-specs#26 (specs-service [ADR-0022](../../specs/docs/decisions/0022-the-principal-id-is-identity-services.md)) |
 

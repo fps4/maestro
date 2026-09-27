@@ -313,4 +313,46 @@ describe('questions on a version', () => {
       /No MCP tool named `resolve_question`/,
     );
   });
+
+  it('stand on the author’s Today until answered, and the version on the decider’s', async () => {
+    const v = await proposeSpecification('On Today');
+    const asked = await call<{ question: { id: string } }>(
+      harness,
+      'POST',
+      questionsUrl(v.artifact, v.ordinal),
+      {
+        as: SPONSOR,
+        body: { text: 'Which projects are in scope?' },
+      },
+    );
+
+    type Today = {
+      decide: Array<{ artifact: string; gate: string; open: boolean; waiting_on: string[] }>;
+      answer: Array<{ question: string; artifact: string; text: string }>;
+    };
+    const author = (await call<Today>(harness, 'GET', `${base()}/today`, { as: AUTHOR })).body;
+    expect(author.answer).toContainEqual(
+      expect.objectContaining({
+        question: asked.body.question.id,
+        artifact: v.artifact,
+        text: 'Which projects are in scope?',
+      }),
+    );
+    // The author cannot decide on what they created: it is not on their Decide list.
+    expect(author.decide.map((d) => d.artifact)).not.toContain(v.artifact);
+
+    // The owner may decide, and sees what holds the gate shut: the open question.
+    const owner = (await call<Today>(harness, 'GET', `${base()}/today`, { as: SPONSOR })).body;
+    const row = owner.decide.find((d) => d.artifact === v.artifact);
+    expect(row).toMatchObject({ gate: 'specification_gate' });
+    expect(owner.answer.map((a) => a.artifact)).not.toContain(v.artifact);
+
+    // Answered, it leaves the author's Today: the asker closes it from here.
+    await call(harness, 'POST', `${questionsUrl(v.artifact, v.ordinal)}/${asked.body.question.id}/answers`, {
+      as: AUTHOR,
+      body: { text: 'Every active project.' },
+    });
+    const after = (await call<Today>(harness, 'GET', `${base()}/today`, { as: AUTHOR })).body;
+    expect(after.answer.map((a) => a.question)).not.toContain(asked.body.question.id);
+  });
 });

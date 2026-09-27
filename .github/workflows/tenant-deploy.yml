@@ -62,6 +62,13 @@ env:
   MAESTRO_TENANT: ${{ inputs.tenant }}
   TF_IN_AUTOMATION: "1"
 
+# `bash` as named here runs with -e and pipefail; the runner's default is -e alone. Without pipefail,
+# `deploy.sh plan | tee plan.txt` exits with tee's status: a plan that failed read as green, and the
+# apply job would have gone on to apply.
+defaults:
+  run:
+    shell: bash
+
 jobs:
   plan:
     runs-on: ${{ fromJSON(inputs.runner) }}

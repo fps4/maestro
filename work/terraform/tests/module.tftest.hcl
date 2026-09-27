@@ -465,7 +465,7 @@ run "authority_events" {
     intake = {
       principal                = "prn-w-intake-demo"
       workspace                = "aannemer-x"
-      runtime_events_topic_arn = "arn:aws:sns:eu-west-1:111111111111:demo-spine-events.fifo"
+      runtime_events_topic_arn = "arn:aws:sns:eu-west-1::demo-spine-events.fifo"
     }
   }
   assert {

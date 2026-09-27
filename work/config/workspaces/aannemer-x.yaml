@@ -38,6 +38,11 @@ applications:
 
 policy:
   severity_map: { P1: sev1, P2: sev2, P3: sev3, P4: sev4 }
+  # A signal the application sends no hint for — an external probe's, an alarm without P1–P4 — is its
+  # kind by the application's tier.
+  signal_severity:
+    alarm_state: { tier1: sev1, tier2: sev2, tier3: sev3 }
+    silence: { tier1: sev2, tier2: sev3, tier3: sev3 }
   default_severity: sev4
   clocks:
     sev1: { tier1: [PT15M, PT4H], tier2: [PT30M, PT8H], tier3: [PT1H, P1D] }

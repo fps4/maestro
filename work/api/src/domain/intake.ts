@@ -203,6 +203,7 @@ export function route(definition: WorkspaceDefinition, s: Signal, now: string): 
       title: title(s.kind.replace(/_/g, ' ')),
       ...about,
       ...(s.severity_hint ? { severity_hint: s.severity_hint } : {}),
+      signal_kind: s.kind,
       ...(cls === 'remediation' ? { evidence_plan: ['signal_ok'] as EvidenceKind[] } : {}),
       raised_cause: ref(s),
     },

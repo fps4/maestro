@@ -96,7 +96,7 @@ any open state ──▶ closed (superseded · refused · escalated_out, with a 
 `POST /signals` accepts the [envelope](../signals.md#the-envelope); adapters behind the intake port produce it from SNS (via SQS), EventBridge, GitHub webhooks, and the application's own monitor. Intake:
 
 1. **dedups** by `fingerprint` within a policy window and **correlates** a storm into one item;
-2. **resolves severity** from policy: signal kind × application tier, with the application's hint as input;
+2. **resolves severity** from policy: the application's hint through `severity_map` if it sent one, else `signal_severity` — the signal's kind × the application's tier — else `default_severity`;
 3. **raises** the item per the policy's signal → class mapping, or **satisfies** an evidence-plan entry on an open item (`state: ok`, a deploy, a re-scan);
 4. records the signal as the item's `raised_cause`.
 
@@ -123,6 +123,8 @@ applications:                         # tier and onboarding level: until runtime
 
 policy:
   severity_map: { P1: sev1, P2: sev2, P3: sev3, P4: sev4 }
+  signal_severity:                    # a signal with no hint: its kind × the application's tier
+    alarm_state: { tier1: sev1, tier2: sev2, tier3: sev3 }
   default_severity: sev4
   clocks:                             # severity × tier → [respond_by, resolve_by]
     sev1: { tier1: [PT15M, PT4H], tier2: [PT30M, PT8H], tier3: [PT1H, P1D] }

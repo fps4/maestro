@@ -75,6 +75,8 @@ export interface RaiseInput {
   remediation_class?: RemediationClass;
   reversible?: boolean;
   severity_hint?: string;
+  /** The kind of signal that raised it, which with the tier resolves a severity no hint gave. Intake's only. */
+  signal_kind?: string;
   evidence_plan?: EvidenceKind[];
   raised_cause?: string;
 }
@@ -145,7 +147,11 @@ export function raise(env: Env, id: string, input: RaiseInput, origin: Origin = 
     app?.accountable ?? origin.accountable ?? (actor.kind === 'human' ? actor.principal : actor.accountable!);
   const seat = seatFor(definition, input.class);
   const seatDecl = definition.seats[seat]!;
-  const severity = resolveSeverity(policy, input.severity_hint);
+  const severity = resolveSeverity(
+    policy,
+    input.severity_hint,
+    input.signal_kind ? { kind: input.signal_kind, tier: app?.tier } : undefined,
+  );
   const clocks = clocksFor(policy, severity, app?.tier);
   const plan = [...new Set(input.evidence_plan ?? [])];
 

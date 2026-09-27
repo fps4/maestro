@@ -58,8 +58,14 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
           </em>
         </div>
 
-        <RailGroup label="Workspace">
-          <RailLink href="/">Register</RailLink>
+        <RailGroup label="Work">
+          <RailLink href="/">Today</RailLink>
+          <RailLink href="/owed">Owed</RailLink>
+          <RailLink href="/board">Board</RailLink>
+        </RailGroup>
+
+        <RailGroup label="Specifications">
+          <RailLink href="/register">Register</RailLink>
           {usesCatalogue ? (
             <>
               <RailLink href="/catalogue">Catalogue</RailLink>

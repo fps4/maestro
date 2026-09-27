@@ -44,6 +44,7 @@ describe('clocks', () => {
       { principal: ALICE, roles: ['operations'] },
       { principal: OWNER, roles: ['owner', 'operations'] },
       { principal: AGENT, roles: ['operations'], accountable: ALICE },
+      { principal: STEWARD, roles: ['operations'] },
     ]);
     notifier.unreachable.add(STEWARD);
   });
@@ -80,8 +81,27 @@ describe('clocks', () => {
     expect((await at('2026-09-25T09:36:00Z')).events).toEqual({ WorkItemChased: 1 });
     expect((await at('2026-09-25T11:12:00Z')).events).toEqual({ WorkItemChased: 1 });
     expect((await at('2026-09-25T12:48:00Z')).events).toEqual({ WorkItemChased: 1 });
+    // The item stands on the answerable person's Today marked with why (ADR-0023).
+    const owner = (await call(OWNER, 'GET', '/today')).body;
+    expect(owner.owes.find((r: { item_id: string }) => r.item_id === id).marks).toEqual({
+      chased: { step: 'escalate_accountable', n: 3, of: 5, to: OWNER },
+      breached: ['respond_by'],
+    });
     // A sweep that missed a step fires it late, in order, alongside what else is due.
     expect((await at('2026-09-25T16:00:00Z')).events).toEqual({ WorkItemChased: 1, WorkItemBreached: 1 });
+    // The steward's step puts it on the steward's Today, though they neither hold it nor answer for it.
+    const steward = (await call(STEWARD, 'GET', '/today')).body;
+    expect(steward.owes).toEqual([]);
+    expect(steward.escalated).toMatchObject([
+      {
+        item_id: id,
+        accountable: OWNER,
+        marks: {
+          chased: { step: 'escalate_steward', n: 4, of: 5, to: STEWARD },
+          breached: ['respond_by', 'resolve_by'],
+        },
+      },
+    ]);
     // And once the ladder is spent, nothing more until the review date.
     expect((await at('2026-09-25T18:00:00Z')).due).toBe(0);
 
@@ -106,8 +126,13 @@ describe('clocks', () => {
     // Every act of the sweep is its own, and answered for by the item's accountable human.
     for (const e of events.slice(1)) expect(e).toMatchObject({ acting: SWEEP, accountable: OWNER });
 
-    const item = (await call(OWNER, 'GET', `/items/${id}`)).body.item;
+    const fetched = (await call(OWNER, 'GET', `/items/${id}`)).body;
+    const item = fetched.item;
     expect(item).toMatchObject({ state: 'open', breached: ['respond_by', 'resolve_by'] });
+    expect(fetched.marks).toEqual({
+      chased: { step: 'escalate_steward', n: 4, of: 5, to: STEWARD },
+      breached: ['respond_by', 'resolve_by'],
+    });
     expect(item.outcome).toBeUndefined();
     expect((await call(OWNER, 'GET', '/rates?application=app1')).body.months).toEqual(
       expect.arrayContaining([

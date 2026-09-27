@@ -37,6 +37,7 @@ import { renderVersion } from '../services/render.js';
 import type { UrlSigner } from '../services/attachments.js';
 import type { Principal } from '../domain/types.js';
 import type { Config } from '../config.js';
+import { TodayService } from '../services/today.js';
 
 export interface RouteDeps extends ContextDeps {
   config: Config;
@@ -142,6 +143,22 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     const { ws: workspace } = ws.parse(request.params);
     const ctx = await context(request, workspace);
     return { register: await services(ctx).artifacts.register() };
+  });
+
+  /**
+   * Today, this service's half: the decisions only the caller can take, and the questions waiting on
+   * the versions they proposed. work-service serves the rest of the page.
+   */
+  app.get('/v1/workspaces/:ws/today', async (request) => {
+    const { ws: workspace } = ws.parse(request.params);
+    const ctx = await context(request, workspace);
+    return new TodayService(ctx.handle, ctx.workspace, services(ctx).acceptances).today({
+      decider: ctx.principal,
+      roles: ctx.roles,
+      routed: [],
+      assigned: ctx.gates,
+      directory: new Map(),
+    });
   });
 
   app.get('/v1/workspaces/:ws/search', async (request) => {

@@ -19,7 +19,7 @@ What a person sees, and the rules every screen obeys. A deployment has one maest
 
 | Screen | Component · milestone | Carries | State |
 |---|---|---|---|
-| **Today** | the console | Decide · Answer · Owed · Agents at work | built for work-service's half (owed, agents at work, what a chase step brought, each row marked); Decide and Answer to build |
+| **Today** | the console | Decide · Answer · Owed · Agents at work | built: Decide and Answer from specs-service, Owed and Agents at work from work-service (with what a chase step brought, each row marked); each half stands when the other service is down |
 | **Register** | specs-service | lineage, type, phase, state, open questions, last decision, version, updated | built; demo content re-seeded to the MVP types |
 | **The document** | specs-service | one text; beside it *what the gate will read*, derived; *ask an assistant* drafts into the document and never proposes | built |
 | **The decision page** | specs-service | rule 5; phone-first | built |

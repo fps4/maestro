@@ -1,5 +1,6 @@
 import { Mono, PageTitle, Scroller, SectionTitle, Td, Th, Tile } from '@/components/atoms';
 import { FilterGroup, FilterLink, FrontierTable, NothingOwed, WorkUnavailable } from '@/components/work';
+import { consolePreferences, rememberChoice } from '@/lib/preferences';
 import { fetchFrontier, fetchMe, fetchRates } from '@/lib/work';
 import type { FrontierRow, Rates } from '@/lib/work-types';
 
@@ -26,11 +27,16 @@ const WEEK = 7 * 86_400_000;
 export default async function OwedPage({
   searchParams,
 }: {
-  searchParams: Promise<{ who?: string; application?: string }>;
+  searchParams: Promise<{ who?: string; application?: string; set?: string }>;
 }) {
-  const params = await searchParams;
+  // A filter link carries `set`: a choice, remembered on the person's profile (ADR-0029). A URL with no
+  // filters — the rail's — opens on the last choice; one with its filters in it shows what it says.
+  const url = await searchParams;
+  const chosen = url.set !== undefined || url.who !== undefined || url.application !== undefined;
+  const params = chosen ? url : ((await consolePreferences()).owed ?? {});
   const who: Who = params.who && params.who in WHO ? (params.who as Who) : 'all';
   const application = params.application || undefined;
+  if (url.set !== undefined) await rememberChoice('owed', { who, ...(application ? { application } : {}) });
 
   let all: FrontierRow[];
   let me: string;
@@ -111,10 +117,10 @@ function Filters({
   applications: string[];
 }) {
   const href = (w: Who, a?: string) => {
-    const q = new URLSearchParams();
+    const q = new URLSearchParams({ set: '1' });
     if (w !== 'all') q.set('who', w);
     if (a) q.set('application', a);
-    return q.size ? `/owed?${q}` : '/owed';
+    return `/owed?${q}`;
   };
   return (
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">

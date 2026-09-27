@@ -106,6 +106,22 @@ export interface Board {
   closed_today: Array<FrontierRow & { outcome: string; closed_at: string }>;
 }
 
+/** One event on an item's record, as its timeline reads it: the fact, when, and who answered for it. */
+export interface HistoryEntry {
+  seq: number;
+  subject_seq: number;
+  type: string;
+  at: string;
+  recorded_at: string;
+  acting: string;
+  accountable: string;
+  seat: string;
+  oversight_level: string;
+  body: Record<string, unknown>;
+  /** The event names words kept in the payload store (a title, a reason); read from the item. */
+  has_payload: boolean;
+}
+
 /** A person's slice of the frontier. specs-service's half — decisions and questions — is its own read. */
 export interface Today {
   principal: string;
@@ -455,6 +471,28 @@ export class WorkItemService {
       edges: await ctx.handle.items.edges(id),
       next_human_touchpoint: nextHumanTouchpoint(item),
       ...(marks ? { marks } : {}),
+    };
+  }
+
+  /** history: the item's events on the record, oldest first — the timeline. */
+  async history(ctx: RequestContext, id: string): Promise<{ item_id: string; events: HistoryEntry[] }> {
+    await this.head(ctx, id);
+    const rows = await ctx.handle.outbox.ofSubject(id);
+    return {
+      item_id: id,
+      events: rows.map((r) => ({
+        seq: r.seq,
+        subject_seq: r.subject_seq,
+        type: r.type,
+        at: r.occurred_at,
+        recorded_at: r.recorded_at,
+        acting: r.acting,
+        accountable: r.accountable,
+        seat: r.seat,
+        oversight_level: r.oversight_level,
+        body: r.body,
+        has_payload: !!r.payload_ref,
+      })),
     };
   }
 

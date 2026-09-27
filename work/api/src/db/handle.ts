@@ -111,6 +111,18 @@ export class OutboxRepository {
     return items.map((i) => strip<OutboxRow>(i));
   }
 
+  /**
+   * One subject's events, in its own order: the workspace's outbox read and filtered. Linear in the
+   * workspace's events, which the MVP's volumes allow; an index by subject comes with the next
+   * projection version, since nothing migrates in place.
+   */
+  async ofSubject(subjectId: string): Promise<OutboxRow[]> {
+    const items = await this.b.items.query(this.b.keys.outbox, {
+      filter: (e) => `${e.n('subject_id')} = ${e.v(subjectId)}`,
+    });
+    return items.map((i) => strip<OutboxRow>(i)).sort((a, b) => a.subject_seq - b.subject_seq);
+  }
+
   /** `(workspace, seq)` is the key: the spine's rule, enforced by the put. */
   insert(row: OutboxRow, tx: Transaction): void {
     tx.insert(outboxToItem(this.b.keys, row), `Outbox seq ${row.seq} is already taken.`);

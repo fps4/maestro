@@ -170,6 +170,12 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     return items.blocking(ctx, request.params.id);
   });
 
+  /** history: the item's events on the record, oldest first. */
+  app.get<ItemParams>('/v1/workspaces/:ws/items/:id/history', async (request) => {
+    const ctx = await contextFor(deps, request);
+    return items.history(ctx, request.params.id);
+  });
+
   /** The holder renews its lease. */
   app.post<ItemParams>('/v1/workspaces/:ws/items/:id/heartbeat', async (request) => {
     const ctx = await contextFor(deps, request);

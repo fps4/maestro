@@ -11,7 +11,7 @@ import 'server-only';
 
 import { AUTH_MODE } from './session';
 import { currentToken, currentWorkspace } from './auth';
-import type { Blocking, Board, FrontierRow, ItemView, Rates, Today } from './work-types';
+import type { Blocking, Board, FrontierRow, HistoryEntry, ItemView, Rates, Today } from './work-types';
 
 const BASE = process.env.WORK_API_PROXY_TARGET ?? (AUTH_MODE === 'dev' ? 'http://127.0.0.1:8041' : '');
 
@@ -97,3 +97,6 @@ export const linkPullRequest = (id: string, pullRequest: string): Promise<unknow
 /** Who work-service takes the signed-in person to be here. */
 export const fetchMe = (): Promise<{ principal: string; kind: string; roles: string[] }> =>
   call('GET', '/me');
+
+export const fetchHistory = (id: string): Promise<{ item_id: string; events: HistoryEntry[] }> =>
+  call('GET', `/items/${encodeURIComponent(id)}/history`);

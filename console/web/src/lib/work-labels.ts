@@ -7,6 +7,7 @@ import type {
   ChaseStep,
   Clock,
   EvidenceKind,
+  HistoryEntry,
   ItemClass,
   ItemState,
   Marks,
@@ -143,4 +144,78 @@ export function aboutLabel(about: WorkItem['about']): string {
 export function pullRequestUrl(ref: string): string | null {
   const m = /^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)#([1-9][0-9]*)$/.exec(ref);
   return m ? `https://github.com/${m[1]}/${m[2]}/pull/${m[3]}` : null;
+}
+
+const RAISED: Record<string, string> = {
+  human: 'Raised by a person',
+  signal: 'Raised from a signal',
+  gate: 'Raised at a gate',
+  recurrence: 'Raised on its schedule',
+  run: 'Raised by a run',
+};
+
+const CHECK_LABELS: Record<string, string> = {
+  onboarding: 'the application’s onboarding level',
+  seat: 'the seat',
+  oversight: 'the oversight level',
+  ceiling: 'the agent’s ceiling',
+};
+
+/**
+ * One event on the timeline, as a sentence, and whether it was a person's act at one of their gates
+ * — a claim, a closure, a link — which the timeline marks (ux.md, the work item).
+ */
+export function historySentence(e: HistoryEntry, me?: string): { text: string; gate: boolean } {
+  const b = e.body as Record<string, string | undefined>;
+  const who = (id?: string) => principalLabel(id, me).text;
+  const human = e.acting.startsWith('prn-h-');
+  switch (e.type) {
+    case 'WorkItemRaised':
+      return { text: RAISED[b.raised_by ?? ''] ?? 'Raised', gate: false };
+    case 'WorkItemAssigned':
+      return { text: `Claimed by ${who(b.assigned_to)}`, gate: human };
+    case 'WorkItemClaimRefused':
+      return {
+        text: `A claim by ${who(b.principal)} refused: ${CHECK_LABELS[b.check ?? ''] ?? b.check}`,
+        gate: false,
+      };
+    case 'WorkItemReleased':
+      return {
+        text:
+          b.reason === 'lease_expired'
+            ? `The lease of ${who(b.released)} expired`
+            : `Released by ${who(b.released)}`,
+        gate: false,
+      };
+    case 'WorkItemStateChanged':
+      return {
+        text: `${ITEM_STATE_LABELS[b.from as ItemState] ?? b.from} → ${ITEM_STATE_LABELS[b.to as ItemState] ?? b.to}`,
+        gate: false,
+      };
+    case 'WorkItemEscalated':
+      return { text: `Escalated to ${who(b.to)}`, gate: false };
+    case 'WorkItemChased':
+      return {
+        text: `${STEP_LABELS[b.step as ChaseStep] ?? b.step}${b.to ? ` — ${who(b.to)}` : ''} · ${b.delivery?.replace(/_/g, ' ')}`,
+        gate: false,
+      };
+    case 'WorkItemLinked':
+      return {
+        text: `Linked ${b.link === 'pull_request' ? 'pull request' : 'artifact'} ${b.ref}`,
+        gate: human,
+      };
+    case 'WorkItemEvidenceSatisfied':
+      return { text: `${EVIDENCE_LABELS[b.kind as EvidenceKind] ?? b.kind}: ${b.fact}`, gate: false };
+    case 'WorkItemSignalAttached':
+      return { text: `Another ${b.signal_kind ?? 'signal'} attached`, gate: false };
+    case 'WorkItemBreached':
+      return { text: `Breached ${CLOCK_LABELS[b.clock as Clock] ?? b.clock}`, gate: false };
+    case 'WorkItemClosed':
+      return {
+        text: `Closed ${(OUTCOME_LABELS[b.outcome as Outcome] ?? b.outcome ?? '').toLowerCase()}`,
+        gate: human,
+      };
+    default:
+      return { text: e.type.replace(/^WorkItem/, '').replace(/([a-z])([A-Z])/g, '$1 $2'), gate: false };
+  }
 }

@@ -137,3 +137,18 @@ export interface Rates {
   refusals: Record<string, number>;
   escalated_out_rate: number | null;
 }
+
+/** One event on an item's record, as work-service's `history` returns it. */
+export interface HistoryEntry {
+  seq: number;
+  subject_seq: number;
+  type: string;
+  at: string;
+  recorded_at: string;
+  acting: string;
+  accountable: string;
+  seat: string;
+  oversight_level: string;
+  body: Record<string, unknown>;
+  has_payload: boolean;
+}

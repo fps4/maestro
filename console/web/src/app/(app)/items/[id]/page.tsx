@@ -1,17 +1,18 @@
 import Link from 'next/link';
 import { Card, KeyValue, Mono, Notice, PageTitle, SectionTitle } from '@/components/atoms';
 import { Due, ItemStateChip, MarkList, WorkUnavailable, Who } from '@/components/work';
-import { fetchBlocking, fetchItem, fetchMe } from '@/lib/work';
+import { fetchBlocking, fetchHistory, fetchItem, fetchMe } from '@/lib/work';
 import {
   CLASS_LABELS,
   EVIDENCE_LABELS,
   aboutLabel,
   clockLabel,
   derivation,
+  historySentence,
   pullRequestUrl,
   utc,
 } from '@/lib/work-labels';
-import type { Blocking, Clock, EdgeRow, ItemView, WorkItem } from '@/lib/work-types';
+import type { Blocking, Clock, EdgeRow, HistoryEntry, ItemView, WorkItem } from '@/lib/work-types';
 import { Acts, LinkPullRequest } from './acts';
 
 export const dynamic = 'force-dynamic';
@@ -30,8 +31,14 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
   let view: ItemView;
   let blocking: Blocking;
   let me: string;
+  let history: HistoryEntry[];
   try {
-    [view, blocking, { principal: me }] = await Promise.all([fetchItem(id), fetchBlocking(id), fetchMe()]);
+    [view, blocking, { principal: me }, { events: history }] = await Promise.all([
+      fetchItem(id),
+      fetchBlocking(id),
+      fetchMe(),
+      fetchHistory(id),
+    ]);
   } catch (error) {
     return (
       <>
@@ -112,6 +119,11 @@ export default async function ItemPage({ params }: { params: Promise<{ id: strin
           <Edges blocking={blocking} item={item} me={me} />
         </Card>
       </div>
+
+      <Card>
+        <SectionTitle>Timeline</SectionTitle>
+        <Timeline events={history} me={me} />
+      </Card>
     </>
   );
 }
@@ -326,5 +338,47 @@ function EdgeList({ label, rows, me }: { label: string; rows: EdgeRow[]; me: str
         </Link>
       ))}
     </div>
+  );
+}
+
+/**
+ * The facts on the record, oldest first (ux.md, the work item). A person's own act — a claim, a link,
+ * a closure — is marked as a gate, so the timeline shows at a glance where a person was needed.
+ */
+function Timeline({ events, me }: { events: HistoryEntry[]; me: string }) {
+  if (events.length === 0) return <p className="text-xs text-muted">Nothing on the record yet.</p>;
+  return (
+    <ol className="flex flex-col">
+      {events.map((e) => {
+        const { text, gate } = historySentence(e, me);
+        return (
+          <li
+            key={e.seq}
+            className={`grid grid-cols-[9.5rem,1fr] gap-3 border-l-2 py-1.5 pl-3 text-sm ${
+              gate ? 'border-accent' : 'border-rule'
+            }`}
+          >
+            <Mono className="text-2xs text-faint">{utc(e.at)}</Mono>
+            <span className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
+              <span className={gate ? 'font-semibold' : ''}>{text}</span>
+              {gate ? (
+                <span className="rounded-sm border border-accent px-1 font-mono text-[10px] uppercase text-accent-ink">
+                  a person’s gate
+                </span>
+              ) : null}
+              <span className="text-2xs text-faint">
+                by <Who id={e.acting} me={me} />
+                {e.accountable !== e.acting ? (
+                  <>
+                    {' '}
+                    · answerable <Who id={e.accountable} me={me} />
+                  </>
+                ) : null}
+              </span>
+            </span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

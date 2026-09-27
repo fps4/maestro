@@ -51,6 +51,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     sboms: deps.sboms,
     signals: deps.signals,
     workspaces: new WorkspaceRegistry(deps.store),
+    buildGraceSeconds: deps.config.BUILD_GRACE_SECONDS,
     now,
   });
 

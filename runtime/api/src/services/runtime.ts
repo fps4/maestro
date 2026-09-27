@@ -43,6 +43,19 @@ export interface RuntimeDeps {
   signals: SignalSink;
   workspaces: WorkspaceRegistry;
   now: () => string;
+  /** How long an unseen digest's deploy waits for its build record (config `BUILD_GRACE_SECONDS`). */
+  buildGraceSeconds?: number;
+}
+
+/**
+ * A deploy of a digest the ledger has never seen, younger than the grace: its build record may still
+ * be on its way. Nothing is recorded; the queue retries it.
+ */
+export class BuildPending extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'BuildPending';
+  }
 }
 
 /** Who acts, where: a request's caller, or the intake workload taking in the queue. */
@@ -230,6 +243,12 @@ export class RuntimeService {
     const { detail } = arrival;
     const result = await scope.handle.transaction(async (tx) => {
       const artifact = await scope.handle.artifacts.get(detail.application, detail.digest);
+      const grace = this.deps.buildGraceSeconds ?? 0;
+      if (!artifact && grace > 0 && Date.parse(env.now) - Date.parse(arrival.at) < grace * 1000) {
+        throw new BuildPending(
+          `No build record for \`${detail.application}\` ${detail.digest} yet; its deploy waits up to ${grace}s for one before it is a mismatch.`,
+        );
+      }
       const instance = await scope.handle.instances.get(detail.application, detail.environment);
       const decided = decide.deploy(env, arrival.at, detail, artifact, instance);
       if ('ignored' in decided) return { ignored: decided.ignored };

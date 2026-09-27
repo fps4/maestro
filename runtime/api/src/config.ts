@@ -81,6 +81,12 @@ const schema = z.object({
    * work-service's intake as this service's workload, with a token from identity-service's
    * client-credentials grant; `log` writes a line and nothing else — the laptop's.
    */
+  /**
+   * How long a deploy of a digest the ledger has never seen waits for its build record before it is a
+   * mismatch. The two events are put in order, but the queue between them does not keep it, and a
+   * retry can bring the deploy first. Within the window the deploy is retried; after it, a mismatch.
+   */
+  BUILD_GRACE_SECONDS: z.coerce.number().int().nonnegative().default(300),
   SIGNALS: z.enum(['log', 'work']).default('log'),
   WORK_API_URL: z.string().url().optional(),
   SIGNALS_TOKEN_URL: z.string().url().optional(),

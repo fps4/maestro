@@ -4,6 +4,7 @@
 
 import type { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
 import { ZodError } from 'zod';
+import { BuildPending } from '../services/runtime.js';
 import { Forbidden } from '../auth/context.js';
 import { Unauthenticated } from '../auth/verify.js';
 import { ProjectionBehind, UnknownWorkspace } from '../db/client.js';
@@ -34,6 +35,8 @@ export function statusOf(error: unknown): number {
   if (error instanceof Forbidden || error instanceof IsolationViolation) return 403;
   if (error instanceof NotFound || error instanceof UnknownWorkspace) return 404;
   if (error instanceof Conflict) return 409;
+  // Too Early: the deploy's build record has not arrived; retry, as the queue does.
+  if (error instanceof BuildPending) return 425;
   if (
     error instanceof Refused ||
     error instanceof Refusal ||

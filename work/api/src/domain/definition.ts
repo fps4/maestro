@@ -77,6 +77,12 @@ const application = z
     accountable: human,
     environments: z.array(slug).min(1).default(['prod']),
     /**
+     * What its reachability rests on that it shares with others — a host, a tunnel (maestro
+     * ADR-0028): alarms from one domain inside the correlation window are one outage, one item.
+     * Declared in `policy.failure_domains`.
+     */
+    failure_domain: slug.optional(),
+    /**
      * The repositories the application is built from, each with the environment a fix must reach
      * before its advisory is done — what the GitHub adapter reads to turn an alert into an item
      * about this application, and whose deploy the item waits for.
@@ -167,6 +173,14 @@ const policy = z
      * steps before `breach` fire evenly across an item's window from `opened_at` to `resolve_by`; the
      * breach is `resolve_by` itself, and is recorded whether a ladder names it or not.
      */
+    /**
+     * The failure domains applications share (ADR-0028 §2), each with the application that detects
+     * its members from outside, if one does: while the detector's own alarm is open, an alarm in the
+     * domain is the detector's, not the site's.
+     */
+    failure_domains: z.record(slug, z.object({ detector: slug.optional() }).strict()).default({}),
+    /** How long after a domain's first alarm another in it is the same outage. */
+    correlation_window: duration.default('PT15M'),
     chase_ladders: z.record(identifier, z.array(z.enum(CHASE_STEPS)).min(1)).default({}),
     /** The ladder every item with a `resolve_by` is chased on. None, and nothing is chased. */
     chase_ladder: identifier.optional(),
@@ -225,6 +239,20 @@ export function parseWorkspaceDefinition(raw: unknown): WorkspaceDefinition {
           `repository ${r.repository}${r.path ? ` at ${r.path}` : ''} belongs to two applications; give each its own path`,
         );
       repos.add(where);
+    }
+  }
+  for (const app of d.applications) {
+    if (app.failure_domain && !d.policy.failure_domains[app.failure_domain]) {
+      problems.push(
+        `application \`${app.id}\` names failure domain \`${app.failure_domain}\`, which policy.failure_domains does not declare`,
+      );
+    }
+  }
+  for (const [domain, { detector }] of Object.entries(d.policy.failure_domains)) {
+    if (detector && !ids.has(detector)) {
+      problems.push(
+        `policy.failure_domains.${domain}.detector names \`${detector}\`, which is not an application`,
+      );
     }
   }
   const seats = new Set(Object.keys(d.seats));
@@ -306,4 +334,12 @@ export function applicationOfRepository(
     }
   }
   return best && { application: best.application, environment: best.environment };
+}
+
+/** The domains an application detects from outside (ADR-0028 §2): those naming it their detector. */
+export function detectedBy(definition: WorkspaceDefinition, application: string): string[] {
+  return Object.entries(definition.policy.failure_domains)
+    .filter(([, d]) => d.detector === application)
+    .map(([domain]) => domain)
+    .sort();
 }

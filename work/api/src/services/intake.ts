@@ -6,7 +6,12 @@
  *   raised    — a new item, and its fingerprint's window;
  *   attached  — a repeat inside the window, on the item it raised (the window moves on);
  *   folded    — a medium or low finding, on the week's obligation (raised by the first of them);
- *   a fact    — an all-clear or a deploy, applied to every item waiting on its key.
+ *   a fact    — an all-clear or a deploy, applied to every item waiting on its key;
+ *   stale     — an alarm older than the all-clear already taken in for it (ADR-0028 §3): nothing.
+ *
+ * An alarm in a failure domain (ADR-0028 §2) attaches to the domain's outage — its detector's item
+ * while that is open, else the item its first alarm raised inside the correlation window — and owes
+ * its own all-clear there; with no outage open it raises its item and opens the domain's outage.
  *
  * A fact touches each waiting item in that item's own transaction; satisfying a satisfied entry
  * decides nothing, so a fact delivered twice is harmless and its delivery is recorded after.
@@ -15,12 +20,13 @@
 import { uuidv7 } from '@fps4/maestro-spine';
 import { Conflict } from '../db/handle.js';
 import * as decide from '../domain/decide.js';
+import { addDuration } from '../domain/definition.js';
 import type { Fact } from '../domain/evidence.js';
 import { route, type Signal } from '../domain/intake.js';
 import type { Scope, WorkItemService } from './work-items.js';
 
 export interface IntakeResult {
-  outcome: 'raised' | 'attached' | 'folded' | 'satisfied' | 'unmatched';
+  outcome: 'raised' | 'attached' | 'folded' | 'satisfied' | 'unmatched' | 'stale';
   items: string[];
   /** The delivery had been taken in already; this is what it became then. */
   replayed?: boolean;
@@ -45,6 +51,10 @@ export class IntakeService {
     });
 
     if (r.action === 'fact') {
+      // Its own time, kept whether it closes anything or not: an alarm older than it is stale.
+      if (r.fact.kind === 'signal_ok') {
+        await handle.allClears.record({ fingerprint: s.fingerprint, last_ok: s.occurred_at }, env.now);
+      }
       const result = await this.fact(scope, r.fact);
       await handle.deliveries.put(delivery(result.outcome, result.items), env.now);
       return result;
@@ -72,6 +82,14 @@ export class IntakeService {
           return { outcome: 'raised', items: [item.item_id] };
         }
 
+        // An alarm older than an all-clear already taken in for it arrived out of order: the OK is
+        // the latest word, and the alarm raises nothing (ADR-0028 §3).
+        const clear = await handle.allClears.get(r.fingerprint);
+        if (clear && Date.parse(clear.last_ok) > Date.parse(s.occurred_at)) {
+          handle.deliveries.stageInsert(tx, delivery('stale', []), env.now);
+          return { outcome: 'stale', items: [] };
+        }
+
         const until = r.origin.fingerprint_until!;
         const window = await handle.fingerprints.get(r.fingerprint);
         if (window && window.window_until >= env.now) {
@@ -88,12 +106,60 @@ export class IntakeService {
             return { outcome: 'attached', items: [head.item_id] };
           }
         }
-        const item = await this.items.raiseIn(tx, scope, env, correlation, r.input, r.origin);
+        // One outage in a failure domain is one item (ADR-0028 §2): the detector's while its own alarm
+        // is open, else the domain's first alarm's inside the correlation window.
+        const domain = r.correlate?.domain;
+        if (domain) {
+          for (const role of ['detector', 'site'] as const) {
+            const outage = await handle.outages.get(role, domain);
+            if (!outage) continue;
+            if (
+              role === 'site' &&
+              addDuration(outage.opened_at, env.definition.policy.correlation_window) < env.now
+            )
+              continue;
+            const head = await handle.items.get(outage.item_id);
+            if (!head || head.state === 'closed') continue;
+            const events = decide.attachSignal(env, head, {
+              fingerprint: r.fingerprint,
+              kind: s.kind,
+              fingerprint_until: until,
+              outage: true,
+            });
+            await this.items.stage(tx, scope, correlation, head, events);
+            // A repeat of this alarm attaches here too, while its window runs.
+            handle.fingerprints.stage(
+              tx,
+              { fingerprint: r.fingerprint, item_id: head.item_id, window_until: until },
+              window,
+            );
+            handle.deliveries.stageInsert(tx, delivery('attached', [head.item_id]), env.now);
+            return { outcome: 'attached', items: [head.item_id] };
+          }
+        }
+
+        const detects = r.correlate?.detects ?? [];
+        const origin = {
+          ...r.origin,
+          ...(domain ? { failure_domain: domain } : {}),
+          ...(detects.length ? { detects } : {}),
+        };
+        const item = await this.items.raiseIn(tx, scope, env, correlation, r.input, origin);
         handle.fingerprints.stage(
           tx,
           { fingerprint: r.fingerprint, item_id: item.item_id, window_until: until },
           window,
         );
+        for (const [role, d] of [
+          ...(domain ? [['site', domain] as const] : []),
+          ...detects.map((d) => ['detector', d] as const),
+        ]) {
+          handle.outages.stage(
+            tx,
+            { role, domain: d, item_id: item.item_id, opened_at: item.opened_at },
+            await handle.outages.get(role, d),
+          );
+        }
         handle.deliveries.stageInsert(tx, delivery('raised', [item.item_id]), env.now);
         return { outcome: 'raised', items: [item.item_id] };
       });

@@ -13,7 +13,7 @@
  */
 
 import { z } from 'zod';
-import { addDuration, applicationOf, type WorkspaceDefinition } from './definition.js';
+import { addDuration, applicationOf, detectedBy, type WorkspaceDefinition } from './definition.js';
 import type { Origin, RaiseInput } from './decide.js';
 import { Refusal } from './decide.js';
 import { factKeys, type Fact } from './evidence.js';
@@ -93,7 +93,17 @@ export function isoWeek(at: string): { name: string; starts: string; ends: strin
 
 export type Route =
   | { action: 'fact'; fact: Fact }
-  | { action: 'raise'; fingerprint: string; input: RaiseInput; origin: Origin }
+  | {
+      action: 'raise';
+      fingerprint: string;
+      input: RaiseInput;
+      origin: Origin;
+      /**
+       * An alarm on an application in a failure domain, or on a domain's detector (ADR-0028 §2):
+       * the service attaches it to the domain's open outage, or opens one with it.
+       */
+      correlate?: { domain?: string; detects: string[] };
+    }
   | { action: 'fold'; fold: string; fingerprint: string; input: RaiseInput; origin: Origin };
 
 const ref = (s: Signal) => `${s.source}:${s.delivery_id}`;
@@ -195,12 +205,21 @@ export function route(definition: WorkspaceDefinition, s: Signal, now: string): 
     CORRECTNESS_CLASSES.includes(mapped) && BELOW_CORRECTNESS.includes(app.onboarding_level)
       ? 'review'
       : mapped;
+
+  // An alarm on an application in a failure domain, or on a domain's detector, that raises a
+  // remediation — an item closed by all-clears: one outage, one item (ADR-0028 §2).
+  const alarm = ALARM_LIKE.includes(s.kind) && s.state !== 'ok' && cls === 'remediation';
+  const domain = alarm ? app.failure_domain : undefined;
+  const detects = alarm ? detectedBy(definition, app.id) : [];
+  const correlate = domain || detects.length > 0 ? { ...(domain ? { domain } : {}), detects } : undefined;
   return {
     action: 'raise',
     fingerprint: s.fingerprint,
     input: {
       class: cls,
-      title: title(s.kind.replace(/_/g, ' ')),
+      title: domain
+        ? `${s.kind.replace(/_/g, ' ')} in failure domain ${domain}, first on ${s.application}/${s.environment}: ${s.fingerprint}`
+        : title(s.kind.replace(/_/g, ' ')),
       ...about,
       ...(s.severity_hint ? { severity_hint: s.severity_hint } : {}),
       signal_kind: s.kind,
@@ -208,5 +227,6 @@ export function route(definition: WorkspaceDefinition, s: Signal, now: string): 
       raised_cause: ref(s),
     },
     origin: { fingerprint: s.fingerprint, fingerprint_until: window },
+    ...(correlate ? { correlate } : {}),
   };
 }

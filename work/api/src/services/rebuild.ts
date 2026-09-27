@@ -21,7 +21,7 @@ import {
 } from '@fps4/maestro-spine';
 import type { Store } from '../db/client.js';
 import { PROJECTION_VERSION, type OutboxRow } from '../db/handle.js';
-import type { Edge, FingerprintWindow, FoldRecord } from '../db/work-items.js';
+import type { Edge, FingerprintWindow, FoldRecord, OutageRecord } from '../db/work-items.js';
 import { evolveAuthority, type Authority, type AuthorityProjected } from '../domain/authority.js';
 import { armed } from '../domain/evidence.js';
 import { evolve, talliesOf, type ItemEvent } from '../domain/events.js';
@@ -87,6 +87,7 @@ export class RebuildService {
     // week's fold; the expectations from the heads as they end.
     const windows = new Map<string, FingerprintWindow>();
     const folds = new Map<string, FoldRecord>();
+    const outages = new Map<string, OutageRecord>();
     const tallies = new Map<string, number>();
     // Each application's tier and level as runtime-service set them (ADR-0027 §4).
     const authorities = new Map<string, Authority>();
@@ -142,6 +143,24 @@ export class RebuildService {
               windows.set(fingerprint, { fingerprint, item_id: item.item, window_until: fingerprint_until });
             }
             if (fold) folds.set(fold, { fold, item_id: item.item });
+            // Each raise that opened an outage names it: the last per domain and role is the one held.
+            if (item.body.failure_domain) {
+              const domain = item.body.failure_domain;
+              outages.set(`site#${domain}`, {
+                role: 'site',
+                domain,
+                item_id: item.item,
+                opened_at: head.opened_at,
+              });
+            }
+            for (const domain of item.body.detects ?? []) {
+              outages.set(`detector#${domain}`, {
+                role: 'detector',
+                domain,
+                item_id: item.item,
+                opened_at: head.opened_at,
+              });
+            }
           }
           if (item.type === 'WorkItemSignalAttached' && item.body.fingerprint_until) {
             const w = windows.get(item.body.fingerprint);
@@ -165,6 +184,7 @@ export class RebuildService {
     await handle.items.putMany([...heads.values()], edges);
     await handle.fingerprints.putMany([...windows.values()]);
     await handle.folds.putMany([...folds.values()]);
+    await handle.outages.putMany([...outages.values()]);
     await handle.expectations.putMany(
       [...heads.values()].flatMap((h) =>
         armed(h).map((a) => ({ key: a.key, item_id: h.item_id, index: a.index })),

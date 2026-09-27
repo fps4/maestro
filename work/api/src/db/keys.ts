@@ -34,6 +34,8 @@ export const KINDS = {
   expectation: 'expectation',
   fingerprint: 'fingerprint',
   fold: 'fold',
+  outage: 'outage',
+  all_clear: 'all_clear',
   tally: 'tally',
   delivery: 'delivery',
   request: 'request',
@@ -58,6 +60,7 @@ export const RECORD_KINDS: readonly Kind[] = [
   KINDS.expectation,
   KINDS.fingerprint,
   KINDS.fold,
+  KINDS.outage,
   KINDS.tally,
   KINDS.authority,
   KINDS.outbox,
@@ -112,6 +115,13 @@ export function workspaceKeys(workspace: string) {
 
     fingerprint: (fp: string): Key => ({ pk: `${p}fingerprint`, sk: fp }),
     fold: (name: string, period: string): Key => ({ pk: `${p}fold`, sk: `${name}#${period}` }),
+    /** A failure domain's outage: the item its first alarm raised, or its detector's (ADR-0028 §2). */
+    outage: (role: 'site' | 'detector', domain: string): Key => ({
+      pk: `${p}outage`,
+      sk: `${role}#${domain}`,
+    }),
+    /** A fingerprint's last all-clear, by the alarm's own time (ADR-0028 §3). A cache, not record. */
+    allClear: (fp: string): Key => ({ pk: `${p}all_clear`, sk: fp }),
 
     tallies: `${p}tally`,
     tally: (name: string): Key => ({ pk: `${p}tally`, sk: name }),

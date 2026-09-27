@@ -35,6 +35,26 @@ applications:
     onboarding_level: n1
     accountable: prn-h-demo-owner
     environments: [prod]
+  # Two sites that cannot publish for themselves, behind one host's tunnel, watched from outside by a
+  # probe that publishes their alarms (ADR-0028): one outage in the domain is one item.
+  - id: app3
+    tier: tier3
+    onboarding_level: n1
+    accountable: prn-h-demo-owner
+    environments: [prod]
+    failure_domain: host1-tunnel
+  - id: app4
+    tier: tier3
+    onboarding_level: n1
+    accountable: prn-h-demo-owner
+    environments: [prod]
+    failure_domain: host1-tunnel
+  # The probe itself: while its own alarm is open, an alarm in the domain it watches is its.
+  - id: probe
+    tier: tier2
+    onboarding_level: n1
+    accountable: prn-h-demo-owner
+    environments: [prod]
 
 policy:
   severity_map: { P1: sev1, P2: sev2, P3: sev3, P4: sev4 }
@@ -73,4 +93,8 @@ policy:
   chase_ladders:
     standard: [reminder, chase, escalate_accountable, escalate_steward, breach]
   chase_ladder: standard
+  # What applications' reachability rests on together, and who detects them from outside (ADR-0028).
+  failure_domains:
+    host1-tunnel: { detector: probe }
+  correlation_window: PT15M
   alerts: { slack_on_raise_at_or_above: sev2 }

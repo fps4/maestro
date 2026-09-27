@@ -246,8 +246,11 @@ describe('evidence and intake', () => {
     );
     expect(await item(id)).toMatchObject({ state: 'closed', outcome: 'done', signals: 2 });
 
-    // The same fingerprint after its item closed raises a new one.
-    expect((await signal(alarm)).body.outcome).toBe('raised');
+    // An alarm older than the all-clear already taken in arrived out of order: stale (ADR-0028 §3).
+    expect((await signal(alarm)).body).toMatchObject({ outcome: 'stale', items: [] });
+    // The same fingerprint alarming after its item closed raises a new one.
+    h.setNow('2026-09-30T08:30:00Z');
+    expect((await signal({ ...alarm, occurred_at: '2026-09-30T08:30:00Z' })).body.outcome).toBe('raised');
   });
 
   it('raises a low review item for a signal about nothing the workspace declares — never nothing', async () => {

@@ -15,10 +15,12 @@ import { KINDS, workspaceKeys, type WorkspaceKeys } from './keys.js';
 import type { Authority } from '../domain/authority.js';
 import { PK } from './table.js';
 import {
+  AllClearRepository,
   DeliveryRepository,
   ExpectationRepository,
   FingerprintRepository,
   FoldRepository,
+  OutageRepository,
   RequestRepository,
   TallyRepository,
   WorkItemRepository,
@@ -248,6 +250,8 @@ export interface WorkspaceHandle {
   readonly folds: FoldRepository;
   readonly deliveries: DeliveryRepository;
   readonly authorities: AuthorityRepository;
+  readonly outages: OutageRepository;
+  readonly allClears: AllClearRepository;
   /**
    * One transaction over this workspace's items: `work` reads what it needs and stages its writes
    * on `tx`, each with the condition that makes its reads still true; the commit is all or nothing.
@@ -282,6 +286,8 @@ export function workspaceHandle(
     folds: new FoldRepository(b),
     deliveries: new DeliveryRepository(b),
     authorities: new AuthorityRepository(b),
+    outages: new OutageRepository(b),
+    allClears: new AllClearRepository(b),
     async transaction<T>(work: (tx: Transaction) => Promise<T>): Promise<T> {
       for (let attempt = 1; ; attempt += 1) {
         const tx = b.items.transaction();

@@ -22,6 +22,7 @@ import {
 import {
   addDuration,
   parseDuration,
+  detectedBy,
   parseWorkspaceDefinition,
   resolveSeverity,
 } from '../../src/domain/definition.js';
@@ -85,7 +86,25 @@ describe('severity, resolved from policy', () => {
 
 describe('the demo definition', () => {
   it('validates', () => {
-    expect(definition.applications.map((a) => a.id)).toEqual(['app1', 'app2']);
+    expect(definition.applications.map((a) => a.id)).toEqual(['app1', 'app2', 'app3', 'app4', 'probe']);
+    expect(definition.policy.failure_domains).toEqual({ 'host1-tunnel': { detector: 'probe' } });
+    expect(definition.policy.correlation_window).toBe('PT15M');
+  });
+
+  it('refuses a failure domain nobody declared, and a detector that is not an application', () => {
+    const load = () =>
+      parse(readFileSync(resolvePath(__dirname, '../../../config/workspaces/aannemer-x.yaml'), 'utf8'));
+    const undeclared = load();
+    undeclared.applications[2].failure_domain = 'host9';
+    expect(() => parseWorkspaceDefinition(undeclared)).toThrow(/failure domain `host9`/);
+    const detector = load();
+    detector.policy.failure_domains['host1-tunnel'].detector = 'nobody';
+    expect(() => parseWorkspaceDefinition(detector)).toThrow(/detector names `nobody`/);
+  });
+
+  it('knows which domains an application detects', () => {
+    expect(detectedBy(definition, 'probe')).toEqual(['host1-tunnel']);
+    expect(detectedBy(definition, 'app3')).toEqual([]);
   });
 
   it('refuses a seat nobody declared', () => {

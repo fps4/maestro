@@ -1,6 +1,6 @@
 # ADR-0028 · An application that cannot publish is watched from outside by a detector it names; maestro correlates a shared failure
 
-**Status:** proposed · 2026-09-27 · amends [ADR-0012](0012-the-application-owns-detection-maestro-owns-response.md) (its "what would reopen it"); answers the first tenant's own record of its external probe, kept in its infrastructure repository
+**Status:** accepted · 2026-09-27 · amends [ADR-0012](0012-the-application-owns-detection-maestro-owns-response.md) (its "what would reopen it"); answers the first tenant's own record of its external probe, kept in its infrastructure repository
 
 ## Context
 
@@ -76,6 +76,10 @@ A fingerprint's window keeps the last `OK`'s `occurred_at`.
 - The first tenant's outage of 2026-09-26 would have been one SEV2 item naming both sites, not two. A probe failure would have been one item, not three.
 - Intake gains a read per signal (the domain's open outage), still one transaction per signal.
 - A detector's application is observed like any other. Its own silence reads as every site in its domains down, and §2 turns that into one item about the probe.
+
+## Decided at acceptance
+
+The three questions asked, answered as recommended (#71, 2026-09-27): failure domains are declared in work-service's definition; an outage item is about the first application to alarm, the others named on it; the correlation window is a policy value, 15 minutes by default.
 
 ## What would reopen it
 

@@ -1,6 +1,6 @@
 # ADR-0029 · A person's preferences live on their profile in identity-service
 
-**Status:** proposed · 2026-09-27 · follows [ADR-0023](0023-maestro-alerts-in-its-one-console.md) (one console, holding no data of its own); asks a small capability of identity-service
+**Status:** accepted · 2026-09-27 · follows [ADR-0023](0023-maestro-alerts-in-its-one-console.md) (one console, holding no data of its own); asks a small capability of identity-service
 
 ## Context
 
@@ -54,6 +54,10 @@ identity-service owns the person, so it owns their profile. It gains two operati
 - identity-service grows a small, self-contained capability, in its own repository, merged on the architect's word. It has two routes, one item kind in its table, and tests.
 - The console remembers the Owed and board filters per person, on any browser they sign in from.
 - Pins and other preferences later need no new store.
+
+## Decided at acceptance
+
+The two questions asked, answered as recommended (#71, 2026-09-27): one document per person per application; at most 8 KB.
 
 ## What would reopen it
 

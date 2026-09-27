@@ -141,7 +141,6 @@ export function busEvent(source: 'maestro.build' | 'maestro.deploy', detail: obj
     id: id ?? `00000000-0000-4000-8000-${String(eventCounter).padStart(12, '0')}`,
     'detail-type': source === 'maestro.build' ? 'build' : 'deploy',
     source,
-    account: '000000000000',
     time: `2026-09-27T08:${String(eventCounter % 60).padStart(2, '0')}:00Z`,
     region: 'eu-central-1',
     resources: [],

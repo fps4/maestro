@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# The services live in one repository but stay apart (ADR-0020): code under specs/ or work/
+# The services live in one repository but stay apart (ADR-0020): code under specs/, work/ or runtime/
 # imports from its own tree, or from a package by name (the spine from npm, the rest over HTTP) —
 # never by a relative path into another component's source. Prints each crossing; exits 1 if any.
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
 out="$(
-git ls-files --cached --others --exclude-standard -- 'specs/*' 'work/*' \
+git ls-files --cached --others --exclude-standard -- 'specs/*' 'work/*' 'runtime/*' \
   | grep -E '\.(ts|tsx|mts|cts|js|mjs|cjs)$' | grep -v '/node_modules/' \
   | while IFS= read -r file; do
       service="${file%%/*}"

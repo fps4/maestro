@@ -51,7 +51,9 @@ One meaning per word, across every component and document. If a component needs 
 | **Onboarding level** | N0 observed · N1 operated · N2 governed · N3 integrated · N4 regenerated. What maestro may do *to* an application; the ceiling for remediation. The MVP uses N0–N2. |
 | **Artifact (deployed)** | What was built: an image or bundle with a digest, a version, an SBOM, and a known-good rollback target. Held in the ledger. |
 | **Instance** | One artifact digest running in one environment of one application. Held in the register. A running digest the ledger does not know is a hard stop. |
+| **Build record** | The fact that a pipeline built an artifact — its digest, commit, version and SBOM — put as `maestro.build` before the deploy (ADR-0027). |
 | **Deploy event** | The fact that an artifact became an instance — from the tenant's pipeline via EventBridge. |
+| **Digest mismatch** | A deploy of a digest with no build record: recorded, the instance marked, a signal sent to work-service, never corrected in place. |
 | **Consequence class** | How much a thing matters if wrong. Carried on every item and instance from the first build; read in full only by the regulated branch. |
 
 ## What agents do

@@ -19,7 +19,12 @@ import {
   type Actor,
   type Env,
 } from '../../src/domain/decide.js';
-import { addDuration, parseDuration, parseWorkspaceDefinition } from '../../src/domain/definition.js';
+import {
+  addDuration,
+  parseDuration,
+  parseWorkspaceDefinition,
+  resolveSeverity,
+} from '../../src/domain/definition.js';
 import { evolve, evolveAll, EvolveError, talliesOf, type ItemEvent } from '../../src/domain/events.js';
 import { nextAt, type WorkItem } from '../../src/domain/item.js';
 
@@ -52,6 +57,29 @@ describe('durations', () => {
     expect(addDuration(NOW, 'P1DT2H')).toBe('2026-09-26T10:00:00Z');
     expect(() => parseDuration('15m')).toThrow();
     expect(() => parseDuration('P')).toThrow();
+  });
+});
+
+describe('severity, resolved from policy', () => {
+  const policy = parseWorkspaceDefinition({
+    workspace: 'w',
+    definition_version: 1,
+    consequence_class: 'c2',
+    seats: { operations: { oversight_level: 'O2' } },
+    policy: {
+      severity_map: { P1: 'sev1' },
+      default_severity: 'sev4',
+      signal_severity: { alarm_state: { tier1: 'sev1', tier2: 'sev2' } },
+    },
+  }).policy;
+
+  it('takes the hint first, then the signal’s kind by tier, then the default', () => {
+    expect(resolveSeverity(policy, 'P1', { kind: 'alarm_state', tier: 'tier2' })).toBe('sev1');
+    expect(resolveSeverity(policy, undefined, { kind: 'alarm_state', tier: 'tier2' })).toBe('sev2');
+    expect(resolveSeverity(policy, 'P9', { kind: 'alarm_state', tier: 'tier1' })).toBe('sev1');
+    expect(resolveSeverity(policy, undefined, { kind: 'alarm_state', tier: 'tier3' })).toBe('sev4');
+    expect(resolveSeverity(policy, undefined, { kind: 'dlq', tier: 'tier1' })).toBe('sev4');
+    expect(resolveSeverity(policy, undefined)).toBe('sev4');
   });
 });
 

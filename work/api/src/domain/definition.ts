@@ -107,6 +107,12 @@ const policy = z
   .object({
     /** The application's own priority → maestro's one scale (maestro ADR-0009). */
     severity_map: z.record(z.string(), severity).default({}),
+    /**
+     * What a signal with no hint is, by its kind and the application's tier (maestro
+     * docs/components/work-service.md, "Signals intake"): an alarm on a tier1 application is not a
+     * tier3's. A hint the application sends wins; a kind or tier not named here falls to the default.
+     */
+    signal_severity: z.record(z.string(), z.record(tier, severity)).default({}),
     /** A raise with no hint, and no signal to resolve one from. */
     default_severity: severity.default('sev4'),
     /** severity × tier → [respond_by, resolve_by], as durations from `opened_at`. */
@@ -248,12 +254,18 @@ export function seatFor(definition: WorkspaceDefinition, cls: ItemClass): string
 }
 
 /** Severity from the caller's hint through the map, or the policy's default. Never typed in. */
-export function resolveSeverity(policy: Policy, hint: string | undefined): Severity {
+/** The hint through the map; else the signal's kind by tier; else the default. Never entered by hand. */
+export function resolveSeverity(
+  policy: Policy,
+  hint: string | undefined,
+  signal?: { kind: string; tier: Tier | undefined },
+): Severity {
   if (hint !== undefined) {
     const mapped = policy.severity_map[hint];
     if (mapped) return mapped;
   }
-  return policy.default_severity;
+  const byKind = signal?.tier ? policy.signal_severity[signal.kind]?.[signal.tier] : undefined;
+  return byKind ?? policy.default_severity;
 }
 
 export function clocksFor(policy: Policy, sev: Severity, t: Tier | undefined): [string, string] | undefined {

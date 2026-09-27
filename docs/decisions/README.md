@@ -31,5 +31,7 @@ Architecture decision records, numbered from 0001. Each states context in a few 
 | [0025](0025-the-weekly-fold-is-per-application.md) | The weekly fold is one obligation per application | proposed |
 | [0026](0026-the-console-behind-the-tenants-edge.md) | The console runs like an API, behind the tenant's own edge | accepted |
 | [0027](0027-runtime-services-table-and-feeds.md) | runtime-service: a partition per instance, the build record before the deploy, level and tier as events | accepted |
+| [0028](0028-external-detection-and-correlated-outages.md) | An application that cannot publish is watched from outside by a detector it names; maestro correlates a shared failure | proposed |
+| [0029](0029-a-persons-preferences-live-on-their-profile.md) | A person's preferences live on their profile in identity-service | proposed |
 
 specs-service's own decision log moved with it to [`specs/docs/decisions/`](../../specs/docs/decisions/) (ADR-0001–0022 there) and is closed: its records are cited as "specs-service ADR-00NN", and every new decision, whatever it is about, is recorded here ([ADR-0020](0020-maestros-own-services-live-in-one-repository.md)).

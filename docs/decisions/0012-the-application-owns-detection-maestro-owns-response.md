@@ -20,4 +20,4 @@ maestro ships the application side as a Terraform module and a CDK construct. On
 
 ## What would reopen it
 
-An application that cannot publish (no IaC, no SNS) — then maestro polls, as a read-only adapter, and the split of ownership stays.
+An application that cannot publish (no IaC, no SNS) — then maestro polls, as a read-only adapter, and the split of ownership stays. *Met on 2026-09-27, and answered otherwise: a detector outside the application publishes for it, and maestro does not poll ([ADR-0028](0028-external-detection-and-correlated-outages.md)).*

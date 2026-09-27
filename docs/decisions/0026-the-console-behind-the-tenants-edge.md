@@ -1,6 +1,6 @@
 # ADR-0026 · The console runs like an API, behind the tenant's own edge
 
-**Status:** proposed · 2026-09-26 · amends [ADR-0002](0002-serverless-aws-is-the-substrate.md) (its clause on consoles: "OpenNext and CloudFront")
+**Status:** accepted · 2026-09-27 (proposed 2026-09-26) · amends [ADR-0002](0002-serverless-aws-is-the-substrate.md) (its clause on consoles: "OpenNext and CloudFront")
 
 ## Context
 

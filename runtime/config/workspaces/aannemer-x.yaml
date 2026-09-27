@@ -1,0 +1,28 @@
+# The demo tenant — Aannemer X, fictional — as runtime-service reads it: its applications, the
+# environments each runs in, and the repositories they are built from (maestro ADR-0027 §7). A real
+# tenant's definition lives in its private configuration repository as
+# `workspaces/<workspace>.runtime.yaml` and is applied by its pipeline.
+#
+# No tier and no onboarding level here: those are a person's act (`set_level`, `set_tier`), recorded
+# as events and projected by work-service (ADR-0027 §4).
+
+workspace: aannemer-x
+definition_version: 1
+title: Aannemer X
+consequence_class: c2
+
+# The seats this service records its acts under: a pipeline's build and deploy, taken in by the
+# intake workload; and a person setting an application's level or tier.
+seats:
+  intake: { oversight_level: O2 }
+  owner: { oversight_level: O0 }
+
+applications:
+  - id: app1
+    accountable: prn-h-demo-owner
+    environments: [staging, prod]
+    repositories:
+      - { repository: aannemer-x/app1, environment: prod }
+  - id: app2
+    accountable: prn-h-demo-owner
+    environments: [prod]

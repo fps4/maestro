@@ -1,0 +1,85 @@
+name: runtime-dod
+
+# runtime-service's Definition-of-Done gate. Every job is blocking. The secret scan and the public
+# guards run once for the whole tree (guards.yml); this is the service's own gate, run when
+# something under runtime/ changes. Every image is built with runtime/ as its context, as compose does.
+#
+# GitHub-hosted runners only (maestro ADR-0017: a self-hosted runner on a public repository runs
+# strangers' code). Every job builds an image and runs in it, so the gate is what a laptop can run
+# with Docker and nothing else. Nothing deploys from here; a tenant's pipeline does.
+
+on:
+  push:
+    branches: [main]
+    paths: ['runtime/**', '.github/workflows/runtime-dod.yml']
+  pull_request:
+    paths: ['runtime/**', '.github/workflows/runtime-dod.yml']
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-dod-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-build:
+    # Building the api image runs typecheck, lint and the compile (see api.Dockerfile): nothing that
+    # did not pass can be shipped.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t mr-api:${{ github.run_id }}-${{ github.run_attempt }} -f runtime/infra/docker/api.Dockerfile runtime
+
+  test:
+    # The full suite against DynamoDB Local (maestro ADR-0018). Unit tests pin the domain rules —
+    # the fold, the decisions, the intake's reading of the bus — and integration tests drive the
+    # service over HTTP: acceptance scenarios T1–T3 and the cross-workspace read. Each test file
+    # makes its own table from api/src/db/table.ts and drops it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the CI image
+        run: docker build -t mr-ci:${{ github.run_id }}-${{ github.run_attempt }} -f runtime/infra/docker/ci.Dockerfile runtime
+      - name: Test against a sibling DynamoDB Local on a per-run network
+        run: |
+          set -e
+          SUFFIX=${{ github.run_id }}-${{ github.run_attempt }}
+          NET=mr-net-$SUFFIX
+          DYNAMO=mr-dynamodb-$SUFFIX
+          docker network create "$NET"
+          # No credentials: DynamoDB Local accepts any key pair, the container is on a throwaway
+          # network with no published port, and what is under test is the store's shape.
+          docker run -d --name "$DYNAMO" --network "$NET" --network-alias dynamodb \
+            --health-cmd "curl -s -o /dev/null http://localhost:8000/ || exit 1" \
+            --health-interval 3s --health-timeout 3s --health-retries 30 \
+            amazon/dynamodb-local:latest -jar DynamoDBLocal.jar -sharedDb -inMemory
+          for _ in $(seq 1 40); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' "$DYNAMO" 2>/dev/null)" = healthy ] && break
+            sleep 2
+          done
+          [ "$(docker inspect -f '{{.State.Health.Status}}' "$DYNAMO")" = healthy ] || {
+            echo "::error::DynamoDB Local never became healthy"; docker logs --tail 40 "$DYNAMO"; exit 1; }
+          docker run --rm --network "$NET" -e DYNAMODB_ENDPOINT="http://dynamodb:8000" \
+            mr-ci:$SUFFIX bash -lc "cd api && npm run lint && npm run typecheck && npm test"
+      - name: Cleanup
+        if: always()
+        run: |
+          SUFFIX=${{ github.run_id }}-${{ github.run_attempt }}
+          docker rm -f -v "mr-dynamodb-$SUFFIX" 2>/dev/null || true
+          docker network rm "mr-net-$SUFFIX" 2>/dev/null || true
+
+  dependency-scan:
+    # Known vulnerabilities in what ships. High and above fails; the report is printed either way.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: npm audit
+        working-directory: runtime/api
+        run: |
+          npm audit --omit=dev || true
+          npm audit --omit=dev --audit-level=high

@@ -10,7 +10,9 @@ locals {
   sweep_name  = "${var.name}-sweep"
   intake_name = "${var.name}-intake"
   intake_on   = var.intake != null
-  table_name  = coalesce(var.table_name, var.name)
+  # runtime-service's tier and level events, projected by the intake (ADR-0027 §4).
+  authority_on = local.intake_on && try(var.intake.runtime_events_topic_arn, null) != null
+  table_name   = coalesce(var.table_name, var.name)
 
   # Each secret's current value, by the environment variable name it is set as.
   secret_env = { for name, secret in data.aws_secretsmanager_secret_version.secret : name => secret.secret_string }
@@ -774,6 +776,62 @@ resource "aws_sns_topic_subscription" "signals" {
   endpoint  = aws_sqs_queue.signals[0].arn
 }
 
+# runtime-service's `InstanceLevelSet` and `InstanceTierSet`, from the spine's events topic: a FIFO
+# queue of its own, so a workspace's events arrive in order, filtered to those two types and
+# delivered raw — each message is the event's canonical line.
+resource "aws_sqs_queue" "authority_dlq" {
+  count                     = local.authority_on ? 1 : 0
+  name                      = "${local.intake_name}-authority-dlq.fifo"
+  fifo_queue                = true
+  message_retention_seconds = 1209600
+  sqs_managed_sse_enabled   = true
+  tags                      = local.tags
+}
+
+resource "aws_sqs_queue" "authority" {
+  count                      = local.authority_on ? 1 : 0
+  name                       = "${local.intake_name}-authority.fifo"
+  fifo_queue                 = true
+  visibility_timeout_seconds = 6 * var.intake_timeout_seconds
+  message_retention_seconds  = 1209600
+  sqs_managed_sse_enabled    = true
+  redrive_policy             = jsonencode({ deadLetterTargetArn = aws_sqs_queue.authority_dlq[0].arn, maxReceiveCount = 5 })
+  tags                       = local.tags
+}
+
+resource "aws_sqs_queue_policy" "authority" {
+  count     = local.authority_on ? 1 : 0
+  queue_url = aws_sqs_queue.authority[0].id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid       = "SpineEventsTopic"
+      Effect    = "Allow"
+      Principal = { Service = "sns.amazonaws.com" }
+      Action    = "sqs:SendMessage"
+      Resource  = aws_sqs_queue.authority[0].arn
+      Condition = { ArnEquals = { "aws:SourceArn" = var.intake.runtime_events_topic_arn } }
+    }]
+  })
+}
+
+resource "aws_sns_topic_subscription" "authority" {
+  count                = local.authority_on ? 1 : 0
+  topic_arn            = var.intake.runtime_events_topic_arn
+  protocol             = "sqs"
+  endpoint             = aws_sqs_queue.authority[0].arn
+  raw_message_delivery = true
+  filter_policy        = jsonencode({ type = ["InstanceLevelSet", "InstanceTierSet"] })
+}
+
+resource "aws_lambda_event_source_mapping" "authority" {
+  count                   = local.authority_on ? 1 : 0
+  event_source_arn        = aws_sqs_queue.authority[0].arn
+  function_name           = aws_lambda_function.intake[0].arn
+  batch_size              = 10
+  function_response_types = ["ReportBatchItemFailures"]
+}
+
 resource "aws_cloudwatch_log_group" "intake" {
   count             = local.intake_on ? 1 : 0
   name              = "/aws/lambda/${local.intake_name}"
@@ -821,7 +879,7 @@ resource "aws_iam_role_policy" "intake" {
       {
         Effect   = "Allow"
         Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:GetQueueAttributes"]
-        Resource = aws_sqs_queue.signals[0].arn
+        Resource = concat([aws_sqs_queue.signals[0].arn], aws_sqs_queue.authority[*].arn)
       },
     ]
   })

@@ -10,6 +10,7 @@
 
 import { assertEvent, uuidv7, type OversightLevel, type SpineEvent } from '@fps4/maestro-spine';
 import type { Transaction, WorkspaceHandle } from '../db/handle.js';
+import type { AuthorityProjected } from '../domain/authority.js';
 import type { ItemEvent } from '../domain/events.js';
 import { spineWorkspaceId, type PrincipalKind } from '../domain/ids.js';
 import { RECORD_TYPES } from '../domain/record-types.js';
@@ -25,8 +26,9 @@ export interface EmitContext {
 }
 
 export interface Recordable {
-  event: ItemEvent;
-  /** The item's revision once this event is applied. */
+  /** An item's event, or an application's (its projected authority, ADR-0027 §4). */
+  event: ItemEvent | AuthorityProjected;
+  /** The subject's revision once this event is applied. */
   subject_seq: number;
   consequence_class: string;
   payload?: PayloadRef;
@@ -55,8 +57,9 @@ export async function emit(
       event_id: uuidv7(),
       workspace_id: spineWorkspaceId(ctx.workspace),
       seq: start + i + 1,
-      subject_type: 'work_item',
-      subject_id: event.item,
+      ...('item' in event
+        ? { subject_type: 'work_item', subject_id: event.item }
+        : { subject_type: 'application', subject_id: event.application }),
       subject_seq,
       type: event.type,
       type_version: 1,

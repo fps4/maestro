@@ -44,6 +44,7 @@ export const KINDS = {
   workspace: 'workspace',
   workspace_definition: 'workspace_definition',
   principal: 'principal',
+  authority: 'authority',
 } as const;
 export type Kind = (typeof KINDS)[keyof typeof KINDS];
 
@@ -58,6 +59,7 @@ export const RECORD_KINDS: readonly Kind[] = [
   KINDS.fingerprint,
   KINDS.fold,
   KINDS.tally,
+  KINDS.authority,
   KINDS.outbox,
   KINDS.counter,
 ];
@@ -124,6 +126,10 @@ export function workspaceKeys(workspace: string) {
     outboxItem: (seq: number): Key => ({ pk: `${p}outbox`, sk: padSeq(seq) }),
     /** The sparse index: set while undelivered, removed by the ack. */
     pending: (seq: number) => ({ pending_pk: `${p}outbox`, pending_sk: padSeq(seq) }),
+
+    /** An application's tier and onboarding level, projected from runtime-service (ADR-0027 §4). */
+    authorities: `${p}authority`,
+    authority: (application: string): Key => ({ pk: `${p}authority`, sk: application }),
 
     counters: `${p}counter`,
     counter: (name: string): Key => ({ pk: `${p}counter`, sk: name }),

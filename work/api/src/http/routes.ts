@@ -16,8 +16,10 @@ import type { Store } from '../db/client.js';
 import type { PayloadStore } from '../record/payload-store.js';
 import { signalSchema } from '../domain/intake.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { parseEventLine } from '@fps4/maestro-spine';
 import { fromGitHub } from '../domain/adapters.js';
 import { AdapterService, intakeScope } from '../services/adapters.js';
+import { AuthorityService } from '../services/authority.js';
 import { IntakeService } from '../services/intake.js';
 import { scopeOf, WorkItemService } from '../services/work-items.js';
 import { WorkspaceRegistry } from '../services/workspaces.js';
@@ -63,6 +65,7 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
   const items = new WorkItemService({ store: deps.store, payloads: deps.payloads, workspaces, now });
   const intake = new IntakeService(items);
   const adapters = new AdapterService(items);
+  const authority = new AuthorityService(deps.store, workspaces, now);
 
   app.get('/health', async () => ({ status: 'ok' }));
 
@@ -122,6 +125,16 @@ export async function registerRoutes(app: FastifyInstance, deps: RouteDeps): Pro
     requireRole(ctx, 'intake');
     const result = await intake.signal(scopeOf(ctx), signalSchema.parse(request.body));
     return reply.code(result.outcome === 'raised' && !result.replayed ? 201 : 200).send(result);
+  });
+
+  /**
+   * runtime-service's `InstanceLevelSet` or `InstanceTierSet`, as the spine delivers it: projected
+   * onto the application (ADR-0027 §4). The queue's path in a deployment; this route in the local loop.
+   */
+  app.post<WsParams>('/v1/workspaces/:ws/authority', async (request) => {
+    const ctx = await contextFor(deps, request);
+    requireRole(ctx, 'intake');
+    return authority.apply(scopeOf(ctx), parseEventLine(JSON.stringify(request.body)));
   });
 
   /** A fact from the world — a merge, a deploy, an accepted decision — applied to what waits on it. */

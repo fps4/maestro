@@ -34,6 +34,8 @@ The next iteration:
 - **The change-control kinds** (cosmetic, behavioural, assumption-breaking) become a field that routes, rather than a table in the governance model.
 - specs-service gates stay human. Automated acceptance of low-consequence documents would be its own decision.
 
+[practices.md](practices.md#change) places this inside change management, with the inputs the grade reads and the change-induced incident link.
+
 ## Branch R — the regulated domain
 
 Forks from the finished MVP. Adds a pack registry (standards, ceilings, chase ladders and clocks as versioned, effective-dated content), a standards engine behind specs-service's evaluator port, assurance and drift detection, classification enforced on every payload and transcript, a conformance dossier per application, and ceilings derived from consequence class.

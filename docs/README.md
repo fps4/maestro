@@ -16,6 +16,7 @@ Read in this order the first time; jump straight to a component after that.
 | [`build-standards.md`](build-standards.md) | The CI floor every maestro repository meets |
 | [`first-deployment.md`](first-deployment.md) | The runbook: from an empty account to the first act, in order, with what the first tenant taught |
 | [`ux.md`](ux.md) | The rules every screen obeys, the screens per component, and what the redraw must show |
+| [`practices.md`](practices.md) | Incident, problem and change management after the MVP: lanes over the components, the risk grade, agents and the gates that stay human |
 | [`beyond-mvp.md`](beyond-mvp.md) | The backlog after the MVP, and the regulated branch |
 | [`components/`](components/) | One document per component: what it holds, its ports, its interfaces, its acceptance |
 | [`decisions/`](decisions/) | The decision log, ADR-0001 onward |

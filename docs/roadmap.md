@@ -33,7 +33,7 @@ Each scenario is run on the first tenant (fps4's own deployment, [first-deployme
 | W5 | **The advisory lane with no agent:** advisory → item → Dependabot's PR → a person's merge → deploy event → re-scan → closed `done` on evidence. Medium and low findings fold into one weekly obligation. | [use-cases.md](use-cases.md#uc1b--the-advisory-lane) | **passed live 2026-09-26** on the fixture: `semver` high → `wrk-2`, Dependabot's #23 linked; merged 12:58:51Z, re-scan clear 12:58:55Z, deploy 12:59:39Z → closed `done`, never claimed. `ms` medium and `debug` low → the week's obligation `wrk-1`, closed `done` when both re-scanned clear |
 | W6 | A skill written against the tracker contract runs its acceptance suite green against the MCP server. | [work-service](components/work-service.md#acceptance) | in code |
 | **Deploys and instances** | | | |
-| T1 | A deploy event creates the artifact and the instance; a second deploy shifts `rollback_target`; a rebuild from the archive is identical. | [runtime-service](components/runtime-service.md#acceptance) | in code; **live 2026-09-27 but for the rebuild**: the fixture's build record and deploy created its artifact and instance, and each later deploy shifted `rollback_target`. The rebuild waits for the day's seal, as W1's does |
+| T1 | A deploy event creates the artifact and the instance; a second deploy shifts `rollback_target`; a rebuild from the archive is identical. | [runtime-service](components/runtime-service.md#acceptance) | **passed live 2026-09-28**: the fixture's build record and deploy created its artifact and instance, and each later deploy shifted `rollback_target` (2026-09-27); rebuilt from the archive and the SBOMs into a scratch table, every read (the estate, each instance, `carries`) was identical to the deployed service's |
 | T2 | A deploy of a digest with no build record raises `DigestMismatchDetected` and a SEV item; the instance is marked, never silently corrected. | [runtime-service](components/runtime-service.md#acceptance) | **passed live 2026-09-27**: a fixture deploy with no build record was recorded as a mismatch, the instance marked `mismatched`, and work-service raised SEV2 `wrk-12`; the fixture's next deploy of a built digest cleared the mark and closed `wrk-12` `done` on the all-clear |
 | T3 | `carries(dependency)` returns every deployed instance whose SBOM names it. | [runtime-service](components/runtime-service.md#acceptance) | **passed live 2026-09-27**: `carries(pkg:npm/semver)` named the fixture at 7.5.2 and runtime-service; `pkg:npm/ms` the fixture at both versions it carries; from the SBOMs the pipelines uploaded |
 | **Agent runs** | | | |
@@ -81,7 +81,6 @@ Built and deployed on the first tenant 2026-09-27 ([ADR-0027](decisions/0027-run
 
 | Still to build | |
 |---|---|
-| T1's rebuild from the archive, live | after the day's seal, with W1's scratch-table script |
 | Tier and onboarding level moved: each application's set here, so work-service's definition no longer carries them | the projection is built; no application has been set yet |
 | `deploy_event` evidence matched by digest rather than by time | after the MVP unless a scenario needs it |
 | Scan intake from ECR and Inspector | not in the MVP (ADR-0027 §8) |

@@ -91,6 +91,27 @@ One meaning per word, across every component and document. If a component needs 
 | **Run page** | One run: plan, timeline, ceiling, refusals, next human touchpoint. |
 | **Estate** | runtime-service's view of every application × environment: digest, level, tier, last deploy, open items. |
 
+## Practices — after the MVP
+
+Named now so [`docs/practices.md`](docs/practices.md) can use them; none is built.
+
+| Term | Meaning |
+|---|---|
+| **Practice** | Incident, problem, change and the rest, done as a lane: configuration and run kinds over the existing components, never a service of its own. |
+| **Incident** | A `remediation` item a signal raised, or an outage's item. Not a record of its own. |
+| **Incident lead** | The human seat on a SEV1–2 incident that owns communication and escalation. Not `accountable`, which does not move. |
+| **Suspect change** | A deploy to an incident's application, or to its failure domain, within the change window before the incident. Named by rule; confirmed or cleared by the cause analysis. |
+| **Change-failure rate** | An application's confirmed suspect changes over its changes. An input to the risk grade. |
+| **Problem** | A specs-service artifact naming the cause several incidents share, its workaround, and the change that removes it. |
+| **Known error** | An accepted problem version with a workaround; the triager matches incidents against it. |
+| **Risk grade** | low, normal or high: a change's grade from the tenant's versioned risk policy, taken at proposal and again at merge. Computed, never typed. |
+| **Standard change** | A low-grade change approved by a rule the tenant wrote, recorded under the policy's version. |
+| **Emergency change** | A change taken during an incident ahead of its gate, decided after the fact by a `review` item. |
+| **Freeze window** | A period in the policy calendar during which every change grades high. |
+| **Blast radius** | The applications and tiers a change could reach: its failure domain and what depends on it. |
+| **Error budget** | What an application's own SLO has left to spend; read by maestro as a signal and an input to the risk grade. |
+| **Runbook** | An artifact type in specs-service: the steps for a known situation. A run's plan cites the version it follows. |
+
 ## The build
 
 | Term | Meaning |

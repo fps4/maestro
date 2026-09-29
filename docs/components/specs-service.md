@@ -18,7 +18,7 @@ All four are workspace configuration — a type with facets and body blocks, a g
 ## What it already does that the MVP relies on
 
 - **Drafts are mutable, versions are immutable**; a version is proposed to a gate with its digest.
-- **Agents author and propose; only a named human decides**, and no MCP tool records a decision.
+- **Agents author and propose; only a named human decides**, and no MCP tool records a decision. After the MVP, a rule or an agent run may decide where the application's risk appetite delegates it; the accountable is still a human ([ADR-0031](../decisions/0031-risk-appetite-delegates-decisions.md)).
 - **The decision page** — one column, the packet: the document, facets, what changed since the last version, checks, open questions, who decides, consequences of each outcome in plain language.
 - **Questions on a version**; a gate may require all resolved.
 - **Pinned links**: an accepted version freezes what it rests on.

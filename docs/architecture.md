@@ -33,7 +33,7 @@ Every component depends on **identity-service** at runtime and on nothing else. 
 
 A managed cloud tempts you to fuse the first and third (EventBridge for both governance and application events; CloudWatch as an audit log). Fusing either deletes the export.
 
-**Agents never decide.** An agent may draft, propose, claim, act within a ceiling, ask, and answer. A decision at a gate is a human's, recorded with the version's digest, and no MCP tool records one. This is enforced by the interfaces, not by a prompt.
+**An agent decides only where a human delegated it.** An agent may draft, propose, claim, act within a ceiling, ask, and answer. A decision at a gate is a person's unless the application's risk appetite delegates that grade to a rule or an agent ([ADR-0031](decisions/0031-risk-appetite-delegates-decisions.md)); either way it is recorded with the version's digest, its basis and a human `accountable`, and no MCP tool records one. This is enforced by the interfaces, not by a prompt. The MVP delegates nothing.
 
 **The accountable human never moves.** Every event, item and run carries `accountable` (a human), `acting` (whoever performed the act), the seat, and the oversight level in force at the time — copied on, never joined to current configuration. Reassignment moves work; it never moves accountability.
 

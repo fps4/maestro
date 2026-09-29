@@ -23,7 +23,7 @@ One meaning per word, across every component and document. If a component needs 
 | **Version** | An immutable snapshot of a draft, proposed to a gate. Versions are the record. |
 | **Facet** | A structured, evaluable field of an artifact (a status, a list, a table). Facets are evaluated; the **body** is read. |
 | **Gate** | A named point where a version is decided: accepted, changes requested, rejected. Gates are configuration. |
-| **Decision** | A human's recorded outcome at a gate, with the version's digest. Agents never decide. |
+| **Decision** | A recorded outcome at a gate, with the version's digest, its **basis** — `human`, `rule` (with the policy version) or `agent` (with the appetite version and the run) — and a human `accountable`. An agent decides only where the application's risk appetite delegates it (ADR-0031). |
 | **Question** | A doubt raised on a version; a gate may require all questions resolved before acceptance. |
 | **Pinned link** | A link from one version to a specific version of another artifact, frozen at acceptance. |
 
@@ -34,6 +34,8 @@ One meaning per word, across every component and document. If a component needs 
 | **Work item** | A commitment: someone owes an act, by when, under whose authority. Six **classes**: change, objective, remediation, obligation, support, review. |
 | **Signal** | A fact from outside that may raise a work item: an alarm, an advisory, a deploy, a finding, silence. Normalised into one envelope. |
 | **Severity** | SEV1–4, resolved from policy (signal kind × application tier), never typed in. |
+| **Risk grade** | low · medium · high · critical: what a change or act puts at stake, computed by the tenant's versioned policy, never typed in. |
+| **Risk appetite** | Per application, a versioned artifact accepted by its owner: for each risk grade, who decides — a human, a rule, a rule with an agent concurring, or an agent — and whether a second human is required. A maximum the seat still earns by promotion; floors no appetite lowers. |
 | **Policy** | The tenant's rules: severity × tier → clocks; agent ceilings by class; chase ladders; SEV↔P mapping. Configuration in work-service. |
 | **Claim** | A principal taking a work item. Authority is checked at claim and refused, never warned. |
 | **Lease** | How long a claim holds without a heartbeat. An expired lease returns the item to `open` with the reason recorded; `accountable` does not move. |

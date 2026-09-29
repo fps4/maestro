@@ -20,6 +20,7 @@ Rules:
 - **Demotion is immediate** on an adverse outcome: a refused act, a reversed remediation, a breach, a reopened item. Demotion is faster and cheaper than promotion, and it takes effect on the next act, not the next token refresh — the level is read from seat occupancy, never carried in a token.
 - **Sampling above O2** starts at 100% and decays to a floor that is never zero. A seat with zero sampling is not supervised; it is believed.
 - **Promote in order of error visibility**, not frequency: triage classification and restore-class remediation first; anything invisible until an audit last or never.
+- **An agent decides (O3, O4) only where the application's risk appetite delegates the grade** ([ADR-0031](decisions/0031-risk-appetite-delegates-decisions.md)). The appetite is the most a seat may reach; promotion is how it gets there.
 - The MVP ships at **O0–O2**. Recording exists from the first build; promotion machinery does not.
 
 ## Ceilings
@@ -29,7 +30,7 @@ Some seats never rise above a ceiling, regardless of performance:
 | Seat | Ceiling | Why |
 |---|---|---|
 | Accepting a cause analysis | O2 | what the fix is built on |
-| Merging a change to a production application | O2 (patch-level bumps on N2: O3 under policy) | irreversible past the deploy |
+| Merging a change to a production application | O2; on N2, raised by the application's risk appetite to at most O4 at low grade and O3 at medium | irreversible past the deploy |
 | Deciding an onboarding level | O2 | commits maestro's liability and the tenant's money |
 | Confirming a severity reclassification | O2 | resets every clock |
 | Triage classification, restore-class remediation | O4 | cheap, immediately visible errors |

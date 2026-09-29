@@ -34,5 +34,6 @@ Architecture decision records, numbered from 0001. Each states context in a few 
 | [0028](0028-external-detection-and-correlated-outages.md) | An application that cannot publish is watched from outside by a detector it names; maestro correlates a shared failure | accepted |
 | [0029](0029-a-persons-preferences-live-on-their-profile.md) | A person's preferences live on their profile in identity-service | accepted |
 | [0030](0030-agent-runs-on-fargate.md) | Agent runs: a Fargate task per run, Opus 5.5 at an effort per kind, a GitHub App that cannot merge, transcripts under their own key | proposed |
+| [0031](0031-risk-appetite-delegates-decisions.md) | Risk appetite: each application sets who decides at each risk grade; an agent decides only where that appetite delegates it; accountability never moves | proposed |
 
 specs-service's own decision log moved with it to [`specs/docs/decisions/`](../../specs/docs/decisions/) (ADR-0001–0022 there) and is closed: its records are cited as "specs-service ADR-00NN", and every new decision, whatever it is about, is recorded here ([ADR-0020](0020-maestros-own-services-live-in-one-repository.md)).

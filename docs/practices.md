@@ -1,6 +1,6 @@
 # Practices
 
-Incident, problem and change management, and the practices around them, as maestro does them: agents do the work, a rule or a person decides, and the gate a person stands at is chosen by risk. This is the design for **after the MVP** ([ADR-0022](decisions/0022-one-mvp-built-whole.md)). Nothing here is planned until the MVP's acceptance scenarios pass. Where a part needs a decision before it is built, the part says so.
+Incident, problem and change management, and the practices around them, as maestro does them: agents do the work, and who decides — a person, a rule, or an agent — is chosen by risk and by the application's risk appetite. This is the design for **after the MVP** ([ADR-0022](decisions/0022-one-mvp-built-whole.md)). Nothing here is planned until the MVP's acceptance scenarios pass. Where a part needs a decision before it is built, the part says so.
 
 **A practice is a lane, not a service.** Each practice is configuration and run kinds over the components maestro already has:
 - work-service's classes and policy;
@@ -10,7 +10,7 @@ Incident, problem and change management, and the practices around them, as maest
 
 No practice gets a table, a deployable or a console of its own. The three rules the MVP already enforces carry over unchanged:
 
-1. **Agents never decide.** A rule the tenant wrote, or a person, decides.
+1. **An agent decides only where a human delegated it.** Each application's **risk appetite** says who decides at each risk grade; a person accepts it, floors no appetite lowers bound it, and the accountable is always a human ([ADR-0031](decisions/0031-risk-appetite-delegates-decisions.md)).
 2. **What matters is computed, never typed.** Severity is resolved from policy; so is a change's risk grade.
 3. **Authority is refused, never warned.** It is checked at claim and again where the act lands ([governance-model.md](governance-model.md#authority-at-claim)).
 
@@ -67,20 +67,27 @@ No practice gets a table, a deployable or a console of its own. The three rules 
 | error budget remaining | the application's SLO signal |
 | inside a freeze window | policy calendar |
 
-**Three grades, each with a route.** The ceilings in [governance-model.md](governance-model.md#ceilings) still cap every route.
+**Four grades; the application's risk appetite routes each** ([ADR-0031](decisions/0031-risk-appetite-delegates-decisions.md)). The grade is computed; the appetite, a versioned artifact the application's owner accepts, says who decides at it. The ceilings in [governance-model.md](governance-model.md#ceilings) still cap every route, and the onboarding level bounds the appetite: an N1 application delegates no change decision.
 
-| Grade | Change type | Who decides | Oversight |
+| Grade | cautious | balanced (default) | delegating |
 |---|---|---|---|
-| **low** | standard: pre-approved by a rule the tenant wrote ("patch bump, CI green, N2, consequence ≤ c2 → merge"), recorded under the policy's version | the rule | O3, sampled; floor never zero |
-| **normal** | normal: a decision page at the change gate | the owner | O2 |
-| **high** | normal, with a second named decider; inside a freeze window, only with the freeze's exception decider | owner + second decider | O1 |
+| **low** — standard change, e.g. "patch bump, CI green, N2, consequence ≤ c2" | owner | the rule approves and the change assessor concurs; either objecting sends it to the owner. O4, sampled | an agent run decides. O4, sampled |
+| **medium** | owner | an agent run decides; the owner may veto before effect (O3) | an agent run decides (O3) |
+| **high** | owner | owner | owner |
+| **critical** | owner + second decider | owner; second decider optional | owner; second decider optional |
+
+- **The appetite permits; the seat earns.** An agent reaches a delegated level by promotion on this application, and loses it at once on demotion.
+- **A waived second decider is recorded** on the decision (`waived under appetite vN`). At critical the change assessor's review is then required, and deciding against its objection records the override.
+- **Inside a freeze window**, only the freeze's exception decider, a person, decides, whatever the grade.
+- **An agent never decides on its own work.** The deciding run is not the run that opened the change.
 
 ```mermaid
 flowchart LR
   PR[pull request] --> G{risk grade<br/>policy vN}
-  G -- low --> R[rule approves<br/>merge, sampled]
-  G -- normal --> O[owner decides<br/>at the gate]
-  G -- high --> T[owner + second decider]
+  G --> A{appetite vN<br/>for this application}
+  A -- delegated --> R[rule and/or agent decides<br/>sampled, owner may veto at O3]
+  A -- human --> O[owner decides<br/>at the gate]
+  A -- critical --> T[owner + second decider<br/>or waived, assessor required]
   R & O & T --> D[deploy event] --> W{incident within<br/>change_window?}
   W -- yes --> S[suspect: rollback proposed,<br/>change-failure rate +1]
   W -- no --> C[change evidence satisfied]
@@ -103,7 +110,7 @@ No change advisory board. The decision page is the board, and the grade decides 
 - a burn alarm raises an item like any alarm;
 - remaining budget is an input to the risk grade.
 
-A spent budget does not freeze change. It raises the grade, so a person decides.
+A spent budget does not freeze change. It raises the grade, so a decision the appetite delegated at the old grade may go to a person at the new one.
 
 ## Agents
 
@@ -114,7 +121,7 @@ One roster. Each role is a run kind under [agent-service](components/agent-servi
 | **triager** | classifies an incoming item, matches known errors, names a suspect change, proposes a severity change | a triage note on the item; a reclassification a person confirms | O4 for classification; O2 for a severity change |
 | **diagnostician** | reads logs, alarms, the timeline and the suspect diff | a cause-analysis draft | O2: a person accepts it |
 | **remediator** | takes the restore act, or opens the fix | a rollback or failover; a pull request | restore: O4 at N1; patch and code: its grade's route at N2 |
-| **change assessor** | explains the grade the policy gave; flags inputs the policy could not read | a note on the decision page | O1: it never changes the grade |
+| **change assessor** | explains the grade the policy gave; flags inputs the policy could not read; concurs or objects; decides where the appetite delegates the grade | a note on the decision page; a verdict | O1 for the grade: it never changes it. Its verdict: the appetite's level, reached by promotion |
 | **scribe** | keeps the timeline readable; drafts stakeholder updates and the review's first draft | drafts | O1: the lead sends, the owner accepts |
 | **problem analyst** | clusters repeat incidents; drafts problems and known errors | a problem draft | O2: a person accepts it |
 
@@ -125,11 +132,12 @@ One roster. Each role is a run kind under [agent-service](components/agent-servi
 | Gate | Why |
 |---|---|
 | accepting a cause analysis, a problem, a known error | what the fix and the next triage are built on |
-| a change graded normal or high | the grade says a person decides |
+| a change graded high or critical, or any grade the appetite does not delegate | the appetite says a person decides |
+| setting or loosening an application's risk appetite, and a freeze exception | the rule that lets anything else decide is itself a decision |
 | confirming a severity change | it resets every clock |
 | accepting an emergency change after the fact | it skipped its gate |
 | the incident lead | communication and escalation are judgment |
-| changing the risk policy | the rule that approves low-grade changes is itself a decision |
+| changing the risk policy | the grade every route reads is itself a decision |
 
 ## Order after the MVP
 
@@ -140,7 +148,6 @@ One roster. Each role is a run kind under [agent-service](components/agent-servi
 
 ## To decide before building
 
-- **Where the risk policy lives.** Recommended: work-service's policy, beside severity, because the grade routes work. Alternative: a policy artifact in specs-service, versioned at a gate, because the rule that approves changes is itself a decision.
 - **The change window and the suspect link across a failure domain.** Recommended: policy value, default 60 minutes, and the domain counts. A deploy to one member is suspect for an incident on another.
 - **Whether a problem is an artifact or a work item.** Recommended: an artifact, because it is agreed and versioned. The work to remove it is an item pinned to it.
 - **Where dependencies are declared.** Recommended: runtime-service's register, next to failure domains once they move there ([ADR-0028](decisions/0028-external-detection-and-correlated-outages.md), asked 1).

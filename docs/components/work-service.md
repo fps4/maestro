@@ -168,7 +168,7 @@ policy:
 
 **An application's tier and onboarding level are runtime-service's to set** ([ADR-0027](../decisions/0027-runtime-services-table-and-feeds.md) §4). A person sets them there; work-service projects each `InstanceTierSet` and `InstanceLevelSet` from the spine's events topic (a FIFO queue its intake function reads, `intake.runtime_events_topic_arn`), records the projection as its own `ApplicationAuthorityProjected`, and reads the projected value in place of the definition's from then on. An application nobody has set keeps the definition's. Items keep what they were raised under.
 
-`onboarding` is the application's limit for anyone and is checked first; `ceilings` is an agent's, per seat. A person in the seat may act up to the onboarding level; an agent only up to its ceiling. `alerts` is declared and read by nothing: maestro alerts on Today only ([ADR-0023](../decisions/0023-maestro-alerts-in-its-one-console.md)).
+`onboarding` is the application's limit for anyone and is checked first; `ceilings` is an agent's, per seat. A person in the seat may act up to the onboarding level; an agent only up to its ceiling. `paging` names the page routes and what pages: an item raised at or above `on_raise_at_or_above`, and the ladder steps it lists, go to the application's route as well as to Today; everything else reaches a person on Today only ([ADR-0032](../decisions/0032-paging-through-sns.md), amending [ADR-0023](../decisions/0023-maestro-alerts-in-its-one-console.md)).
 
 ## Time
 
@@ -235,13 +235,14 @@ Outside the contract, for the principal holding an item: `heartbeat` (renew the 
 |---|---|---|
 | record sink | outbox in DynamoDB | relay → spine |
 | notifier | log line | the step on the item, shown on Today ([ADR-0023](../decisions/0023-maestro-alerts-in-its-one-console.md)) |
+| pager | log line | SNS: publish to the route's topic; its subscribers are the rota, declared in the tenant repository ([ADR-0032](../decisions/0032-paging-through-sns.md)) |
 | signals intake | HTTP | SQS from SNS / EventBridge / GitHub |
 | authority resolver | policy in the definition | + each application's tier and level projected from runtime-service's events |
 | object storage | MinIO | S3 |
 
 ## Acceptance
 
-The MVP's acceptance scenarios W1–W6 ([roadmap](../roadmap.md#acceptance)).
+The MVP's acceptance scenarios W1–W7 ([roadmap](../roadmap.md#acceptance)).
 
 1. An item is raised, assigned, closed with an outcome, and read back identically after the workspace is dropped and rebuilt from the archive.
 2. A patch-class claim on an N1 application is refused at claim, closes `escalated_out`, and the rate is queryable in one call.

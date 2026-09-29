@@ -26,7 +26,7 @@ Architecture decision records, numbered from 0001. Each states context in a few 
 | [0020](0020-maestros-own-services-live-in-one-repository.md) | maestro's own services live in `fps4/maestro`; a repository is earned by a consumer outside maestro | accepted |
 | [0021](0021-a-tenants-repository-is-maestro-tenant.md) | A tenant's repository is `fps4/maestro-<tenant>`; a tenant is never named after a component | proposed |
 | [0022](0022-one-mvp-built-whole.md) | One MVP, built whole: no milestones, one acceptance list | proposed |
-| [0023](0023-maestro-alerts-in-its-one-console.md) | maestro alerts in its console only in the MVP; a deployment has one console | proposed |
+| [0023](0023-maestro-alerts-in-its-one-console.md) | maestro alerts in its console only in the MVP; a deployment has one console | proposed; §1 and §4 amended by 0032 |
 | [0024](0024-a-repositorys-rescan-follows-the-merge.md) | A repository's re-scan follows the merge, not the deploy | proposed |
 | [0025](0025-the-weekly-fold-is-per-application.md) | The weekly fold is one obligation per application | proposed |
 | [0026](0026-the-console-behind-the-tenants-edge.md) | The console runs like an API, behind the tenant's own edge | accepted |
@@ -35,5 +35,6 @@ Architecture decision records, numbered from 0001. Each states context in a few 
 | [0029](0029-a-persons-preferences-live-on-their-profile.md) | A person's preferences live on their profile in identity-service | accepted |
 | [0030](0030-agent-runs-on-fargate.md) | Agent runs: a Fargate task per run, Opus 5.5 at an effort per kind, a GitHub App that cannot merge, transcripts under their own key | proposed |
 | [0031](0031-risk-appetite-delegates-decisions.md) | Risk appetite: each application sets who decides at each risk grade; an agent decides only where that appetite delegates it; accountability never moves | proposed |
+| [0032](0032-paging-through-sns.md) | Paging: work-service pages a route, an SNS topic whose subscribers are the rota; maestro's own failures page past maestro | proposed |
 
 specs-service's own decision log moved with it to [`specs/docs/decisions/`](../../specs/docs/decisions/) (ADR-0001–0022 there) and is closed: its records are cited as "specs-service ADR-00NN", and every new decision, whatever it is about, is recorded here ([ADR-0020](0020-maestros-own-services-live-in-one-repository.md)).

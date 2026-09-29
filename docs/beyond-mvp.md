@@ -18,9 +18,11 @@ Needs: one Terraform module that stands up a tenant as a product; an external re
 
 ### Push alerts
 
-maestro alerts only in its console in the MVP ([ADR-0023](decisions/0023-maestro-alerts-in-its-one-console.md)). A push channel — Slack, email, a mobile push — lets maestro reach a person who is not looking, and lets an application retire its own alert for a signal maestro handles (one alert, one owner).
-
-Needs: a principal's contact from identity-service, given to the notifier and to nothing else; the Slack↔principal link for Slack; an on-call rota in the workspace definition.
+maestro pages through SNS in the MVP: a route per application, whose subscribers the tenant repository declares ([ADR-0032](decisions/0032-paging-through-sns.md)). What comes after:
+- **A paging product** (PagerDuty's Events API v2, which Opsgenie and incident.io also accept) behind the same pager port, with rotas, escalation to a next person, and an acknowledgement that lands as a claim.
+- **An external heartbeat** outside the tenant's account, so an outage of the account's own SNS or CloudWatch still pages.
+- **Slack**, which needs the Slack↔principal link.
+- **Retiring an application's own alert** for a signal maestro handles ("one alert, one owner"), per application, once its route has passed W7.
 
 ### Risk-graded change routing
 

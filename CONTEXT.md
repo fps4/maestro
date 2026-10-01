@@ -111,7 +111,14 @@ Named now so [`docs/practices.md`](docs/practices.md) can use them; none is buil
 | **Standard change** | A low-grade change approved by a rule the tenant wrote, recorded under the policy's version. |
 | **Emergency change** | A change taken during an incident ahead of its gate, decided after the fact by a `review` item. |
 | **Freeze window** | A period in the policy calendar during which every change grades high. |
-| **Blast radius** | The applications and tiers a change could reach: its failure domain and what depends on it. |
+| **Blast radius** | The applications and tiers a change could reach: its failure domain and, through connections, what depends on it. |
+| **Connection** | A directed link between two things in the estate (applications, interfaces, queues, endpoints, APIs), with its **provenance**. Structure only. |
+| **Provenance** | Where a connection was read — a file and line, a log query, a decision — and how it is known: *declared*, *observed*, *inferred* or *curated*. Without it, a connection is not stored. |
+| **Resolver** | The one way connections and references are read: a question in (neighbours, downstream, upstream, path, impact), an answer out with provenance and gaps. Every surface and rule asks it. |
+| **Gap** | What the resolver cannot see for a question: an unread queue, a source not loaded, a link known only by inference. Unknown escalates. Not the G-numbered gaps in `docs/use-cases.md`, which are missing build parts. |
+| **Impact** | The resolver's answer to "what stops if X is retired, goes out, changes its contract or moves host": what is affected, who to tell, the gaps. |
+| **View** | An impact, neighbourhood or path answer drawn as a small Mermaid diagram, rebuilt on every request. |
+| **Story** | An answer and its view frozen with a date and each source's state; replayed to show what changed. |
 | **Error budget** | What an application's own SLO has left to spend; read by maestro as a signal and an input to the risk grade. |
 | **Runbook** | An artifact type in specs-service: the steps for a known situation. A run's plan cites the version it follows. |
 

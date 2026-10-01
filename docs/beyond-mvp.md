@@ -30,7 +30,7 @@ Raised 2026-09-26, planned for the iteration after the MVP. The MVP routes by ri
 
 The next iteration:
 
-- **A deterministic change classifier on the pull request.** Its inputs: the bump level, CI status, the paths touched (against CODEOWNERS and declared sensitive paths), the size, and whether the change can be reverted. Its output is the change's effective class, checked where the act lands, at merge. A pull request graded above its item's class goes to a person.
+- **A deterministic change classifier on the pull request.** Its inputs: the bump level, CI status, the paths touched (against CODEOWNERS and declared sensitive paths), the size, whether the change can be reverted, and, once the estate has connections, the downstream consumers of what it touches ([practices.md](practices.md#configuration)). A change whose impact reaches a gap grades high. Its output is the change's effective class, checked where the act lands, at merge. A pull request graded above its item's class goes to a person.
 - **Automated approval under the application's risk appetite.** A low grade is approved by a rule the tenant writes ("patch bump, CI green, N2, consequence ≤ c2 → merge"), recorded under the policy's version, with an agent concurring by default; an agent decides alone only where the appetite delegates it and the seat has earned it ([ADR-0031](decisions/0031-risk-appetite-delegates-decisions.md)).
 - **Consequence class read by the ceilings**, so one rule holds at c2 and tightens at c4.
 - **The change-control kinds** (cosmetic, behavioural, assumption-breaking) become a field that routes, rather than a table in the governance model.

@@ -21,7 +21,7 @@ No practice gets a table, a deployable or a console of its own. The three rules 
 | **Incident** | signal → item with severity and clocks → claim → cause analysis at a gate → fix → evidence plan → close ([operations-model.md](operations-model.md#incident-lifecycle)); outages ([ADR-0028](decisions/0028-external-detection-and-correlated-outages.md)); a `review` after SEV ≤ 2 | an incident-lead seat; the change-induced link; stakeholder updates; push and on-call ([beyond-mvp.md](beyond-mvp.md#push-alerts)) |
 | **Change** | the `change` class; the change-record artifact; merge ceiling O2; the three change-control kinds | the risk grade; standard, normal and emergency changes; freeze windows |
 | **Problem** | the cause-analysis artifact | the problem record; known errors; the link from repeat incidents |
-| **Configuration** | runtime-service's register and Estate; failure domains | dependencies between applications, for the blast radius |
+| **Configuration** | runtime-service's register and Estate; failure domains | connections between applications, each with its provenance, read through one resolver; impact before a change ([below](#configuration)) |
 | **Service level** | clocks, criticality tiers, the chase ladder | SLOs declared by the application; error budgets that feed the risk grade |
 | **Request** | S1 and the `support` class; the intake agent ([beyond-mvp.md](beyond-mvp.md#the-intake-agent)) | nothing new |
 | **Vulnerability** | the advisory lane and the fold ([use-cases.md](use-cases.md#uc1b--the-advisory-lane)) | nothing new |
@@ -62,7 +62,7 @@ No practice gets a table, a deployable or a console of its own. The three rules 
 | change kind (cosmetic, behavioural, assumption-breaking), bump level, paths touched against CODEOWNERS and declared sensitive paths, size | the pull request |
 | CI status, whether the change can be reverted | the pull request, runtime-service's rollback target |
 | consequence class, criticality tier, onboarding level | runtime-service |
-| blast radius: the applications and tiers that share its failure domain or depend on it | work-service's definition, runtime-service's register |
+| blast radius: the applications and tiers that share its failure domain or depend on it; the downstream consumers of what the change touches; whether its impact reaches a gap | work-service's definition, runtime-service's register and connections ([Configuration](#configuration)) |
 | change-failure rate, incidents open or recent on the application | work-service |
 | error budget remaining | the application's SLO signal |
 | inside a freeze window | policy calendar |
@@ -104,6 +104,35 @@ flowchart LR
 
 No change advisory board. The decision page is the board, and the grade decides who sits at it.
 
+## Configuration
+
+**The register knows what runs; the practice adds what talks to what.** Until then the blast radius is a failure domain, and nobody can say what stops if an interface, a queue or an endpoint is changed or retired. Breaking changes and mistaken decommissions are the incidents this prevents.
+
+- **A connection** is a directed link between two things in the estate (applications, interfaces, queues, endpoints, APIs) with its **provenance**: where it was read (a file and line, a log query, a decision) and how it is known (declared in code or configuration, observed in logs, inferred from a naming convention, or curated by a person). A connection without provenance is not stored. Structure only: never payloads, credentials or property values.
+- **One loader per source.** The application's code and configuration, its infrastructure code, its logs, the incident history. A source's connections are replaced as a unit on each load, so nothing a source no longer reports is left behind.
+- **People add what no source records**: the reader of a queue nobody declared, a system outside every repository, a planned decommission. An agent or a person proposes; a person confirms. A curated connection never silently overrides a declared one; a disagreement is shown.
+- **References** (runbooks, pages, tickets) are passages linked to what they mention. They are read; they never become connections.
+- **One resolver reads them.** The console, the API, MCP, the risk grade and the triager ask the same questions (neighbours, downstream, upstream, path, impact) and get the same answer: the connections the walk reached, references filtered to them, the provenance of each, and the **gaps**, what it cannot see.
+- **Impact** asks what stops if X changes in a given way: retired, out, its contract changed, moved to another host. A **view** draws the answer as a small Mermaid diagram, rebuilt on every request. A **story** freezes it with its date and each source's state, and a replay shows what changed since.
+
+```mermaid
+flowchart LR
+  S[sources<br/>code · infrastructure · logs · incidents] --> L[loaders<br/>one per source]
+  P[people<br/>propose · confirm] --> L
+  L --> G[(connections<br/>with provenance)]
+  L --> I[(references<br/>passages)]
+  G --> R[resolver]
+  I --> R
+  R --> C[console · API · MCP]
+  R --> RG[risk grade<br/>unknown escalates]
+  R --> T[triager · cause analysis<br/>blast radius]
+```
+
+**What it feeds.**
+- **The risk grade** reads the downstream consumers of what a change touches, and **a change whose impact reaches a gap grades high**: unknown escalates.
+- **The cause analysis** fills its blast radius from connections instead of guessing.
+- **The problem analyst** links incidents to the connections they name.
+
 ## Service level
 
 **The application declares its SLOs, as it owns its alarms** ([ADR-0012](decisions/0012-the-application-owns-detection-maestro-owns-response.md)). maestro reads their burn as signals:
@@ -144,10 +173,12 @@ One roster. Each role is a run kind under [agent-service](components/agent-servi
 1. **Risk-graded change routing** ([beyond-mvp.md](beyond-mvp.md#risk-graded-change-routing)), with the change-induced link. The inputs mostly exist; the link is one join between runtime-service and work-service.
 2. **Problems and known errors.** An artifact type, the problem analyst, and known-error matching in the triager.
 3. **Service levels and push.** SLOs feeding the grade; the incident lead and stakeholder updates, once maestro can reach a person who is not looking.
-4. **Dependencies in the register**, so the blast radius is more than a failure domain.
+4. **Connections in the estate** ([Configuration](#configuration)), so the blast radius is more than a failure domain and the grade can see what a change touches.
 
 ## To decide before building
 
 - **The change window and the suspect link across a failure domain.** Recommended: policy value, default 60 minutes, and the domain counts. A deploy to one member is suspect for an incident on another.
 - **Whether a problem is an artifact or a work item.** Recommended: an artifact, because it is agreed and versioned. The work to remove it is an item pinned to it.
-- **Where dependencies are declared.** Recommended: runtime-service's register, next to failure domains once they move there ([ADR-0028](decisions/0028-external-detection-and-correlated-outages.md), asked 1).
+- **Where connections live.** Recommended: runtime-service, next to the register and the failure domains once they move there ([ADR-0028](decisions/0028-external-detection-and-correlated-outages.md), asked 1). A practice gets no service of its own.
+- **How connections are stored and read.** Recommended: connection events in runtime-service's stream, so the archive stays the record and the store is a projection; the store a graph (one named graph per source, provenance on each connection) and an index (passages with full-text and vector search) as peers, behind one resolver. A second kind of store beside DynamoDB ([ADR-0018](decisions/0018-dynamodb-is-the-mvp-database.md)), so it needs its own ADR.
+- **Where curated connections are confirmed.** Recommended: a proposal is a draft, confirmed by a person; the confirmation is an attributed event like any decision.

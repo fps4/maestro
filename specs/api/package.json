@@ -40,7 +40,7 @@
     "ajv": "^8.17.1",
     "ajv-formats": "^3.0.1",
     "diff": "^8.0.3",
-    "fastify": "^5.2.1",
+    "fastify": "^5.12.6",
     "jose": "^5.9.6",
     "markdown-it": "^14.1.0",
     "sanitize-html": "^2.14.0",
